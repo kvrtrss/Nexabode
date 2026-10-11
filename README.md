@@ -17,8 +17,5 @@ A C#-based management system for handling room and bed occupancy, tenant records
 ## Scope & Limitations
 Designed for a single boarding house and one administrator account. The system does not include online payment integration, multi-property management, or hardware-based utility submetering.
 
-## License
-No license has been selected yet.
-
 ---
 *Nexabode — Smarter occupancy. Structured management.*
