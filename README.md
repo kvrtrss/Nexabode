@@ -15,7 +15,7 @@ A C#-based management system for handling room and bed occupancy, tenant records
 - Printable billing statements and reports
 
 ## Scope & Limitations
-Designed for a single boarding house and one administrator account. The system does not include online payment integration, multi-property management, or hardware-based utility submetering.
+Designed for a single boarding house and one administrator account, thats it. The system does not include online payment integration, multi-property management, or hardware-based utility submetering.
 
 ---
 *Nexabode — Smarter occupancy. Structured management.*
