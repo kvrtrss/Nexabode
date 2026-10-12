@@ -1,0 +1,106 @@
+﻿namespace Nexabode.Models;
+
+public enum ChargeType { Rent, Utility, Other }
+
+public class AdminUser
+{
+    public int Id { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string PasswordHash { get; set; } = string.Empty;
+}
+
+public class Room
+{
+    public int Id { get; set; }
+    public string RoomName { get; set; } = string.Empty;
+    public string? Floor { get; set; }
+    public string? Notes { get; set; }
+    public List<Bed> Beds { get; set; } = new();
+}
+
+public class Bed
+{
+    public int Id { get; set; }
+    public int RoomId { get; set; }
+    public Room Room { get; set; } = null!;
+    public string BedLabel { get; set; } = string.Empty;
+    public decimal MonthlyRate { get; set; }
+    public bool IsActive { get; set; } = true;
+    public List<Occupancy> Occupancies { get; set; } = new();
+}
+
+public class Tenant
+{
+    public int Id { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string? Contact { get; set; }
+    public string? EmergencyContact { get; set; }
+    public string? SchoolOrWork { get; set; }
+    public string? Notes { get; set; }
+    public List<Occupancy> Occupancies { get; set; } = new();
+    public List<Payment> Payments { get; set; } = new();
+}
+
+public class Occupancy
+{
+    public int Id { get; set; }
+    public int TenantId { get; set; }
+    public Tenant Tenant { get; set; } = null!;
+    public int BedId { get; set; }
+    public Bed Bed { get; set; } = null!;
+    public DateOnly MoveInDate { get; set; }
+    public DateOnly? MoveOutDate { get; set; }   // ?null = still staying
+    public decimal AgreedRent { get; set; }
+    public decimal Deposit { get; set; }
+    public List<Charge> Charges { get; set; } = new();
+}
+
+public class UtilityBill
+{
+    public int Id { get; set; }
+    public string UtilityType { get; set; } = string.Empty;
+    public string BillingMonth { get; set; } = string.Empty;  // "eg2026-10"
+    public decimal TotalAmount { get; set; }
+    public int? RoomId { get; set; }                          // ?null = whole house
+    public Room? Room { get; set; }
+    public DateOnly? DueDate { get; set; }
+    public List<Charge> Charges { get; set; } = new();
+}
+
+public class Charge
+{
+    public int Id { get; set; }
+    public int OccupancyId { get; set; }
+    public Occupancy Occupancy { get; set; } = null!;
+    public string BillingMonth { get; set; } = string.Empty;
+    public ChargeType ChargeType { get; set; }
+    public string? Description { get; set; }
+    public decimal Amount { get; set; }
+    public DateOnly DueDate { get; set; }
+    public int? UtilityBillId { get; set; }
+    public UtilityBill? UtilityBill { get; set; }
+    public List<PaymentAllocation> Allocations { get; set; } = new();
+}
+
+public class Payment
+{
+    public int Id { get; set; }
+    public int TenantId { get; set; }
+    public Tenant Tenant { get; set; } = null!;
+    public DateOnly PaymentDate { get; set; }
+    public decimal Amount { get; set; }
+    public string? Method { get; set; }
+    public string? ReferenceNo { get; set; }
+    public string? Remarks { get; set; }
+    public List<PaymentAllocation> Allocations { get; set; } = new();
+}
+
+public class PaymentAllocation
+{
+    public int Id { get; set; }
+    public int PaymentId { get; set; }
+    public Payment Payment { get; set; } = null!;
+    public int ChargeId { get; set; }
+    public Charge Charge { get; set; } = null!;
+    public decimal AmountApplied { get; set; }
+}

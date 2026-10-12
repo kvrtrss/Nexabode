@@ -1,0 +1,41 @@
+﻿using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Nexabode.Models;
+
+namespace Nexabode.Data;
+
+public class AppDbContext : DbContext
+{
+    public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
+    public DbSet<Room> Rooms => Set<Room>();
+    public DbSet<Bed> Beds => Set<Bed>();
+    public DbSet<Tenant> Tenants => Set<Tenant>();
+    public DbSet<Occupancy> Occupancies => Set<Occupancy>();
+    public DbSet<UtilityBill> UtilityBills => Set<UtilityBill>();
+    public DbSet<Charge> Charges => Set<Charge>();
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
+
+    protected override void OnConfiguring(DbContextOptionsBuilder options)
+    {
+        var connection = new SqliteConnectionStringBuilder
+        {
+            DataSource = DatabaseKeyProvider.DbPath,
+            Password = DatabaseKeyProvider.GetOrCreateKey()   // enables SQLCipher encryption
+        }.ToString();
+
+        options.UseSqlite(connection);
+    }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AdminUser>().HasIndex(a => a.Username).IsUnique();
+        modelBuilder.Entity<Room>().HasIndex(r => r.RoomName).IsUnique();
+        modelBuilder.Entity<Bed>().HasIndex(b => new { b.RoomId, b.BedLabel }).IsUnique();
+        modelBuilder.Entity<Charge>().Property(c => c.ChargeType).HasConversion<string>();
+
+        // Never auto-delete history: block deleting a record that other records depend on.
+        foreach (var fk in modelBuilder.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()))
+            fk.DeleteBehavior = DeleteBehavior.Restrict;
+    }
+}
