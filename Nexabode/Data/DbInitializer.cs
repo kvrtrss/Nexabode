@@ -14,10 +14,9 @@ public static class DbInitializer
             db.AdminUsers.Add(new AdminUser
             {
                 Username = "admin",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123")  // temporary infos, the user will chnage this once they log in for the first time
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123")  // temporary infos, the user will change this once they log in for the first time
             });
             db.SaveChanges();
         }
-    }
     }
 }
