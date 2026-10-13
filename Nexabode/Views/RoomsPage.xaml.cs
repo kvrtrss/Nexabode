@@ -7,6 +7,14 @@ namespace Nexabode.Views;
 
 public partial class RoomsPage : Page
 {
+    public class RoomRow
+    {
+        public int Id { get; set; }
+        public string RoomName { get; set; } = "";
+        public bool IsActive { get; set; }
+        public string Display => IsActive ? RoomName : $"{RoomName} (Inactive)";
+    }
+
     public class BedRow
     {
         public int Id { get; set; }
@@ -27,7 +35,12 @@ public partial class RoomsPage : Page
     private void LoadRooms(int? selectId = null)
     {
         using var db = new AppDbContext();
-        var rooms = db.Rooms.OrderBy(r => r.RoomName).ToList();
+        var rooms = db.Rooms
+            .OrderBy(r => r.RoomName)
+            .AsEnumerable()
+            .Select(r => new RoomRow { Id = r.Id, RoomName = r.RoomName, IsActive = r.IsActive })
+            .ToList();
+
         RoomList.ItemsSource = rooms;
         if (selectId != null)
             RoomList.SelectedItem = rooms.FirstOrDefault(r => r.Id == selectId);
@@ -35,7 +48,7 @@ public partial class RoomsPage : Page
 
     private void LoadBeds()
     {
-        if (RoomList.SelectedItem is not Room room)
+        if (RoomList.SelectedItem is not RoomRow room)
         {
             BedGrid.ItemsSource = null;
             SelectedRoomText.Text = "Select a room";
@@ -43,7 +56,7 @@ public partial class RoomsPage : Page
             return;
         }
 
-        SelectedRoomText.Text = room.RoomName;
+        SelectedRoomText.Text = room.Display;
 
         using var db = new AppDbContext();
         var occupiedBedIds = db.Occupancies
@@ -60,7 +73,7 @@ public partial class RoomsPage : Page
                 Id = b.Id,
                 BedLabel = b.BedLabel,
                 MonthlyRate = b.MonthlyRate,
-                Status = !b.IsActive ? "Inactive"
+                Status = !room.IsActive || !b.IsActive ? "Inactive"
                        : occupiedBedIds.Contains(b.Id) ? "Occupied" : "Vacant"
             })
             .ToList();
@@ -68,12 +81,18 @@ public partial class RoomsPage : Page
         UpdateButtons();
     }
 
-    // Each button is enabled only when it applies to the selected bed.
+    // Each button is enabled only when it applies to the current selection.
     private void UpdateButtons()
     {
+        var room = RoomList.SelectedItem as RoomRow;
+        DeactivateRoomButton.IsEnabled = room is { IsActive: true };
+        ActivateRoomButton.IsEnabled = room is { IsActive: false };
+
+        // Bed buttons only work while the room itself is active.
         var status = (BedGrid.SelectedItem as BedRow)?.Status;
-        DeactivateButton.IsEnabled = status is "Vacant" or "Occupied";
-        ActivateButton.IsEnabled = status == "Inactive";
+        var roomActive = room is { IsActive: true };
+        DeactivateButton.IsEnabled = roomActive && status is "Vacant" or "Occupied";
+        ActivateButton.IsEnabled = roomActive && status == "Inactive";
     }
 
     private void RoomList_SelectionChanged(object sender, SelectionChangedEventArgs e) => LoadBeds();
@@ -109,11 +128,53 @@ public partial class RoomsPage : Page
         LoadRooms(room.Id);
     }
 
-    private void AddBed_Click(object sender, RoutedEventArgs e)
+    private void DeactivateRoom_Click(object sender, RoutedEventArgs e)
     {
-        if (RoomList.SelectedItem is not Room room)
+        if (RoomList.SelectedItem is not RoomRow row)
         {
             Tell("Select a room first.");
+            return;
+        }
+
+        using var db = new AppDbContext();
+
+        if (db.Occupancies.Any(o => o.MoveOutDate == null && o.Bed.RoomId == row.Id))
+        {
+            Tell("This room still has tenants staying in it. Move them out first.");
+            return;
+        }
+
+        var room = db.Rooms.Find(row.Id)!;
+        room.IsActive = false;
+        db.SaveChanges();
+        LoadRooms(row.Id);
+    }
+
+    private void ActivateRoom_Click(object sender, RoutedEventArgs e)
+    {
+        if (RoomList.SelectedItem is not RoomRow row)
+        {
+            Tell("Select a room first.");
+            return;
+        }
+
+        using var db = new AppDbContext();
+        var room = db.Rooms.Find(row.Id)!;
+        room.IsActive = true;
+        db.SaveChanges();
+        LoadRooms(row.Id);
+    }
+
+    private void AddBed_Click(object sender, RoutedEventArgs e)
+    {
+        if (RoomList.SelectedItem is not RoomRow room)
+        {
+            Tell("Select a room first.");
+            return;
+        }
+        if (!room.IsActive)
+        {
+            Tell("This room is inactive. Activate the room before adding beds.");
             return;
         }
 

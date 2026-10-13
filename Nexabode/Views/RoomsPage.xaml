@@ -21,6 +21,7 @@
         <Grid Grid.Row="1" Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -28,10 +29,17 @@
                 <ui:TextBox x:Name="RoomNameBox" PlaceholderText="Room name (e.g. Room 1)" Margin="0,0,0,8" />
                 <ui:TextBox x:Name="FloorBox" PlaceholderText="Floor (optional)" Margin="0,0,0,8" />
                 <ui:Button Content="Add room" Appearance="Primary" HorizontalAlignment="Stretch"
-                           Click="AddRoom_Click" Margin="0,0,0,16" />
+                           Click="AddRoom_Click" Margin="0,0,0,12" />
             </StackPanel>
 
-            <ListBox x:Name="RoomList" Grid.Row="1" DisplayMemberPath="RoomName"
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                <ui:Button x:Name="DeactivateRoomButton" Content="Deactivate room"
+                           IsEnabled="False" Click="DeactivateRoom_Click" Margin="0,0,8,0" />
+                <ui:Button x:Name="ActivateRoomButton" Content="Activate room"
+                           IsEnabled="False" Click="ActivateRoom_Click" />
+            </StackPanel>
+
+            <ListBox x:Name="RoomList" Grid.Row="2" DisplayMemberPath="Display"
                      SelectionChanged="RoomList_SelectionChanged" />
         </Grid>
 

@@ -15,6 +15,7 @@ public class Room
     public string RoomName { get; set; } = string.Empty;
     public string? Floor { get; set; }
     public string? Notes { get; set; }
+    public bool IsActive { get; set; } = true;
     public List<Bed> Beds { get; set; } = new();
 }
 
