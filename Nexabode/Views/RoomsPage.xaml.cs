@@ -1,6 +1,5 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
-using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
 using Nexabode.Models;
 
@@ -22,6 +21,9 @@ public partial class RoomsPage : Page
         Loaded += (_, _) => LoadRooms();
     }
 
+    private static void Tell(string message) =>
+        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
+
     private void LoadRooms(int? selectId = null)
     {
         using var db = new AppDbContext();
@@ -37,6 +39,7 @@ public partial class RoomsPage : Page
         {
             BedGrid.ItemsSource = null;
             SelectedRoomText.Text = "Select a room";
+            UpdateButtons();
             return;
         }
 
@@ -61,23 +64,35 @@ public partial class RoomsPage : Page
                        : occupiedBedIds.Contains(b.Id) ? "Occupied" : "Vacant"
             })
             .ToList();
+
+        UpdateButtons();
+    }
+
+    // Each button is enabled only when it applies to the selected bed.
+    private void UpdateButtons()
+    {
+        var status = (BedGrid.SelectedItem as BedRow)?.Status;
+        DeactivateButton.IsEnabled = status is "Vacant" or "Occupied";
+        ActivateButton.IsEnabled = status == "Inactive";
     }
 
     private void RoomList_SelectionChanged(object sender, SelectionChangedEventArgs e) => LoadBeds();
+
+    private void BedGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateButtons();
 
     private void AddRoom_Click(object sender, RoutedEventArgs e)
     {
         var name = RoomNameBox.Text.Trim();
         if (name == "")
         {
-            MessageBox.Show("Please enter a room name.");
+            Tell("Please enter a room name.");
             return;
         }
 
         using var db = new AppDbContext();
         if (db.Rooms.Any(r => r.RoomName == name))
         {
-            MessageBox.Show("A room with that name already exists.");
+            Tell("A room with that name already exists.");
             return;
         }
 
@@ -98,21 +113,21 @@ public partial class RoomsPage : Page
     {
         if (RoomList.SelectedItem is not Room room)
         {
-            MessageBox.Show("Select a room first.");
+            Tell("Select a room first.");
             return;
         }
 
         var label = BedLabelBox.Text.Trim();
         if (label == "" || !decimal.TryParse(RateBox.Text, out var rate) || rate < 0)
         {
-            MessageBox.Show("Enter a bed label and a valid monthly rate.");
+            Tell("Enter a bed label and a valid monthly rate.");
             return;
         }
 
         using var db = new AppDbContext();
         if (db.Beds.Any(b => b.RoomId == room.Id && b.BedLabel == label))
         {
-            MessageBox.Show("That bed already exists in this room.");
+            Tell("That bed already exists in this room.");
             return;
         }
 
@@ -124,24 +139,39 @@ public partial class RoomsPage : Page
         LoadBeds();
     }
 
-    private void ToggleBed_Click(object sender, RoutedEventArgs e)
+    private void Deactivate_Click(object sender, RoutedEventArgs e)
     {
         if (BedGrid.SelectedItem is not BedRow row)
         {
-            MessageBox.Show("Select a bed first.");
+            Tell("Select a bed first.");
             return;
         }
 
         using var db = new AppDbContext();
         var bed = db.Beds.Find(row.Id)!;
 
-        if (bed.IsActive && db.Occupancies.Any(o => o.BedId == bed.Id && o.MoveOutDate == null))
+        if (db.Occupancies.Any(o => o.BedId == bed.Id && o.MoveOutDate == null))
         {
-            MessageBox.Show("This bed is occupied. Move the tenant out first.");
+            Tell("This bed is occupied. Move the tenant out first.");
             return;
         }
 
-        bed.IsActive = !bed.IsActive;
+        bed.IsActive = false;
+        db.SaveChanges();
+        LoadBeds();
+    }
+
+    private void Activate_Click(object sender, RoutedEventArgs e)
+    {
+        if (BedGrid.SelectedItem is not BedRow row)
+        {
+            Tell("Select a bed first.");
+            return;
+        }
+
+        using var db = new AppDbContext();
+        var bed = db.Beds.Find(row.Id)!;
+        bed.IsActive = true;
         db.SaveChanges();
         LoadBeds();
     }

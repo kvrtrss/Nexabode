@@ -40,11 +40,12 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <TextBlock x:Name="SelectedRoomText" Text="Select a room" FontSize="18"
-                       FontWeight="SemiBold" Margin="0,0,0,10" />
+            <TextBlock x:Name="SelectedRoomText" Text="Select a room"
+                       FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10" />
 
             <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
                 <ui:TextBox x:Name="BedLabelBox" PlaceholderText="Bed label (e.g. Bed A)"
@@ -52,11 +53,18 @@
                 <ui:TextBox x:Name="RateBox" PlaceholderText="Monthly rate"
                             Width="140" Margin="0,0,8,0" />
                 <ui:Button Content="Add bed" Appearance="Primary" Click="AddBed_Click" />
-                <ui:Button Content="Deactivate bed" Margin="8,0,0,0" Click="ToggleBed_Click" />
             </StackPanel>
 
-            <DataGrid x:Name="BedGrid" Grid.Row="2" AutoGenerateColumns="False"
-                      IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False">
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,12">
+                <ui:Button x:Name="DeactivateButton" Content="Deactivate bed"
+                           IsEnabled="False" Click="Deactivate_Click" Margin="0,0,8,0" />
+                <ui:Button x:Name="ActivateButton" Content="Activate bed"
+                           IsEnabled="False" Click="Activate_Click" />
+            </StackPanel>
+
+            <DataGrid x:Name="BedGrid" Grid.Row="3" AutoGenerateColumns="False"
+                      IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False"
+                      SelectionChanged="BedGrid_SelectionChanged">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Bed" Binding="{Binding BedLabel}" Width="*" />
                     <DataGridTextColumn Header="Monthly rate" Binding="{Binding MonthlyRate, StringFormat=N2}" Width="140" />
