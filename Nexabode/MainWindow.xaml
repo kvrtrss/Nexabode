@@ -20,9 +20,10 @@
                            IsBackButtonVisible="Collapsed">
             <ui:NavigationView.MenuItems>
                 <ui:NavigationViewItem Content="Dashboard"
-                                       Icon="{ui:SymbolIcon Home24}"
-                                       TargetPageType="{x:Type views:DashboardPage}" />
-                <ui:NavigationViewItem Content="Rooms &amp; Beds" Icon="{ui:SymbolIcon Building24}" />
+                           Icon="{ui:SymbolIcon Home24}"
+                           TargetPageType="{x:Type views:DashboardPage}" />
+                <ui:NavigationViewItem Content="Rooms &amp; Beds" Icon="{ui:SymbolIcon Building24}"
+                           TargetPageType="{x:Type views:RoomsPage}" />
                 <ui:NavigationViewItem Content="Tenants" Icon="{ui:SymbolIcon People24}" />
                 <ui:NavigationViewItem Content="Billing" Icon="{ui:SymbolIcon Receipt24}" />
                 <ui:NavigationViewItem Content="Payments" Icon="{ui:SymbolIcon Money24}" />

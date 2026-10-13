@@ -1,0 +1,68 @@
+﻿<Page x:Class="Nexabode.Views.RoomsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Rooms and Beds">
+    <Grid Margin="30,20,30,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="300" />
+            <ColumnDefinition Width="20" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Grid.ColumnSpan="3" Text="Rooms &amp; Beds" FontSize="28"
+                   FontWeight="Bold" Margin="0,0,0,20" />
+
+        <!-- Left: rooms -->
+        <Grid Grid.Row="1" Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <StackPanel>
+                <ui:TextBox x:Name="RoomNameBox" PlaceholderText="Room name (e.g. Room 1)" Margin="0,0,0,8" />
+                <ui:TextBox x:Name="FloorBox" PlaceholderText="Floor (optional)" Margin="0,0,0,8" />
+                <ui:Button Content="Add room" Appearance="Primary" HorizontalAlignment="Stretch"
+                           Click="AddRoom_Click" Margin="0,0,0,16" />
+            </StackPanel>
+
+            <ListBox x:Name="RoomList" Grid.Row="1" DisplayMemberPath="RoomName"
+                     SelectionChanged="RoomList_SelectionChanged" />
+        </Grid>
+
+        <!-- Right: beds of the selected room -->
+        <Grid Grid.Row="1" Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Name="SelectedRoomText" Text="Select a room" FontSize="18"
+                       FontWeight="SemiBold" Margin="0,0,0,10" />
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                <ui:TextBox x:Name="BedLabelBox" PlaceholderText="Bed label (e.g. Bed A)"
+                            Width="200" Margin="0,0,8,0" />
+                <ui:TextBox x:Name="RateBox" PlaceholderText="Monthly rate"
+                            Width="140" Margin="0,0,8,0" />
+                <ui:Button Content="Add bed" Appearance="Primary" Click="AddBed_Click" />
+                <ui:Button Content="Deactivate bed" Margin="8,0,0,0" Click="ToggleBed_Click" />
+            </StackPanel>
+
+            <DataGrid x:Name="BedGrid" Grid.Row="2" AutoGenerateColumns="False"
+                      IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Bed" Binding="{Binding BedLabel}" Width="*" />
+                    <DataGridTextColumn Header="Monthly rate" Binding="{Binding MonthlyRate, StringFormat=N2}" Width="140" />
+                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="140" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+    </Grid>
+</Page>
