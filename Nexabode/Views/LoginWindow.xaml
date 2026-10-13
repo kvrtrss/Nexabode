@@ -4,7 +4,9 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="Nexabode - Login" Height="480" Width="400"
                  ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
-                 ExtendsContentIntoTitleBar="True" WindowBackdropType="Mica">
+                 ExtendsContentIntoTitleBar="True" WindowBackdropType="None"
+                 Background="{DynamicResource AppBackgroundBrush}"
+                 FontFamily="Segoe UI Variable Text, Segoe UI">
     <Grid>
         <ui:TitleBar Title="Nexabode" VerticalAlignment="Top" ShowMaximize="False" />
 

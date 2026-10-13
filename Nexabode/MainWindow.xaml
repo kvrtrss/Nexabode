@@ -3,35 +3,42 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:views="clr-namespace:Nexabode.Views"
-                 Title="Nexabode" Height="720" Width="1200"
-                 MinHeight="600" MinWidth="1000"
+                 Title="Nexabode" Height="760" Width="1280"
+                 MinHeight="620" MinWidth="1060"
                  WindowStartupLocation="CenterScreen"
-                 ExtendsContentIntoTitleBar="True" WindowBackdropType="Mica">
+                 ExtendsContentIntoTitleBar="True" WindowBackdropType="None"
+                 Background="{DynamicResource AppBackgroundBrush}"
+                 FontFamily="Segoe UI Variable Text, Segoe UI">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="Nexabode - Boarding House Management" />
+        <ui:TitleBar Grid.Row="0" Title="Nexabode">
+            <ui:TitleBar.TrailingContent>
+                <ui:Button x:Name="ThemeButton" Appearance="Transparent"
+                           ToolTip="Switch between light and dark mode"
+                           Click="ThemeButton_Click" />
+            </ui:TitleBar.TrailingContent>
+        </ui:TitleBar>
 
         <ui:NavigationView x:Name="RootNavigation" Grid.Row="1"
                            PaneDisplayMode="Left" OpenPaneLength="230"
                            IsBackButtonVisible="Collapsed">
             <ui:NavigationView.MenuItems>
-                <ui:NavigationViewItem Content="Dashboard"
-                           Icon="{ui:SymbolIcon Home24}"
-                           TargetPageType="{x:Type views:DashboardPage}" />
+                <ui:NavigationViewItem Content="Dashboard" Icon="{ui:SymbolIcon Home24}"
+                                       TargetPageType="{x:Type views:DashboardPage}" />
                 <ui:NavigationViewItem Content="Rooms &amp; Beds" Icon="{ui:SymbolIcon Building24}"
-                           TargetPageType="{x:Type views:RoomsPage}" />
+                                       TargetPageType="{x:Type views:RoomsPage}" />
                 <ui:NavigationViewItem Content="Tenants" Icon="{ui:SymbolIcon People24}"
-                       TargetPageType="{x:Type views:TenantsPage}" />
+                                       TargetPageType="{x:Type views:TenantsPage}" />
                 <ui:NavigationViewItem Content="Billing" Icon="{ui:SymbolIcon Receipt24}"
-                       TargetPageType="{x:Type views:BillingPage}" />
+                                       TargetPageType="{x:Type views:BillingPage}" />
                 <ui:NavigationViewItem Content="Payments" Icon="{ui:SymbolIcon Money24}"
-                       TargetPageType="{x:Type views:PaymentsPage}" />
+                                       TargetPageType="{x:Type views:PaymentsPage}" />
                 <ui:NavigationViewItem Content="Reports" Icon="{ui:SymbolIcon DataBarVertical24}"
-                       TargetPageType="{x:Type views:ReportsPage}" />
+                                       TargetPageType="{x:Type views:ReportsPage}" />
             </ui:NavigationView.MenuItems>
         </ui:NavigationView>
     </Grid>

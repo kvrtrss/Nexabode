@@ -1,6 +1,7 @@
-﻿using Nexabode.Data;
+﻿using System.Windows;
+using Nexabode.Data;
+using Nexabode.Services;
 using Nexabode.Views;
-using System.Windows;
 
 namespace Nexabode;
 
@@ -21,6 +22,7 @@ public partial class App : Application
         }
 
         base.OnStartup(e);
+        ThemeService.Initialize();
         new LoginWindow().Show();
     }
 }

@@ -5,9 +5,54 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ui:ThemesDictionary Theme="Dark" />
+                <ui:ThemesDictionary Theme="Light" />
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
+
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F5F7FB" />
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppTextBrush" Color="#1E293B" />
+            <SolidColorBrush x:Key="AppSecondaryBrush" Color="#64748B" />
+            <SolidColorBrush x:Key="AppPrimaryBrush" Color="#4F46E5" />
+            <SolidColorBrush x:Key="AppBorderBrush" Color="#E2E8F0" />
+            <SolidColorBrush x:Key="SuccessBrush" Color="#16A34A" />
+            <SolidColorBrush x:Key="WarningBrush" Color="#D97706" />
+            <SolidColorBrush x:Key="DangerBrush" Color="#DC2626" />
+            <SolidColorBrush x:Key="InfoBrush" Color="#0284C7" />
+            <SolidColorBrush x:Key="NeutralBrush" Color="#64748B" />
+            <SolidColorBrush x:Key="OccupiedBrush" Color="#4F46E5" />
+
+            <FontFamily x:Key="AppFont">Segoe UI Variable Text, Segoe UI</FontFamily>
+
+            <Style x:Key="PageTitle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="26" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+            </Style>
+            <Style x:Key="SectionTitle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="15" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+            </Style>
+            <Style x:Key="MutedText" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="12.5" />
+                <Setter Property="Foreground" Value="{DynamicResource AppSecondaryBrush}" />
+            </Style>
+
+            <Style TargetType="ui:Card" BasedOn="{StaticResource {x:Type ui:Card}}">
+                <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="18" />
+            </Style>
+
+            <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+                <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
+                <Setter Property="GridLinesVisibility" Value="Horizontal" />
+                <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource AppBorderBrush}" />
+                <Setter Property="RowHeight" Value="40" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
