@@ -28,8 +28,10 @@
                        TargetPageType="{x:Type views:TenantsPage}" />
                 <ui:NavigationViewItem Content="Billing" Icon="{ui:SymbolIcon Receipt24}"
                        TargetPageType="{x:Type views:BillingPage}" />
-                <ui:NavigationViewItem Content="Payments" Icon="{ui:SymbolIcon Money24}" />
-                <ui:NavigationViewItem Content="Reports" Icon="{ui:SymbolIcon DataBarVertical24}" />
+                <ui:NavigationViewItem Content="Payments" Icon="{ui:SymbolIcon Money24}"
+                       TargetPageType="{x:Type views:PaymentsPage}" />
+                <ui:NavigationViewItem Content="Reports" Icon="{ui:SymbolIcon DataBarVertical24}"
+                       TargetPageType="{x:Type views:ReportsPage}" />
             </ui:NavigationView.MenuItems>
         </ui:NavigationView>
     </Grid>

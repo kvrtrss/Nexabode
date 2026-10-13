@@ -1,0 +1,43 @@
+﻿<Page x:Class="Nexabode.Views.ReportsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Reports">
+    <Grid Margin="30,20,30,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Reports" FontSize="28" FontWeight="Bold" Margin="0,0,0,16" />
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock Text="Report:" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <ComboBox x:Name="ReportCombo" Width="200" Margin="0,0,16,0"
+                      SelectionChanged="ReportCombo_SelectionChanged">
+                <ComboBoxItem Content="Billing statement" />
+                <ComboBoxItem Content="Occupancy report" />
+                <ComboBoxItem Content="Collection report" />
+            </ComboBox>
+
+            <StackPanel x:Name="TenantPanel" Orientation="Horizontal">
+                <TextBlock Text="Tenant:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <ComboBox x:Name="TenantCombo" Width="240" DisplayMemberPath="Name" Margin="0,0,16,0" />
+            </StackPanel>
+
+            <StackPanel x:Name="DatePanel" Orientation="Horizontal" Visibility="Collapsed">
+                <TextBlock Text="From:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <DatePicker x:Name="FromPicker" Width="150" Margin="0,0,12,0" />
+                <TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <DatePicker x:Name="ToPicker" Width="150" Margin="0,0,16,0" />
+            </StackPanel>
+
+            <ui:Button Content="Generate" Appearance="Primary" Click="Generate_Click" Margin="0,0,8,0" />
+            <ui:Button Content="Print / Save as PDF" Click="Print_Click" />
+        </StackPanel>
+
+        <FlowDocumentScrollViewer x:Name="Viewer" Grid.Row="2"
+                                  VerticalScrollBarVisibility="Auto" />
+    </Grid>
+</Page>
