@@ -35,4 +35,5 @@ public partial class MainWindow : FluentWindow
         fresh.Show();
         Close();
     }
+    public void NavigateTo(Type page) => RootNavigation.Navigate(page);
 }
