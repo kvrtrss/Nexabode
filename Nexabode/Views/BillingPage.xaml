@@ -1,0 +1,101 @@
+﻿<Page x:Class="Nexabode.Views.BillingPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Billing">
+    <Grid Margin="30,20,30,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Billing" FontSize="28" FontWeight="Bold" Margin="0,0,0,16" />
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock Text="Billing month:" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <ComboBox x:Name="MonthCombo" Width="200" DisplayMemberPath="Display"
+                      SelectionChanged="MonthCombo_SelectionChanged" />
+        </StackPanel>
+
+        <TabControl Grid.Row="2">
+            <!-- TAB 1: CHARGES -->
+            <TabItem Header="Charges">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <TextBlock Text="Rent due date:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <DatePicker x:Name="RentDuePicker" Width="160" Margin="0,0,16,0" />
+                        <CheckBox x:Name="ProrateCheck" Content="Prorate partial months" Margin="0,0,16,0" />
+                        <ui:Button Content="Generate rent for this month" Appearance="Primary"
+                                   Click="GenerateRent_Click" />
+                    </StackPanel>
+
+                    <DataGrid x:Name="ChargeGrid" Grid.Row="1" AutoGenerateColumns="False"
+                              IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Tenant" Binding="{Binding Tenant}" Width="*" />
+                            <DataGridTextColumn Header="Bed" Binding="{Binding Bed}" Width="140" />
+                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80" />
+                            <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="170" />
+                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat=N2}" Width="100" />
+                            <DataGridTextColumn Header="Paid" Binding="{Binding Paid, StringFormat=N2}" Width="100" />
+                            <DataGridTextColumn Header="Balance" Binding="{Binding Balance, StringFormat=N2}" Width="100" />
+                            <DataGridTextColumn Header="Due" Binding="{Binding DueText}" Width="110" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TextBlock x:Name="TotalsText" Grid.Row="2" Margin="0,10,0,0" FontWeight="SemiBold" />
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 2: UTILITY BILLS -->
+            <TabItem Header="Utility bills">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <ComboBox x:Name="UtilityTypeBox" IsEditable="True" Width="150" Margin="0,0,8,0">
+                            <ComboBoxItem Content="Electricity" />
+                            <ComboBoxItem Content="Water" />
+                            <ComboBoxItem Content="Internet" />
+                            <ComboBoxItem Content="Other" />
+                        </ComboBox>
+                        <ui:TextBox x:Name="BillAmountBox" PlaceholderText="Total bill amount"
+                                    Width="150" Margin="0,0,8,0" />
+                        <ComboBox x:Name="ScopeCombo" Width="170" DisplayMemberPath="Display" Margin="0,0,8,0" />
+                        <DatePicker x:Name="BillDuePicker" Width="150" Margin="0,0,8,0" />
+                        <ui:Button Content="Add bill" Appearance="Primary" Click="AddBill_Click" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                        <ui:Button Content="Split selected bill among tenants" Appearance="Primary"
+                                   Click="SplitBill_Click" Margin="0,0,8,0" />
+                        <ui:Button Content="Delete selected bill" Click="DeleteBill_Click" />
+                    </StackPanel>
+
+                    <DataGrid x:Name="BillGrid" Grid.Row="2" AutoGenerateColumns="False"
+                              IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Utility" Binding="{Binding UtilityType}" Width="*" />
+                            <DataGridTextColumn Header="Applies to" Binding="{Binding Scope}" Width="160" />
+                            <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat=N2}" Width="120" />
+                            <DataGridTextColumn Header="Due" Binding="{Binding DueText}" Width="120" />
+                            <DataGridTextColumn Header="Split?" Binding="{Binding SplitText}" Width="120" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Page>

@@ -26,7 +26,8 @@
                            TargetPageType="{x:Type views:RoomsPage}" />
                 <ui:NavigationViewItem Content="Tenants" Icon="{ui:SymbolIcon People24}"
                        TargetPageType="{x:Type views:TenantsPage}" />
-                <ui:NavigationViewItem Content="Billing" Icon="{ui:SymbolIcon Receipt24}" />
+                <ui:NavigationViewItem Content="Billing" Icon="{ui:SymbolIcon Receipt24}"
+                       TargetPageType="{x:Type views:BillingPage}" />
                 <ui:NavigationViewItem Content="Payments" Icon="{ui:SymbolIcon Money24}" />
                 <ui:NavigationViewItem Content="Reports" Icon="{ui:SymbolIcon DataBarVertical24}" />
             </ui:NavigationView.MenuItems>
