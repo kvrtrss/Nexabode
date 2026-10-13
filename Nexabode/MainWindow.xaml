@@ -24,7 +24,7 @@
         </ui:TitleBar>
 
         <ui:NavigationView x:Name="RootNavigation" Grid.Row="1"
-                           PaneDisplayMode="Left" OpenPaneLength="230"
+                           PaneDisplayMode="Left" OpenPaneLength="240"
                            IsBackButtonVisible="Collapsed">
             <ui:NavigationView.MenuItems>
                 <ui:NavigationViewItem Content="Dashboard" Icon="{ui:SymbolIcon Home24}"
@@ -33,13 +33,34 @@
                                        TargetPageType="{x:Type views:RoomsPage}" />
                 <ui:NavigationViewItem Content="Tenants" Icon="{ui:SymbolIcon People24}"
                                        TargetPageType="{x:Type views:TenantsPage}" />
-                <ui:NavigationViewItem Content="Billing" Icon="{ui:SymbolIcon Receipt24}"
+                <ui:NavigationViewItem Content="Billing Charges" Icon="{ui:SymbolIcon Receipt24}"
                                        TargetPageType="{x:Type views:BillingPage}" />
+                <ui:NavigationViewItem Content="Utility Bills" Icon="{ui:SymbolIcon Flash24}"
+                                       TargetPageType="{x:Type views:UtilityBillsPage}" />
                 <ui:NavigationViewItem Content="Payments" Icon="{ui:SymbolIcon Money24}"
                                        TargetPageType="{x:Type views:PaymentsPage}" />
                 <ui:NavigationViewItem Content="Reports" Icon="{ui:SymbolIcon DataBarVertical24}"
                                        TargetPageType="{x:Type views:ReportsPage}" />
             </ui:NavigationView.MenuItems>
+
+            <ui:NavigationView.PaneFooter>
+                <Border Margin="12,8" Padding="10" CornerRadius="10" BorderThickness="1"
+                        BorderBrush="{DynamicResource AppBorderBrush}"
+                        Background="{DynamicResource AppSurfaceBrush}">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="32" Height="32" CornerRadius="16"
+                                Background="{DynamicResource AppPrimaryBrush}">
+                            <TextBlock Text="A" Foreground="White" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="Admin User" FontWeight="SemiBold" FontSize="13"
+                                       Foreground="{DynamicResource AppTextBrush}" />
+                            <TextBlock Text="Administrator" Style="{StaticResource MutedText}" FontSize="12" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </ui:NavigationView.PaneFooter>
         </ui:NavigationView>
     </Grid>
 </ui:FluentWindow>

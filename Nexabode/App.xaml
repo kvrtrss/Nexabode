@@ -21,6 +21,12 @@
             <SolidColorBrush x:Key="InfoBrush" Color="#0284C7" />
             <SolidColorBrush x:Key="NeutralBrush" Color="#64748B" />
             <SolidColorBrush x:Key="OccupiedBrush" Color="#4F46E5" />
+            <SolidColorBrush x:Key="SuccessSoftBrush" Color="#2616A34A" />
+            <SolidColorBrush x:Key="WarningSoftBrush" Color="#26D97706" />
+            <SolidColorBrush x:Key="DangerSoftBrush" Color="#26DC2626" />
+            <SolidColorBrush x:Key="InfoSoftBrush" Color="#260284C7" />
+            <SolidColorBrush x:Key="NeutralSoftBrush" Color="#2664748B" />
+            <SolidColorBrush x:Key="OccupiedSoftBrush" Color="#264F46E5" />
 
             <FontFamily x:Key="AppFont">Segoe UI Variable Text, Segoe UI</FontFamily>
 
@@ -53,6 +59,69 @@
                 <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource AppBorderBrush}" />
                 <Setter Property="RowHeight" Value="40" />
             </Style>
+
+            <!-- Right-aligned cells for money columns -->
+            <Style x:Key="RightCell" TargetType="TextBlock">
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <!-- Status badge: always shows a text label, color only supports it -->
+            <DataTemplate x:Key="StatusBadgeTemplate">
+                <Border x:Name="Pill" CornerRadius="10" Padding="10,2" HorizontalAlignment="Left"
+            VerticalAlignment="Center" Background="{DynamicResource NeutralSoftBrush}">
+                    <TextBlock x:Name="Label" Text="{Binding}" FontSize="12" FontWeight="SemiBold"
+                   Foreground="{DynamicResource NeutralBrush}" />
+                </Border>
+                <DataTemplate.Triggers>
+                    <!-- Green: positive -->
+                    <DataTrigger Binding="{Binding}" Value="Paid">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource SuccessSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding}" Value="Available">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource SuccessSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding}" Value="Split">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource SuccessSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                    </DataTrigger>
+                    <!-- Amber: pending -->
+                    <DataTrigger Binding="{Binding}" Value="Unpaid">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding}" Value="Partial">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding}" Value="Reserved">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                    </DataTrigger>
+                    <!-- Red: urgent -->
+                    <DataTrigger Binding="{Binding}" Value="Overdue">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource DangerSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding}" Value="Maintenance">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource DangerSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                    </DataTrigger>
+                    <!-- Indigo: occupied -->
+                    <DataTrigger Binding="{Binding}" Value="Occupied">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource OccupiedSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource OccupiedBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding}" Value="Staying">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource OccupiedSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource OccupiedBrush}" />
+                    </DataTrigger>
+                    <!-- Anything else (Inactive, Draft, Moved out) stays gray -->
+                </DataTemplate.Triggers>
+            </DataTemplate>
+            
         </ResourceDictionary>
     </Application.Resources>
 </Application>

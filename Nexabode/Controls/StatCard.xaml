@@ -1,0 +1,15 @@
+﻿<UserControl x:Class="Nexabode.Controls.StatCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+    <ui:Card HorizontalAlignment="Stretch">
+        <StackPanel>
+            <TextBlock x:Name="LabelText" Style="{StaticResource MutedText}"
+                       FontSize="11.5" FontWeight="SemiBold" />
+            <TextBlock x:Name="ValueText" FontSize="28" FontWeight="SemiBold"
+                       Margin="0,6,0,2" Foreground="{DynamicResource AppTextBrush}" />
+            <TextBlock x:Name="CaptionText" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource AppSecondaryBrush}" />
+        </StackPanel>
+    </ui:Card>
+</UserControl>
