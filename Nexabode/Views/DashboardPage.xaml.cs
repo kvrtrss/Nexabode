@@ -59,7 +59,7 @@ public partial class DashboardPage : Page
 
         using var db = new AppDbContext();
 
-        var totalBeds = db.Beds.Count(b => b.IsActive && b.Room.IsActive);
+        var totalBeds = db.Beds.Count(b => b.IsActive && b.Room.IsActive && !b.IsMaintenance);
         var occupied = db.Occupancies.Count(o => o.MoveOutDate == null);
         var vacant = Math.Max(0, totalBeds - occupied);
         var rate = totalBeds == 0 ? 0 : occupied * 100.0 / totalBeds;

@@ -27,6 +27,7 @@ public class Bed
     public string BedLabel { get; set; } = string.Empty;
     public decimal MonthlyRate { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsMaintenance { get; set; }
     public List<Occupancy> Occupancies { get; set; } = new();
 }
 

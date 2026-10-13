@@ -299,7 +299,7 @@ public partial class ReportsPage : Page
         var rows = beds.Select(b =>
         {
             active.TryGetValue(b.Id, out var occ);
-            var status = !b.IsActive || !b.Room.IsActive ? "Inactive"
+            var status = !b.IsActive || !b.Room.IsActive || b.IsMaintenance ? "Inactive"
                        : occ != null ? "Occupied" : "Vacant";
             return new
             {

@@ -1,5 +1,9 @@
-﻿using System.Windows;
+﻿using System.Globalization;
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
 using Nexabode.Models;
 
@@ -7,233 +11,535 @@ namespace Nexabode.Views;
 
 public partial class RoomsPage : Page
 {
-    public class RoomRow
+    public class BedInfo
     {
         public int Id { get; set; }
-        public string RoomName { get; set; } = "";
+        public string Label { get; set; } = "";
+        public decimal Rate { get; set; }
         public bool IsActive { get; set; }
-        public string Display => IsActive ? RoomName : $"{RoomName} (Inactive)";
-    }
-
-    public class BedRow
-    {
-        public int Id { get; set; }
-        public string BedLabel { get; set; } = "";
-        public decimal MonthlyRate { get; set; }
         public string Status { get; set; } = "";
     }
+
+    public class RoomInfo
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? Floor { get; set; }
+        public string? Notes { get; set; }
+        public bool IsActive { get; set; }
+        public List<BedInfo> Beds { get; set; } = new();
+    }
+
+    private List<RoomInfo> _rooms = new();
+    private int? _roomId;
+    private int? _bedId;
+    private string _filter = "All";
 
     public RoomsPage()
     {
         InitializeComponent();
-        Loaded += (_, _) => LoadRooms();
+        Loaded += (_, _) => Reload();
     }
+
+    // ---------- Helpers ----------
 
     private static void Tell(string message) =>
         MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
-    private void LoadRooms(int? selectId = null)
-    {
-        using var db = new AppDbContext();
-        var rooms = db.Rooms
-            .OrderBy(r => r.RoomName)
-            .AsEnumerable()
-            .Select(r => new RoomRow { Id = r.Id, RoomName = r.RoomName, IsActive = r.IsActive })
-            .ToList();
+    private Window? Owner => Window.GetWindow(this);
 
-        RoomList.ItemsSource = rooms;
-        if (selectId != null)
-            RoomList.SelectedItem = rooms.FirstOrDefault(r => r.Id == selectId);
+    private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
+
+    private static string? Blank(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    private static bool TryMoney(string text, out decimal value) =>
+        decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value) && value >= 0;
+
+    private static string ToneOf(string status) => status switch
+    {
+        "Available" => "Success",
+        "Occupied" => "Occupied",
+        "Reserved" => "Warning",
+        "Maintenance" => "Danger",
+        _ => "Neutral"
+    };
+
+    private static string StatusOf(Room room, Bed bed, DateOnly? moveIn, DateOnly today)
+    {
+        if (!room.IsActive || !bed.IsActive) return "Inactive";
+        if (bed.IsMaintenance) return "Maintenance";
+        if (moveIn == null) return "Available";
+        return moveIn > today ? "Reserved" : "Occupied";
     }
 
-    private void LoadBeds()
+    private RoomInfo? CurrentRoom => _rooms.FirstOrDefault(r => r.Id == _roomId);
+    private BedInfo? SelectedBed => BedGrid.SelectedItem as BedInfo;
+
+    // ---------- Loading and drawing ----------
+
+    private void Reload(int? selectRoom = null)
     {
-        if (RoomList.SelectedItem is not RoomRow room)
+        if (selectRoom != null && selectRoom != _roomId)
         {
-            BedGrid.ItemsSource = null;
-            SelectedRoomText.Text = "Select a room";
-            UpdateButtons();
-            return;
+            _roomId = selectRoom;
+            _bedId = null;
         }
 
-        SelectedRoomText.Text = room.Display;
+        var today = DateOnly.FromDateTime(DateTime.Today);
 
         using var db = new AppDbContext();
-        var occupiedBedIds = db.Occupancies
-            .Where(o => o.MoveOutDate == null)
-            .Select(o => o.BedId)
-            .ToList();
 
-        BedGrid.ItemsSource = db.Beds
-            .Where(b => b.RoomId == room.Id)
-            .OrderBy(b => b.BedLabel)
-            .AsEnumerable()
-            .Select(b => new BedRow
+        var moveIns = db.Occupancies
+            .Where(o => o.MoveOutDate == null)
+            .ToList()
+            .GroupBy(o => o.BedId)
+            .ToDictionary(g => g.Key, g => g.Min(o => o.MoveInDate));
+
+        _rooms = db.Rooms
+            .Include(r => r.Beds)
+            .OrderBy(r => r.RoomName)
+            .ToList()
+            .Select(r => new RoomInfo
             {
-                Id = b.Id,
-                BedLabel = b.BedLabel,
-                MonthlyRate = b.MonthlyRate,
-                Status = !room.IsActive || !b.IsActive ? "Inactive"
-                       : occupiedBedIds.Contains(b.Id) ? "Occupied" : "Vacant"
+                Id = r.Id,
+                Name = r.RoomName,
+                Floor = r.Floor,
+                Notes = r.Notes,
+                IsActive = r.IsActive,
+                Beds = r.Beds
+                    .OrderBy(b => b.BedLabel)
+                    .Select(b => new BedInfo
+                    {
+                        Id = b.Id,
+                        Label = b.BedLabel,
+                        Rate = b.MonthlyRate,
+                        IsActive = b.IsActive,
+                        Status = StatusOf(r, b, MoveInOf(moveIns, b.Id), today)
+                    })
+                    .ToList()
             })
             .ToList();
 
-        UpdateButtons();
+        if (_roomId != null && CurrentRoom == null) _roomId = null;
+
+        Render();
+    }
+
+    private static DateOnly? MoveInOf(Dictionary<int, DateOnly> map, int bedId) =>
+        map.TryGetValue(bedId, out var date) ? date : null;
+
+    private void Render()
+    {
+        RenderChips();
+        RenderRooms();
+        RenderDetail();
+    }
+
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (RoomWrap == null) return;
+        RenderRooms();
+    }
+
+    private void RenderChips()
+    {
+        ChipPanel.Children.Clear();
+        var beds = _rooms.SelectMany(r => r.Beds).ToList();
+
+        ChipPanel.Children.Add(MakeChip("All", $"All rooms  {_rooms.Count}", null));
+        foreach (var status in new[] { "Available", "Occupied", "Reserved", "Maintenance", "Inactive" })
+            ChipPanel.Children.Add(MakeChip(status, $"{status}  {beds.Count(b => b.Status == status)}", status));
+    }
+
+    private Border MakeChip(string key, string text, string? status)
+    {
+        var tone = status == null ? null : ToneOf(status);
+
+        var chip = new Border
+        {
+            Padding = new Thickness(12, 5, 12, 5),
+            Margin = new Thickness(0, 0, 8, 0),
+            CornerRadius = new CornerRadius(14),
+            Cursor = Cursors.Hand,
+            BorderThickness = new Thickness(1.5),
+            BorderBrush = _filter == key ? Res("AppPrimaryBrush") : Brushes.Transparent,
+            Background = tone == null ? Res("AppBackgroundBrush") : Res(tone + "SoftBrush"),
+            Child = new TextBlock
+            {
+                Text = text,
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = tone == null ? Res("AppTextBrush") : Res(tone + "Brush")
+            }
+        };
+        chip.MouseLeftButtonUp += (_, _) =>
+        {
+            _filter = key;
+            Render();
+        };
+        return chip;
+    }
+
+    private void RenderRooms()
+    {
+        RoomWrap.Children.Clear();
+        var query = SearchBox.Text.Trim();
+
+        var shown = _rooms
+            .Where(r => query == "" || r.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .Where(r => _filter == "All" || r.Beds.Any(b => b.Status == _filter))
+            .ToList();
+
+        if (shown.Count == 0)
+        {
+            RoomWrap.Children.Add(new TextBlock
+            {
+                Text = _rooms.Count == 0
+                    ? "No rooms yet. Click Add room to create your first room."
+                    : "No rooms match your search or filter.",
+                Style = (Style)FindResource("MutedText"),
+                Margin = new Thickness(4, 8, 0, 0)
+            });
+            return;
+        }
+
+        foreach (var room in shown)
+            RoomWrap.Children.Add(MakeRoomCard(room));
+    }
+
+    private Border MakeRoomCard(RoomInfo room)
+    {
+        var selected = room.Id == _roomId;
+
+        var header = new Grid();
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        header.Children.Add(new TextBlock
+        {
+            Text = room.Name,
+            FontSize = 16,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Res("AppTextBrush")
+        });
+        var count = new TextBlock
+        {
+            Text = room.IsActive ? $"{room.Beds.Count} bed(s)" : "Inactive",
+            Style = (Style)FindResource("MutedText"),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(count, 1);
+        header.Children.Add(count);
+
+        var chips = new WrapPanel { Margin = new Thickness(0, 12, 0, 4) };
+        if (room.Beds.Count == 0)
+            chips.Children.Add(new TextBlock
+            {
+                Text = "No beds yet",
+                Style = (Style)FindResource("MutedText"),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+        foreach (var bed in room.Beds)
+            chips.Children.Add(MakeBedChip(bed));
+
+        var link = new TextBlock
+        {
+            Text = "View room details  →",
+            FontSize = 12.5,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Res("AppPrimaryBrush"),
+            Margin = new Thickness(0, 6, 0, 0)
+        };
+
+        var stack = new StackPanel();
+        stack.Children.Add(header);
+        stack.Children.Add(chips);
+        stack.Children.Add(link);
+
+        var card = new Border
+        {
+            Width = 270,
+            Margin = new Thickness(0, 0, 16, 16),
+            Padding = new Thickness(16),
+            CornerRadius = new CornerRadius(10),
+            Cursor = Cursors.Hand,
+            Opacity = room.IsActive ? 1 : 0.65,
+            Background = Res("AppSurfaceBrush"),
+            BorderBrush = selected ? Res("AppPrimaryBrush") : Res("AppBorderBrush"),
+            BorderThickness = new Thickness(selected ? 2 : 1),
+            Child = stack
+        };
+        card.MouseLeftButtonUp += (_, _) =>
+        {
+            _roomId = room.Id;
+            _bedId = null;
+            Render();
+        };
+        return card;
+    }
+
+    private static Border MakeBedChip(BedInfo bed)
+    {
+        var tone = ToneOf(bed.Status);
+        return new Border
+        {
+            Padding = new Thickness(10, 5, 10, 5),
+            Margin = new Thickness(0, 0, 8, 8),
+            CornerRadius = new CornerRadius(8),
+            Background = Res(tone + "SoftBrush"),
+            ToolTip = $"{bed.Label}: {bed.Status}",
+            Child = new TextBlock
+            {
+                Text = bed.Label,
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                MaxWidth = 110,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Foreground = Res(tone + "Brush"),
+                TextDecorations = bed.Status == "Inactive" ? System.Windows.TextDecorations.Strikethrough : null
+            }
+        };
+    }
+
+    private void RenderDetail()
+    {
+        var room = CurrentRoom;
+        DetailEmpty.Visibility = room == null ? Visibility.Visible : Visibility.Collapsed;
+        DetailBody.Visibility = room == null ? Visibility.Collapsed : Visibility.Visible;
+        if (room == null) return;
+
+        DetailTitle.Text = room.IsActive ? room.Name : $"{room.Name} (Inactive)";
+
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(room.Floor)) parts.Add(room.Floor!);
+        parts.Add($"{room.Beds.Count} bed(s)");
+        if (!string.IsNullOrWhiteSpace(room.Notes)) parts.Add(room.Notes!);
+        DetailSub.Text = string.Join("  -  ", parts);
+
+        RoomToggleButton.Content = room.IsActive ? "Deactivate room" : "Activate room";
+
+        var keep = _bedId;   // setting the list clears the selection, so remember it first
+        BedGrid.ItemsSource = room.Beds;
+        BedGrid.SelectedItem = room.Beds.FirstOrDefault(b => b.Id == keep);
+        _bedId = keep;
+
+        UpdateBedButtons();
+    }
+
+    private void BedGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _bedId = SelectedBed?.Id;
+        UpdateBedButtons();
     }
 
     // Each button is enabled only when it applies to the current selection.
-    private void UpdateButtons()
+    private void UpdateBedButtons()
     {
-        var room = RoomList.SelectedItem as RoomRow;
-        DeactivateRoomButton.IsEnabled = room is { IsActive: true };
-        ActivateRoomButton.IsEnabled = room is { IsActive: false };
+        var room = CurrentRoom;
+        var bed = SelectedBed;
+        var roomOn = room?.IsActive == true;
 
-        // Bed buttons only work while the room itself is active.
-        var status = (BedGrid.SelectedItem as BedRow)?.Status;
-        var roomActive = room is { IsActive: true };
-        DeactivateButton.IsEnabled = roomActive && status is "Vacant" or "Occupied";
-        ActivateButton.IsEnabled = roomActive && status == "Inactive";
+        AddBedButton.IsEnabled = roomOn;
+        EditBedButton.IsEnabled = bed != null;
+        DeactivateBedButton.IsEnabled = bed != null && roomOn && bed.IsActive;
+        ActivateBedButton.IsEnabled = bed != null && roomOn && !bed.IsActive;
+        StartMaintButton.IsEnabled = bed?.Status == "Available";
+        EndMaintButton.IsEnabled = bed?.Status == "Maintenance";
     }
 
-    private void RoomList_SelectionChanged(object sender, SelectionChangedEventArgs e) => LoadBeds();
-
-    private void BedGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateButtons();
+    // ---------- Room actions ----------
 
     private void AddRoom_Click(object sender, RoutedEventArgs e)
     {
-        var name = RoomNameBox.Text.Trim();
-        if (name == "")
-        {
-            Tell("Please enter a room name.");
-            return;
-        }
+        var values = FormDialog.Ask(Owner, "Add room", "Add room",
+            new[] { ("Room name (e.g. Room 101)", ""), ("Floor (optional)", ""), ("Notes (optional)", "") },
+            v =>
+            {
+                var name = v[0].Trim();
+                if (name == "") return "Please enter a room name.";
+                using var check = new AppDbContext();
+                return check.Rooms.Any(r => r.RoomName == name) ? "A room with that name already exists." : null;
+            });
+        if (values == null) return;
 
         using var db = new AppDbContext();
-        if (db.Rooms.Any(r => r.RoomName == name))
-        {
-            Tell("A room with that name already exists.");
-            return;
-        }
-
-        var room = new Room
-        {
-            RoomName = name,
-            Floor = string.IsNullOrWhiteSpace(FloorBox.Text) ? null : FloorBox.Text.Trim()
-        };
+        var room = new Room { RoomName = values[0].Trim(), Floor = Blank(values[1]), Notes = Blank(values[2]) };
         db.Rooms.Add(room);
         db.SaveChanges();
 
-        RoomNameBox.Text = "";
-        FloorBox.Text = "";
-        LoadRooms(room.Id);
+        Reload(room.Id);
     }
 
-    private void DeactivateRoom_Click(object sender, RoutedEventArgs e)
+    private void EditRoom_Click(object sender, RoutedEventArgs e)
     {
-        if (RoomList.SelectedItem is not RoomRow row)
-        {
-            Tell("Select a room first.");
-            return;
-        }
+        var room = CurrentRoom;
+        if (room == null) return;
+
+        var values = FormDialog.Ask(Owner, "Edit room", "Save changes",
+            new[] { ("Room name", room.Name), ("Floor (optional)", room.Floor ?? ""), ("Notes (optional)", room.Notes ?? "") },
+            v =>
+            {
+                var name = v[0].Trim();
+                if (name == "") return "Please enter a room name.";
+                using var check = new AppDbContext();
+                return check.Rooms.Any(r => r.RoomName == name && r.Id != room.Id)
+                    ? "Another room already has that name." : null;
+            });
+        if (values == null) return;
+
+        using var db = new AppDbContext();
+        var entity = db.Rooms.Find(room.Id)!;
+        entity.RoomName = values[0].Trim();
+        entity.Floor = Blank(values[1]);
+        entity.Notes = Blank(values[2]);
+        db.SaveChanges();
+
+        Reload();
+    }
+
+    private void ToggleRoom_Click(object sender, RoutedEventArgs e)
+    {
+        var room = CurrentRoom;
+        if (room == null) return;
 
         using var db = new AppDbContext();
 
-        if (db.Occupancies.Any(o => o.MoveOutDate == null && o.Bed.RoomId == row.Id))
+        if (room.IsActive && db.Occupancies.Any(o => o.MoveOutDate == null && o.Bed.RoomId == room.Id))
         {
-            Tell("This room still has tenants staying in it. Move them out first.");
+            Tell("This room still has tenants (or upcoming move-ins). Move them out first.");
             return;
         }
 
-        var room = db.Rooms.Find(row.Id)!;
-        room.IsActive = false;
+        var entity = db.Rooms.Find(room.Id)!;
+        entity.IsActive = !room.IsActive;
         db.SaveChanges();
-        LoadRooms(row.Id);
+
+        Reload();
     }
 
-    private void ActivateRoom_Click(object sender, RoutedEventArgs e)
-    {
-        if (RoomList.SelectedItem is not RoomRow row)
-        {
-            Tell("Select a room first.");
-            return;
-        }
-
-        using var db = new AppDbContext();
-        var room = db.Rooms.Find(row.Id)!;
-        room.IsActive = true;
-        db.SaveChanges();
-        LoadRooms(row.Id);
-    }
+    // ---------- Bed actions ----------
 
     private void AddBed_Click(object sender, RoutedEventArgs e)
     {
-        if (RoomList.SelectedItem is not RoomRow room)
-        {
-            Tell("Select a room first.");
-            return;
-        }
+        var room = CurrentRoom;
+        if (room == null) return;
         if (!room.IsActive)
         {
             Tell("This room is inactive. Activate the room before adding beds.");
             return;
         }
 
-        var label = BedLabelBox.Text.Trim();
-        if (label == "" || !decimal.TryParse(RateBox.Text, out var rate) || rate < 0)
-        {
-            Tell("Enter a bed label and a valid monthly rate.");
-            return;
-        }
+        var values = FormDialog.Ask(Owner, $"Add bed to {room.Name}", "Add bed",
+            new[] { ("Bed label (e.g. Bed A)", ""), ("Monthly rent", "") },
+            v =>
+            {
+                var label = v[0].Trim();
+                if (label == "") return "Please enter a bed label.";
+                if (!TryMoney(v[1], out _)) return "Enter the monthly rent as a number (e.g. 1500).";
+                using var check = new AppDbContext();
+                return check.Beds.Any(b => b.RoomId == room.Id && b.BedLabel == label)
+                    ? "This room already has a bed with that label." : null;
+            });
+        if (values == null) return;
+
+        TryMoney(values[1], out var rate);
 
         using var db = new AppDbContext();
-        if (db.Beds.Any(b => b.RoomId == room.Id && b.BedLabel == label))
-        {
-            Tell("That bed already exists in this room.");
-            return;
-        }
-
-        db.Beds.Add(new Bed { RoomId = room.Id, BedLabel = label, MonthlyRate = rate });
+        var bed = new Bed { RoomId = room.Id, BedLabel = values[0].Trim(), MonthlyRate = Math.Round(rate, 2) };
+        db.Beds.Add(bed);
         db.SaveChanges();
 
-        BedLabelBox.Text = "";
-        RateBox.Text = "";
-        LoadBeds();
+        _bedId = bed.Id;
+        Reload();
     }
 
-    private void Deactivate_Click(object sender, RoutedEventArgs e)
+    private void EditBed_Click(object sender, RoutedEventArgs e)
     {
-        if (BedGrid.SelectedItem is not BedRow row)
-        {
-            Tell("Select a bed first.");
-            return;
-        }
+        var room = CurrentRoom;
+        var bed = SelectedBed;
+        if (room == null || bed == null) return;
+
+        var values = FormDialog.Ask(Owner, $"Edit bed in {room.Name}", "Save changes",
+            new[] { ("Bed label", bed.Label), ("Monthly rent", bed.Rate.ToString("0.##")) },
+            v =>
+            {
+                var label = v[0].Trim();
+                if (label == "") return "Please enter a bed label.";
+                if (!TryMoney(v[1], out _)) return "Enter the monthly rent as a number (e.g. 1500).";
+                using var check = new AppDbContext();
+                return check.Beds.Any(b => b.RoomId == room.Id && b.BedLabel == label && b.Id != bed.Id)
+                    ? "Another bed in this room has that label." : null;
+            },
+            note: "A new rent only applies to future move-ins. Tenants already staying keep the rent they agreed to.");
+        if (values == null) return;
+
+        TryMoney(values[1], out var rate);
 
         using var db = new AppDbContext();
-        var bed = db.Beds.Find(row.Id)!;
+        var entity = db.Beds.Find(bed.Id)!;
+        entity.BedLabel = values[0].Trim();
+        entity.MonthlyRate = Math.Round(rate, 2);
+        db.SaveChanges();
 
+        Reload();
+    }
+
+    private void DeactivateBed_Click(object sender, RoutedEventArgs e)
+    {
+        var bed = SelectedBed;
+        if (bed == null) return;
+
+        using var db = new AppDbContext();
         if (db.Occupancies.Any(o => o.BedId == bed.Id && o.MoveOutDate == null))
         {
-            Tell("This bed is occupied. Move the tenant out first.");
+            Tell("This bed has a tenant (or an upcoming move-in). Move the tenant out first.");
             return;
         }
 
-        bed.IsActive = false;
+        var entity = db.Beds.Find(bed.Id)!;
+        entity.IsActive = false;
         db.SaveChanges();
-        LoadBeds();
+        Reload();
     }
 
-    private void Activate_Click(object sender, RoutedEventArgs e)
+    private void ActivateBed_Click(object sender, RoutedEventArgs e)
     {
-        if (BedGrid.SelectedItem is not BedRow row)
+        var bed = SelectedBed;
+        if (bed == null) return;
+
+        using var db = new AppDbContext();
+        var entity = db.Beds.Find(bed.Id)!;
+        entity.IsActive = true;
+        db.SaveChanges();
+        Reload();
+    }
+
+    private void StartMaintenance_Click(object sender, RoutedEventArgs e)
+    {
+        var bed = SelectedBed;
+        if (bed == null) return;
+
+        using var db = new AppDbContext();
+        if (db.Occupancies.Any(o => o.BedId == bed.Id && o.MoveOutDate == null))
         {
-            Tell("Select a bed first.");
+            Tell("This bed has a tenant. Move the tenant out before starting maintenance.");
             return;
         }
 
-        using var db = new AppDbContext();
-        var bed = db.Beds.Find(row.Id)!;
-        bed.IsActive = true;
+        var entity = db.Beds.Find(bed.Id)!;
+        entity.IsMaintenance = true;
         db.SaveChanges();
-        LoadBeds();
+        Reload();
+    }
+
+    private void EndMaintenance_Click(object sender, RoutedEventArgs e)
+    {
+        var bed = SelectedBed;
+        if (bed == null) return;
+
+        using var db = new AppDbContext();
+        var entity = db.Beds.Find(bed.Id)!;
+        entity.IsMaintenance = false;
+        db.SaveChanges();
+        Reload();
     }
 }

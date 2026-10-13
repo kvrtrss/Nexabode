@@ -76,7 +76,7 @@ public partial class TenantsPage : Page
 
         BedCombo.ItemsSource = db.Beds
             .Include(b => b.Room)
-            .Where(b => b.IsActive)
+            .Where(b => b.IsActive && b.Room.IsActive && !b.IsMaintenance)
             .ToList()
             .Where(b => !occupiedIds.Contains(b.Id))
             .OrderBy(b => b.Room.RoomName).ThenBy(b => b.BedLabel)

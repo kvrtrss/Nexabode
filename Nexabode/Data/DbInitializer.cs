@@ -16,7 +16,7 @@ public static class DbInitializer
         {
             db.AdminUsers.Add(new AdminUser
             {
-                // temporary default login, to be changed by the user on first use
+                // temporary default login, to be changed on first use
                 Username = "admin",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123")
             });
@@ -24,15 +24,23 @@ public static class DbInitializer
         }
     }
 
-    // Adds columns introduced after the database was first created.
+    // Adds columns introduced after the database was first created (existing data is kept).
     private static void UpgradeSchema(AppDbContext db)
     {
-        var hasRoomStatus = db.Database
-            .SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_table_info('Rooms') WHERE name = 'IsActive'")
+        AddColumnIfMissing(db, "Rooms", "IsActive", "INTEGER NOT NULL DEFAULT 1");
+        AddColumnIfMissing(db, "Beds", "IsMaintenance", "INTEGER NOT NULL DEFAULT 0");
+    }
+
+#pragma warning disable EF1002   // table and column names below are fixed constants, never user input
+    private static void AddColumnIfMissing(AppDbContext db, string table, string column, string definition)
+    {
+        var exists = db.Database
+            .SqlQueryRaw<int>($"SELECT COUNT(*) AS Value FROM pragma_table_info('{table}') WHERE name = '{column}'")
             .AsEnumerable()
             .First();
 
-        if (hasRoomStatus == 0)
-            db.Database.ExecuteSqlRaw("ALTER TABLE Rooms ADD COLUMN IsActive INTEGER NOT NULL DEFAULT 1");
+        if (exists == 0)
+            db.Database.ExecuteSqlRaw($"ALTER TABLE {table} ADD COLUMN {column} {definition}");
     }
+#pragma warning restore EF1002
 }
