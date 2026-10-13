@@ -424,5 +424,22 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
+# Nexabode: never commit data, keys, or backups
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+*.key
+*.bak
+*.nexabak
+*.sql
+*.csv
+*.xlsx
+*.pdf
+secrets.json
+appsettings.Development.json
+
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
