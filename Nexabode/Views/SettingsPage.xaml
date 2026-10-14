@@ -1,0 +1,36 @@
+﻿<Page x:Class="Nexabode.Views.SettingsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:controls="clr-namespace:Nexabode.Controls"
+      Title="Settings">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="32,24,32,24" MaxWidth="760" HorizontalAlignment="Left">
+            <controls:PageHeader Title="Settings"
+                                 Subtitle="Security, backups, and app information." />
+
+            <ui:Card Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="Security" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
+                    <TextBlock x:Name="AccountText" Style="{StaticResource MutedText}" Margin="0,0,0,12" />
+                    <ui:Button Content="Change password" HorizontalAlignment="Left"
+                               Click="ChangePassword_Click" />
+                </StackPanel>
+            </ui:Card>
+
+            <ui:Card>
+                <StackPanel>
+                    <TextBlock Text="About" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
+                    <TextBlock Text="Nexabode - Boarding House Bed Occupancy &amp; Payment Monitoring System"
+                               Foreground="{DynamicResource AppTextBrush}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                    <TextBlock Text="Version 1.0.0" Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+                    <TextBlock Text="Where your data is stored" FontWeight="SemiBold"
+                               Foreground="{DynamicResource AppTextBrush}" Margin="0,0,0,2" />
+                    <TextBlock x:Name="DataPathText" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                    <TextBlock Text="Everything stays on this computer. The database is encrypted."
+                               Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                </StackPanel>
+            </ui:Card>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

@@ -42,7 +42,12 @@
                 <ui:NavigationViewItem Content="Reports" Icon="{ui:SymbolIcon DataBarVertical24}"
                                        TargetPageType="{x:Type views:ReportsPage}" />
             </ui:NavigationView.MenuItems>
-
+            
+            <ui:NavigationView.FooterMenuItems>
+                <ui:NavigationViewItem Content="Settings" Icon="{ui:SymbolIcon Settings24}"
+                           TargetPageType="{x:Type views:SettingsPage}" />
+            </ui:NavigationView.FooterMenuItems>
+            
             <ui:NavigationView.PaneFooter>
                 <Border Margin="12,8" Padding="10" CornerRadius="10" BorderThickness="1"
                         BorderBrush="{DynamicResource AppBorderBrush}"
