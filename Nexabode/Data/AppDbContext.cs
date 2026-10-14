@@ -33,6 +33,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Room>().HasIndex(r => r.RoomName).IsUnique();
         modelBuilder.Entity<Bed>().HasIndex(b => new { b.RoomId, b.BedLabel }).IsUnique();
         modelBuilder.Entity<Charge>().Property(c => c.ChargeType).HasConversion<string>();
+        // Voided charges disappear from every query unless a page asks to see them.
+        modelBuilder.Entity<Charge>().HasQueryFilter(c => !c.IsVoided);
+        modelBuilder.Entity<PaymentAllocation>().HasQueryFilter(a => !a.Charge.IsVoided);
 
         // Never auto-delete history: block deleting a record that other records depend on.
         foreach (var fk in modelBuilder.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()))

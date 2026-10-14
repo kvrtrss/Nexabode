@@ -82,6 +82,9 @@ public class Charge
     public int? UtilityBillId { get; set; }
     public UtilityBill? UtilityBill { get; set; }
     public List<PaymentAllocation> Allocations { get; set; } = new();
+    public bool IsVoided { get; set; }
+    public string? VoidReason { get; set; }
+    public DateOnly? VoidedOn { get; set; }
 }
 
 public class Payment

@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Globalization;
+using System.Windows;
 using System.Windows.Controls;
 using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
@@ -21,10 +22,13 @@ public partial class UtilityBillsPage : Page
         public string UtilityType { get; set; } = "";
         public string Scope { get; set; } = "";
         public decimal Total { get; set; }
-        public string DueText { get; set; } = "";
+        public DateOnly? Due { get; set; }
+        public string DueText => Due?.ToString("MMM d, yyyy") ?? "-";
         public bool IsSplit { get; set; }
         public string StatusText => IsSplit ? "Split" : "Draft";
     }
+
+    private bool _ready;
 
     public UtilityBillsPage()
     {
@@ -32,10 +36,22 @@ public partial class UtilityBillsPage : Page
         Loaded += (_, _) => Setup();
     }
 
+    // ---------- Helpers ----------
+
     private static void Tell(string message) =>
         MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
+    private Window? Owner => Window.GetWindow(this);
+
+    private static bool TryDate(string text, out DateOnly date) =>
+        DateOnly.TryParse(text.Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out date);
+
+    private static bool TryMoney(string text, out decimal value) =>
+        decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value);
+
     private DateOnly? SelectedMonth => (MonthCombo.SelectedItem as MonthOption)?.Start;
+
+    private BillRow? Selected => BillGrid.SelectedItem as BillRow;
 
     private void Setup()
     {
@@ -51,15 +67,29 @@ public partial class UtilityBillsPage : Page
 
         var months = BillingHelpers.BuildMonths();
         MonthCombo.ItemsSource = months;
+        _ready = true;
         MonthCombo.SelectedItem = months.First(m => m.Start == BillingHelpers.CurrentMonthStart());
     }
 
     private void MonthCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (SelectedMonth is not DateOnly start) return;
+        if (!_ready || SelectedMonth is not DateOnly start) return;
         BillDuePicker.SelectedDate = start.AddDays(19).ToDateTime(TimeOnly.MinValue);   // the 20th
         LoadBills();
     }
+
+    private void BillGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateButtons();
+
+    private void UpdateButtons()
+    {
+        var row = Selected;
+        SplitButton.IsEnabled = row is { IsSplit: false };
+        UndoButton.IsEnabled = row is { IsSplit: true };
+        EditButton.IsEnabled = row is { IsSplit: false };
+        DeleteButton.IsEnabled = row is { IsSplit: false };
+    }
+
+    // ---------- Loading ----------
 
     private void LoadBills()
     {
@@ -67,6 +97,8 @@ public partial class UtilityBillsPage : Page
         var key = BillingHelpers.MonthKey(start);
 
         using var db = new AppDbContext();
+
+        // Voided shares are filtered out automatically, so an undone split counts as not split.
         var splitIds = db.Charges
             .Where(c => c.UtilityBillId != null)
             .Select(c => c.UtilityBillId!.Value)
@@ -86,30 +118,32 @@ public partial class UtilityBillsPage : Page
                 UtilityType = b.UtilityType,
                 Scope = b.Room?.RoomName ?? "Whole house",
                 Total = b.TotalAmount,
-                DueText = b.DueDate?.ToString("MMM d, yyyy") ?? "-",
+                Due = b.DueDate,
                 IsSplit = splitIds.Contains(b.Id)
             })
             .ToList();
 
-        decimal Sum(Func<UtilityBill, bool> match) => bills.Where(match).Sum(b => b.TotalAmount);
         bool Is(UtilityBill b, string name) => b.UtilityType.Trim().Equals(name, StringComparison.OrdinalIgnoreCase);
 
-        var electricity = Sum(b => Is(b, "Electricity"));
-        var water = Sum(b => Is(b, "Water"));
+        var electricity = bills.Where(b => Is(b, "Electricity")).Sum(b => b.TotalAmount);
+        var water = bills.Where(b => Is(b, "Water")).Sum(b => b.TotalAmount);
         var total = bills.Sum(b => b.TotalAmount);
+        var monthName = start.ToString("MMMM", CultureInfo.CurrentCulture);
 
         ElectricityCard.Value = Fmt.Peso(electricity);
-        ElectricityCard.Caption = $"{Start(start)} bill";
+        ElectricityCard.Caption = $"{monthName} bill";
         WaterCard.Value = Fmt.Peso(water);
-        WaterCard.Caption = $"{Start(start)} bill";
+        WaterCard.Caption = $"{monthName} bill";
         OtherCard.Value = Fmt.Peso(total - electricity - water);
         OtherCard.Caption = "Internet and others";
         TotalCard.Value = Fmt.Peso(total);
         TotalCard.Caption = $"{bills.Count} bill(s) this month";
         TotalCard.Tone = "Info";
+
+        UpdateButtons();
     }
 
-    private static string Start(DateOnly month) => month.ToString("MMMM");
+    // ---------- Add, edit, delete ----------
 
     private void AddBill_Click(object sender, RoutedEventArgs e)
     {
@@ -125,7 +159,7 @@ public partial class UtilityBillsPage : Page
             Tell("Enter the utility type (e.g. Electricity).");
             return;
         }
-        if (!decimal.TryParse(BillAmountBox.Text, out var total) || total <= 0)
+        if (!TryMoney(BillAmountBox.Text, out var total) || total <= 0)
         {
             Tell("Enter a valid total bill amount greater than zero.");
             return;
@@ -144,8 +178,9 @@ public partial class UtilityBillsPage : Page
         var key = BillingHelpers.MonthKey(start);
 
         using var db = new AppDbContext();
+        var lower = type.ToLower();
         var duplicate = db.UtilityBills.Any(b => b.BillingMonth == key
-            && b.RoomId == scope.RoomId && b.UtilityType.ToLower() == type.ToLower());
+            && b.RoomId == scope.RoomId && b.UtilityType.ToLower() == lower);
         if (duplicate)
         {
             Tell("A bill for that utility, month, and room/house already exists.");
@@ -156,7 +191,7 @@ public partial class UtilityBillsPage : Page
         {
             UtilityType = type,
             BillingMonth = key,
-            TotalAmount = total,
+            TotalAmount = Math.Round(total, 2),
             RoomId = scope.RoomId,
             DueDate = DateOnly.FromDateTime(dueDt)
         });
@@ -166,13 +201,77 @@ public partial class UtilityBillsPage : Page
         LoadBills();
     }
 
-    private void SplitBill_Click(object sender, RoutedEventArgs e)
+    private void EditBill_Click(object sender, RoutedEventArgs e)
     {
-        if (BillGrid.SelectedItem is not BillRow row)
+        var row = Selected;
+        if (row == null || row.IsSplit) return;
+
+        var v = FormDialog.Ask(Owner, $"Edit bill - {row.UtilityType}", "Save changes",
+            new[]
+            {
+                ("Utility type", row.UtilityType),
+                ("Total bill amount", row.Total.ToString("0.##", CultureInfo.CurrentCulture)),
+                ("Due date (e.g. 2026-10-20)", (row.Due ?? DateOnly.FromDateTime(DateTime.Today)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+            },
+            vals =>
+            {
+                if (vals[0].Trim() == "") return "Please enter the utility type.";
+                if (!TryMoney(vals[1], out var amount) || amount <= 0) return "Enter the total as a number greater than zero.";
+                if (!TryDate(vals[2], out _)) return "Enter the due date like 2026-10-20.";
+
+                var lower = vals[0].Trim().ToLower();
+                using var check = new AppDbContext();
+                var bill = check.UtilityBills.Find(row.Id)!;
+                var duplicate = check.UtilityBills.Any(b => b.Id != bill.Id
+                    && b.BillingMonth == bill.BillingMonth && b.RoomId == bill.RoomId
+                    && b.UtilityType.ToLower() == lower);
+                return duplicate ? "Another bill with that utility, month, and room already exists." : null;
+            },
+            note: $"Applies to: {row.Scope}. To change what the bill applies to, delete it and add it again.");
+        if (v == null) return;
+
+        TryMoney(v[1], out var newTotal);
+        TryDate(v[2], out var newDue);
+
+        using var db = new AppDbContext();
+        var entity = db.UtilityBills.Find(row.Id)!;
+        entity.UtilityType = v[0].Trim();
+        entity.TotalAmount = Math.Round(newTotal, 2);
+        entity.DueDate = newDue;
+        db.SaveChanges();
+
+        LoadBills();
+    }
+
+    private void DeleteBill_Click(object sender, RoutedEventArgs e)
+    {
+        var row = Selected;
+        if (row == null || row.IsSplit) return;
+
+        using var db = new AppDbContext();
+
+        // A bill whose split was undone keeps its (voided) shares as history, so it can't be deleted.
+        if (db.Charges.IgnoreQueryFilters().Any(c => c.UtilityBillId == row.Id))
         {
-            Tell("Select a bill in the list first.");
+            Tell("This bill has charge history (its split was undone), so it can't be deleted. Edit it instead.");
             return;
         }
+
+        var confirm = MessageBox.Show($"Delete the {row.UtilityType} bill of {Fmt.Peso(row.Total)}?",
+            "Confirm delete", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        db.UtilityBills.Remove(db.UtilityBills.Find(row.Id)!);
+        db.SaveChanges();
+        LoadBills();
+    }
+
+    // ---------- Split and undo split ----------
+
+    private void SplitBill_Click(object sender, RoutedEventArgs e)
+    {
+        var row = Selected;
+        if (row == null) return;
         if (row.IsSplit)
         {
             Tell("This bill has already been split.");
@@ -204,7 +303,7 @@ public partial class UtilityBillsPage : Page
 
         var confirm = MessageBox.Show(
             $"Split {Fmt.Peso(bill.TotalAmount)} ({bill.UtilityType}) among {stays.Count} tenant(s)?\n\n" +
-            $"Each pays about {Fmt.Peso(share)}.\nThis can't be undone.",
+            $"Each pays about {Fmt.Peso(share)}.\nYou can undo the split later if nothing has been paid on it.",
             "Confirm split", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes) return;
 
@@ -225,26 +324,53 @@ public partial class UtilityBillsPage : Page
         LoadBills();
     }
 
-    private void DeleteBill_Click(object sender, RoutedEventArgs e)
+    private void UndoSplit_Click(object sender, RoutedEventArgs e)
     {
-        if (BillGrid.SelectedItem is not BillRow row)
+        var row = Selected;
+        if (row == null || !row.IsSplit) return;
+
+        using (var check = new AppDbContext())
         {
-            Tell("Select a bill in the list first.");
-            return;
-        }
-        if (row.IsSplit)
-        {
-            Tell("This bill has already been split into charges, so it can't be deleted.");
-            return;
+            var shares = check.Charges.Include(c => c.Allocations)
+                .Where(c => c.UtilityBillId == row.Id)
+                .ToList();
+
+            if (shares.Any(c => c.Allocations.Count > 0))
+            {
+                Tell("Some tenants have already paid part of this bill.\n\n" +
+                     "Void those payments first (Payments page), then undo the split.");
+                return;
+            }
         }
 
-        var confirm = MessageBox.Show($"Delete the {row.UtilityType} bill of {Fmt.Peso(row.Total)}?",
-            "Confirm delete", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (confirm != MessageBoxResult.Yes) return;
+        var v = FormDialog.Ask(Owner, $"Undo split - {row.UtilityType}", "Undo split",
+            new[] { ("Reason", "") },
+            vals => vals[0].Trim() == "" ? "Please enter a reason." : null,
+            note: "This voids every tenant share of this bill. The bill goes back to Draft, so you can edit it and split again. " +
+                  "The voided shares stay visible on Billing Charges under Show voided.");
+        if (v == null) return;
 
         using var db = new AppDbContext();
-        db.UtilityBills.Remove(db.UtilityBills.Find(row.Id)!);
-        db.SaveChanges();
+        var charges = db.Charges.Include(c => c.Allocations)
+            .Where(c => c.UtilityBillId == row.Id)
+            .ToList();
+
+        if (charges.Any(c => c.Allocations.Count > 0))
+        {
+            Tell("A payment was just applied to one of these shares. Void that payment first.");
+            LoadBills();
+            return;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        foreach (var charge in charges)
+        {
+            charge.IsVoided = true;
+            charge.VoidReason = "Split undone: " + v[0].Trim();
+            charge.VoidedOn = today;
+        }
+        db.SaveChanges();   // all shares are voided together or not at all
+
         LoadBills();
     }
 }

@@ -10,6 +10,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -45,15 +46,25 @@
                     <ui:TextBox x:Name="BillAmountBox" PlaceholderText="Total bill amount"
                                 Width="160" Margin="0,0,8,0" />
                     <ComboBox x:Name="ScopeCombo" Width="170" DisplayMemberPath="Display" Margin="0,0,8,0" />
-                    <DatePicker x:Name="BillDuePicker" Width="160" Margin="0,0,16,0" />
-                    <ui:Button Content="Split selected bill" Click="SplitBill_Click" Margin="0,0,8,0" />
-                    <ui:Button Content="Delete selected bill" Click="DeleteBill_Click" />
+                    <DatePicker x:Name="BillDuePicker" Width="160" />
                 </StackPanel>
             </StackPanel>
         </ui:Card>
 
-        <DataGrid x:Name="BillGrid" Grid.Row="4" AutoGenerateColumns="False"
-                  IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single">
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,12">
+            <ui:Button x:Name="SplitButton" Content="Split selected bill" Appearance="Primary"
+                       Click="SplitBill_Click" IsEnabled="False" Margin="0,0,8,0" />
+            <ui:Button x:Name="UndoButton" Content="Undo split" Click="UndoSplit_Click"
+                       IsEnabled="False" Margin="0,0,8,0" />
+            <ui:Button x:Name="EditButton" Content="Edit bill" Click="EditBill_Click"
+                       IsEnabled="False" Margin="0,0,8,0" />
+            <ui:Button x:Name="DeleteButton" Content="Delete bill" Click="DeleteBill_Click"
+                       IsEnabled="False" />
+        </StackPanel>
+
+        <DataGrid x:Name="BillGrid" Grid.Row="5" AutoGenerateColumns="False"
+                  IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single"
+                  SelectionChanged="BillGrid_SelectionChanged">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Utility" Binding="{Binding UtilityType}" Width="*" />
                 <DataGridTextColumn Header="Applies to" Binding="{Binding Scope}" Width="170" />
