@@ -134,8 +134,17 @@ public partial class BillingPage : Page
             return;
         }
 
+        // A tenant with more than one stay in the month (for example, a bed change) is billed
+        // by days for each stay, so they never pay the full rent twice.
+        var multiStayTenants = stays
+            .GroupBy(s => s.TenantId)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet();
+
         var created = 0;
         var skipped = 0;
+        var byDays = 0;
 
         foreach (var stay in stays)
         {
@@ -146,15 +155,27 @@ public partial class BillingPage : Page
             var amount = stay.AgreedRent;
             var description = "Monthly rent";
 
-            if (prorate)
+            if (prorate || multiStayTenants.Contains(stay.TenantId))
             {
                 var from = stay.MoveInDate > start ? stay.MoveInDate : start;
                 var to = stay.MoveOutDate is DateOnly mo && mo < end ? mo : end;
+
+                // If the tenant moved straight into another bed on the day this stay ended,
+                // that day belongs to the new stay, so don't count it twice.
+                if (stay.MoveOutDate is DateOnly outDay &&
+                    stays.Any(s => s.TenantId == stay.TenantId && s.Id != stay.Id && s.MoveInDate == outDay))
+                {
+                    to = to.AddDays(-1);
+                }
+
                 var days = to.DayNumber - from.DayNumber + 1;
+                if (days <= 0) continue;
+
                 if (days < daysInMonth)
                 {
                     amount = Math.Round(stay.AgreedRent * days / daysInMonth, 2);
                     description = $"Rent ({days} of {daysInMonth} days)";
+                    if (multiStayTenants.Contains(stay.TenantId)) byDays++;
                 }
             }
 
@@ -172,6 +193,10 @@ public partial class BillingPage : Page
 
         db.SaveChanges();
         LoadCharges();
-        Tell($"Rent charges created: {created}.\nAlready billed (skipped): {skipped}.");
+
+        var message = $"Rent charges created: {created}.\nAlready billed (skipped): {skipped}.";
+        if (byDays > 0)
+            message += $"\n\n{byDays} charge(s) were billed by days because the tenant had more than one stay this month.";
+        Tell(message);
     }
 }
