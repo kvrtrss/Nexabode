@@ -94,6 +94,9 @@ public class Payment
     public string? Method { get; set; }
     public string? ReferenceNo { get; set; }
     public string? Remarks { get; set; }
+    public bool IsVoided { get; set; }          
+    public string? VoidReason { get; set; }
+    public DateOnly? VoidedOn { get; set; }
     public List<PaymentAllocation> Allocations { get; set; } = new();
 }
 

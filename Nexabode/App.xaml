@@ -118,6 +118,10 @@
                         <Setter TargetName="Pill" Property="Background" Value="{DynamicResource OccupiedSoftBrush}" />
                         <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource OccupiedBrush}" />
                     </DataTrigger>
+                    <DataTrigger Binding="{Binding}" Value="Recorded">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource SuccessSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                    </DataTrigger>
                     <!-- Anything else (Inactive, Draft, Moved out) stays gray -->
                 </DataTemplate.Triggers>
             </DataTemplate>

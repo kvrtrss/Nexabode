@@ -201,7 +201,7 @@ public partial class ReportsPage : Page
             .ToList();
 
         var payments = db.Payments
-            .Where(p => p.TenantId == tenantId)
+            .Where(p => p.TenantId == tenantId && !p.IsVoided)
             .ToList()
             .OrderBy(p => p.PaymentDate).ThenBy(p => p.Id)
             .ToList();
@@ -350,7 +350,7 @@ public partial class ReportsPage : Page
         var payments = db.Payments
             .Include(p => p.Tenant)
             .ToList()
-            .Where(p => p.PaymentDate >= from && p.PaymentDate <= to)
+            .Where(p => p.PaymentDate >= from && p.PaymentDate <= to && !p.IsVoided)
             .OrderBy(p => p.PaymentDate).ThenBy(p => p.Id)
             .ToList();
 

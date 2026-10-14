@@ -73,7 +73,7 @@ public partial class DashboardPage : Page
         BedsCard.Tone = "Success";
 
         // Money is summed in C# because SQLite can't add up decimal columns.
-        var payments = db.Payments.Where(p => p.PaymentDate >= lastStart).ToList();
+        var payments = db.Payments.Where(p => p.PaymentDate >= lastStart && !p.IsVoided).ToList();
         var thisMonth = payments.Where(p => p.PaymentDate >= monthStart).Sum(p => p.Amount);
         var lastMonth = payments.Where(p => p.PaymentDate < monthStart).Sum(p => p.Amount);
 
@@ -137,10 +137,10 @@ public partial class DashboardPage : Page
         using var db = new AppDbContext();
 
         var charges = db.Charges
-            .Include(c => c.Allocations)
-            .Include(c => c.Occupancy).ThenInclude(o => o.Tenant)
-            .Where(c => c.DueDate >= first && c.DueDate <= last)
-            .ToList();
+    .Include(c => c.Allocations)
+    .Include(c => c.Occupancy).ThenInclude(o => o.Tenant)
+    .Where(c => c.DueDate >= first && c.DueDate <= last)
+    .ToList();
         foreach (var c in charges)
         {
             var balance = c.Amount - c.Allocations.Sum(a => a.AmountApplied);
@@ -153,9 +153,9 @@ public partial class DashboardPage : Page
         }
 
         var payments = db.Payments
-            .Include(p => p.Tenant)
-            .Where(p => p.PaymentDate >= first && p.PaymentDate <= last)
-            .ToList();
+    .Include(p => p.Tenant)
+    .Where(p => p.PaymentDate >= first && p.PaymentDate <= last && !p.IsVoided)
+    .ToList();
         foreach (var p in payments)
             events.Add(new CalEvent(p.PaymentDate, "Payment", p.Tenant.FullName,
                 p.Method ?? "Payment received", p.Amount));
@@ -336,7 +336,7 @@ public partial class DashboardPage : Page
 
         using var db = new AppDbContext();
 
-        foreach (var p in db.Payments.Include(p => p.Tenant).ToList().Where(p => p.PaymentDate >= cutoff))
+        foreach (var p in db.Payments.Include(p => p.Tenant).ToList().Where(p => p.PaymentDate >= cutoff && !p.IsVoided))
             items.Add(new ActivityItem(p.PaymentDate, "PAYMENT RECEIVED",
                 p.Tenant.FullName + (string.IsNullOrWhiteSpace(p.Method) ? "" : $" - {p.Method}"),
                 p.Amount, "Success"));

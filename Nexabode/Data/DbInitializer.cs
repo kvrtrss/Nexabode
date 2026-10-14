@@ -29,6 +29,9 @@ public static class DbInitializer
     {
         AddColumnIfMissing(db, "Rooms", "IsActive", "INTEGER NOT NULL DEFAULT 1");
         AddColumnIfMissing(db, "Beds", "IsMaintenance", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "Payments", "IsVoided", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "Payments", "VoidReason", "TEXT NULL");
+        AddColumnIfMissing(db, "Payments", "VoidedOn", "TEXT NULL");
     }
 
 #pragma warning disable EF1002   // table and column names below are fixed constants, never user input
