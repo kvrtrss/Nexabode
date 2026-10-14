@@ -26,5 +26,13 @@ public static class DatabaseKeyProvider
         var newKey = RandomNumberGenerator.GetBytes(32);
         File.WriteAllBytes(keyFile, ProtectedData.Protect(newKey, null, DataProtectionScope.CurrentUser));
         return Convert.ToBase64String(newKey);
+
+    }
+        // Used when restoring a backup: stores the backup's key, protected for this Windows user.
+public static void SetKey(byte[] key)
+    {
+        Directory.CreateDirectory(AppFolder);
+        var keyFile = Path.Combine(AppFolder, "db.key");
+        File.WriteAllBytes(keyFile, ProtectedData.Protect(key, null, DataProtectionScope.CurrentUser));
     }
 }

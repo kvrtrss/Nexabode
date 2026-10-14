@@ -18,6 +18,20 @@
                 </StackPanel>
             </ui:Card>
 
+            <ui:Card Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="Backup and restore" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
+                    <TextBlock x:Name="LastBackupText" Margin="0,0,0,6" TextWrapping="Wrap" />
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12"
+                               Text="A backup holds all your rooms, tenants, billing, and payments in one file protected by a backup password. Keep it on a USB drive or cloud storage, not only on this computer. It is also how you move Nexabode to another computer." />
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button Content="Create backup" Appearance="Primary" Click="CreateBackup_Click"
+                                   Margin="0,0,8,0" />
+                        <ui:Button Content="Restore from backup" Click="Restore_Click" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
             <ui:Card>
                 <StackPanel>
                     <TextBlock Text="About" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />

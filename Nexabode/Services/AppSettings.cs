@@ -9,6 +9,7 @@ public class AppSettings
     public bool DarkMode { get; set; }
     public string HouseName { get; set; } = "";
     public string HouseAddress { get; set; } = "";
+    public string LastBackup { get; set; } = "";
 
     private static string FilePath => Path.Combine(DatabaseKeyProvider.AppFolder, "settings.json");
 
@@ -19,7 +20,7 @@ public class AppSettings
             if (File.Exists(FilePath))
                 return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new();
         }
-        catch { /* a damaged file */ }
+        catch { /* a damaged settings file just falls back to defaults */ }
         return new();
     }
 
