@@ -1,9 +1,11 @@
-﻿using System.Windows;
+﻿using System.Globalization;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
+using Nexabode.Services;
 
 namespace Nexabode.Views;
 
@@ -15,7 +17,13 @@ public partial class ReportsPage : Page
         public string Name { get; set; } = "";
     }
 
-    private Func<FlowDocument>? _current;   // rebuilds the current report (used for preview and printing)
+    public class PeriodOption
+    {
+        public DateOnly? Start { get; set; }   // null = all time
+        public string Display { get; set; } = "";
+    }
+
+    private Func<FlowDocument>? _current;   // rebuilds the current report (for preview and printing)
     private string _title = "Nexabode report";
 
     public ReportsPage()
@@ -24,11 +32,20 @@ public partial class ReportsPage : Page
         FromPicker.SelectedDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         ToPicker.SelectedDate = DateTime.Today;
         ReportCombo.SelectedIndex = 0;
-        Loaded += (_, _) => LoadTenants();
+        Loaded += (_, _) =>
+        {
+            LoadTenants();
+            LoadPeriods();
+            LoadOverview();
+        };
     }
+
+    // ---------- Helpers ----------
 
     private static void Tell(string message) =>
         MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
+
+    private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
 
     private void LoadTenants()
     {
@@ -38,12 +55,103 @@ public partial class ReportsPage : Page
             .ToList();
     }
 
+    private void LoadPeriods()
+    {
+        var thisMonth = BillingHelpers.CurrentMonthStart();
+        var periods = new List<PeriodOption> { new() { Start = null, Display = "All time" } };
+        for (var i = 0; i < 12; i++)
+        {
+            var month = thisMonth.AddMonths(-i);
+            periods.Add(new PeriodOption
+            {
+                Start = month,
+                Display = month.ToString("MMMM yyyy", CultureInfo.CurrentCulture)
+            });
+        }
+        PeriodCombo.ItemsSource = periods;
+        PeriodCombo.SelectedIndex = 0;
+    }
+
     private void ReportCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (TenantPanel == null || DatePanel == null) return;
         TenantPanel.Visibility = ReportCombo.SelectedIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
         DatePanel.Visibility = ReportCombo.SelectedIndex == 2 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        var settings = AppSettings.Load();
+
+        var v = FormDialog.Ask(Window.GetWindow(this), "Report settings", "Save",
+            new[]
+            {
+                ("Boarding house name", settings.HouseName),
+                ("Address (optional)", settings.HouseAddress)
+            },
+            note: "These appear at the top of every printed report.");
+        if (v == null) return;
+
+        settings.HouseName = v[0].Trim();
+        settings.HouseAddress = v[1].Trim();
+        settings.Save();
+
+        // Rebuild the open report so the new header shows straight away.
+        if (_current != null) Viewer.Document = _current();
+    }
+
+    // ---------- Overview: stat cards and chart ----------
+
+    private void LoadOverview()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var monthStart = BillingHelpers.CurrentMonthStart();
+        var key = BillingHelpers.MonthKey(monthStart);
+
+        using var db = new AppDbContext();
+
+        // Voided payments and charges are excluded (charges by the global filter).
+        var payments = db.Payments.ToList().Where(p => !p.IsVoided).ToList();
+        var charges = db.Charges.Include(c => c.Allocations).ToList();
+
+        var collected = payments.Where(p => p.PaymentDate >= monthStart).ToList();
+        var billed = charges.Where(c => c.BillingMonth == key).Sum(c => c.Amount);
+
+        var open = charges
+            .Select(c => new { c.DueDate, Balance = c.Amount - c.Allocations.Sum(a => a.AmountApplied) })
+            .Where(x => x.Balance > 0)
+            .ToList();
+        var overdue = open.Where(x => x.DueDate < today).ToList();
+
+        CollectedCard.Value = Fmt.Peso(collected.Sum(p => p.Amount));
+        CollectedCard.Caption = $"{collected.Count} payment(s)";
+        CollectedCard.Tone = "Success";
+
+        BilledCard.Value = Fmt.Peso(billed);
+        BilledCard.Caption = billed == 0 ? "Nothing billed yet" : $"{BillingHelpers.CurrentMonthStart():MMMM} charges";
+        BilledCard.Tone = "Info";
+
+        OutstandingCard.Value = Fmt.Peso(open.Sum(x => x.Balance));
+        OutstandingCard.Caption = open.Count == 0 ? "Everyone is settled" : $"{open.Count} open charge(s)";
+        OutstandingCard.Tone = open.Count == 0 ? "Success" : "Warning";
+
+        OverdueCard.Value = Fmt.Peso(overdue.Sum(x => x.Balance));
+        OverdueCard.Caption = overdue.Count == 0 ? "Nothing overdue" : $"{overdue.Count} overdue charge(s)";
+        OverdueCard.Tone = overdue.Count == 0 ? "Success" : "Danger";
+    }
+
+    private static Border MakeBar(decimal value, decimal max, double area, string brush, string tip) => new()
+    {
+        Width = 13,
+        Height = value <= 0 ? 0 : Math.Max(3, (double)(value / max) * area),
+        Margin = new Thickness(1.5, 0, 1.5, 0),
+        CornerRadius = new CornerRadius(3, 3, 0, 0),
+        Background = Res(brush),
+        VerticalAlignment = VerticalAlignment.Bottom,
+        ToolTip = tip
+    };
+
+    // ---------- Generate and print reports w microsoft to pdf ----------
 
     private void Generate_Click(object sender, RoutedEventArgs e)
     {
@@ -55,8 +163,9 @@ public partial class ReportsPage : Page
                     Tell("Select a tenant first.");
                     return;
                 }
+                var period = (PeriodCombo.SelectedItem as PeriodOption)?.Start;
                 _title = $"Billing statement - {tenant.Name}";
-                _current = () => BuildStatement(tenant.Id);
+                _current = () => BuildStatement(tenant.Id, period);
                 break;
 
             case 1:
@@ -87,6 +196,7 @@ public partial class ReportsPage : Page
         }
 
         Viewer.Document = _current();
+        PreviewHint.Visibility = Visibility.Collapsed;
     }
 
     private void Print_Click(object sender, RoutedEventArgs e)
@@ -169,17 +279,22 @@ public partial class ReportsPage : Page
 
     private static void AddHeader(FlowDocument doc, string title, string? subtitle = null)
     {
-        doc.Blocks.Add(P("Nexabode - Boarding House", 11, bottom: 0));
+        var settings = AppSettings.Load();
+        var house = string.IsNullOrWhiteSpace(settings.HouseName) ? "Boarding House" : settings.HouseName;
+
+        doc.Blocks.Add(P(house, 13, bold: true, bottom: 0));
+        if (!string.IsNullOrWhiteSpace(settings.HouseAddress))
+            doc.Blocks.Add(P(settings.HouseAddress, 11, bottom: 0));
         doc.Blocks.Add(P(title, 22, bold: true, bottom: 2));
         if (subtitle != null) doc.Blocks.Add(P(subtitle, 11, bottom: 10));
     }
 
-    private static string Money(decimal value) => value.ToString("N2");
-    private static string D(DateOnly date) => date.ToString("MMM d, yyyy");
+    private static string Money(decimal value) => Fmt.Peso(value);
+    private static string D(DateOnly date) => Fmt.Date(date);
 
     // ---------- 1. Billing statement ----------
 
-    private FlowDocument BuildStatement(int tenantId)
+    private FlowDocument BuildStatement(int tenantId, DateOnly? monthStart)
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
 
@@ -193,21 +308,34 @@ public partial class ReportsPage : Page
             .OrderByDescending(o => o.MoveInDate)
             .FirstOrDefault();
 
-        var charges = db.Charges
+        // Voided charges are excluded automatically.
+        var allCharges = db.Charges
             .Include(c => c.Allocations)
             .Where(c => c.Occupancy.TenantId == tenantId)
-            .ToList()
-            .OrderBy(c => c.BillingMonth).ThenBy(c => c.DueDate).ThenBy(c => c.Id)
             .ToList();
 
-        var payments = db.Payments
+        var allPayments = db.Payments
             .Where(p => p.TenantId == tenantId && !p.IsVoided)
-            .ToList()
-            .OrderBy(p => p.PaymentDate).ThenBy(p => p.Id)
             .ToList();
+
+        var charges = allCharges;
+        var payments = allPayments;
+        string periodText = "All time";
+
+        if (monthStart is DateOnly start)
+        {
+            var key = BillingHelpers.MonthKey(start);
+            var end = start.AddMonths(1).AddDays(-1);
+            charges = allCharges.Where(c => c.BillingMonth == key).ToList();
+            payments = allPayments.Where(p => p.PaymentDate >= start && p.PaymentDate <= end).ToList();
+            periodText = start.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        }
+
+        charges = charges.OrderBy(c => c.BillingMonth).ThenBy(c => c.DueDate).ThenBy(c => c.Id).ToList();
+        payments = payments.OrderBy(p => p.PaymentDate).ThenBy(p => p.Id).ToList();
 
         var doc = NewDoc();
-        AddHeader(doc, "Billing Statement", $"Statement date: {D(today)}");
+        AddHeader(doc, "Billing Statement", $"Period: {periodText}     Statement date: {D(today)}");
 
         doc.Blocks.Add(P($"Tenant: {tenant.FullName}", 13, bold: true, bottom: 0));
         if (!string.IsNullOrWhiteSpace(tenant.Contact))
@@ -223,13 +351,13 @@ public partial class ReportsPage : Page
         doc.Blocks.Add(P("Charges", 14, bold: true, bottom: 0));
         if (charges.Count == 0)
         {
-            doc.Blocks.Add(P("No charges have been billed yet."));
+            doc.Blocks.Add(P(monthStart == null ? "No charges have been billed yet." : "No charges for this month."));
         }
         else
         {
             doc.Blocks.Add(MakeTable(
                 new[] { "Month", "Description", "Due", "Amount", "Paid", "Balance" },
-                new[] { 1.0, 2.2, 1.3, 1.1, 1.1, 1.1 },
+                new[] { 1.0, 2.2, 1.3, 1.2, 1.2, 1.2 },
                 charges.Select(c =>
                 {
                     var paid = c.Allocations.Sum(a => a.AmountApplied);
@@ -252,16 +380,16 @@ public partial class ReportsPage : Page
             .Where(c => c.DueDate < today)
             .Sum(c => Math.Max(0, c.Amount - c.Allocations.Sum(a => a.AmountApplied)));
 
-        doc.Blocks.Add(P("Payments received", 14, bold: true, bottom: 0));
+        doc.Blocks.Add(P(monthStart == null ? "Payments received" : "Payments received this month", 14, bold: true, bottom: 0));
         if (payments.Count == 0)
         {
-            doc.Blocks.Add(P("No payments recorded yet."));
+            doc.Blocks.Add(P("No payments recorded."));
         }
         else
         {
             doc.Blocks.Add(MakeTable(
                 new[] { "Date", "Method", "Reference", "Amount" },
-                new[] { 1.4, 1.4, 2.0, 1.2 },
+                new[] { 1.4, 1.4, 2.0, 1.3 },
                 payments.Select(p => new[]
                 {
                     D(p.PaymentDate), p.Method ?? "", p.ReferenceNo ?? "", Money(p.Amount)
@@ -271,9 +399,15 @@ public partial class ReportsPage : Page
 
         doc.Blocks.Add(P("Summary", 14, bold: true, bottom: 2));
         doc.Blocks.Add(P($"Total billed:   {Money(billed)}", bottom: 0));
-        doc.Blocks.Add(P($"Total paid:   {Money(paidTotal)}", bottom: 0));
+        doc.Blocks.Add(P($"Paid on these charges:   {Money(paidTotal)}", bottom: 0));
         doc.Blocks.Add(P($"Overdue now:   {Money(overdue)}", bottom: 0));
-        doc.Blocks.Add(P($"BALANCE DUE:   {Money(billed - paidTotal)}", 15, bold: true, bottom: 10));
+        doc.Blocks.Add(P($"BALANCE DUE:   {Money(billed - paidTotal)}", 15, bold: true, bottom: 6));
+
+        if (monthStart != null)
+        {
+            var totalDue = allCharges.Sum(c => c.Amount - c.Allocations.Sum(a => a.AmountApplied));
+            doc.Blocks.Add(P($"Total balance due, all months, as of today:   {Money(totalDue)}", 12, bold: true, bottom: 10));
+        }
 
         return doc;
     }
@@ -299,8 +433,10 @@ public partial class ReportsPage : Page
         var rows = beds.Select(b =>
         {
             active.TryGetValue(b.Id, out var occ);
-            var status = !b.IsActive || !b.Room.IsActive || b.IsMaintenance ? "Inactive"
-                       : occ != null ? "Occupied" : "Vacant";
+            var status = !b.IsActive || !b.Room.IsActive ? "Inactive"
+                       : b.IsMaintenance ? "Maintenance"
+                       : occ == null ? "Available"
+                       : occ.MoveInDate > today ? "Reserved" : "Occupied";
             return new
             {
                 Status = status,
@@ -316,26 +452,29 @@ public partial class ReportsPage : Page
             };
         }).ToList();
 
-        var usable = rows.Count(r => r.Status != "Inactive");
+        var usable = rows.Count(r => r.Status is "Available" or "Occupied" or "Reserved");
         var occupied = rows.Count(r => r.Status == "Occupied");
-        var rate = usable == 0 ? 0 : occupied * 100.0 / usable;
+        var reserved = rows.Count(r => r.Status == "Reserved");
+        var available = rows.Count(r => r.Status == "Available");
+        var rate = usable == 0 ? 0 : (occupied + reserved) * 100.0 / usable;
 
         var doc = NewDoc();
         AddHeader(doc, "Occupancy Report", $"As of {D(today)}");
 
-        doc.Blocks.Add(P($"Beds in use: {usable}     Occupied: {occupied}     " +
-                         $"Vacant: {usable - occupied}     Occupancy rate: {rate:0.#}%", 12, bold: true, bottom: 8));
+        doc.Blocks.Add(P($"Beds in use: {usable}     Occupied: {occupied}     Reserved: {reserved}     " +
+                         $"Available: {available}     Occupancy rate: {rate:0.#}%", 12, bold: true, bottom: 8));
 
         if (rows.Count == 0)
             doc.Blocks.Add(P("No beds have been added yet."));
         else
             doc.Blocks.Add(MakeTable(
                 new[] { "Room", "Bed", "Status", "Tenant", "Move-in", "Rent" },
-                new[] { 1.3, 1.3, 1.1, 2.2, 1.4, 1.1 },
+                new[] { 1.3, 1.3, 1.3, 2.2, 1.5, 1.3 },
                 rows.Select(r => r.Cells),
                 5));
 
-        doc.Blocks.Add(P("Rent shows the tenant's agreed rent for occupied beds, and the bed's rate otherwise.", 10));
+        doc.Blocks.Add(P("Rent shows the tenant's agreed rent for taken beds, and the bed's rate otherwise. " +
+                         "Maintenance and inactive beds are not counted in the occupancy rate.", 10));
         return doc;
     }
 
@@ -350,10 +489,11 @@ public partial class ReportsPage : Page
         var payments = db.Payments
             .Include(p => p.Tenant)
             .ToList()
-            .Where(p => p.PaymentDate >= from && p.PaymentDate <= to && !p.IsVoided)
+            .Where(p => !p.IsVoided && p.PaymentDate >= from && p.PaymentDate <= to)
             .OrderBy(p => p.PaymentDate).ThenBy(p => p.Id)
             .ToList();
 
+        // Voided charges are excluded automatically.
         var charges = db.Charges
             .Include(c => c.Allocations)
             .Include(c => c.Occupancy).ThenInclude(o => o.Tenant)
@@ -383,7 +523,7 @@ public partial class ReportsPage : Page
         {
             doc.Blocks.Add(MakeTable(
                 new[] { "Date", "Tenant", "Method", "Reference", "Amount" },
-                new[] { 1.3, 2.3, 1.2, 1.6, 1.2 },
+                new[] { 1.3, 2.3, 1.2, 1.6, 1.3 },
                 payments.Select(p => new[]
                 {
                     D(p.PaymentDate), p.Tenant.FullName, p.Method ?? "", p.ReferenceNo ?? "", Money(p.Amount)
@@ -393,8 +533,8 @@ public partial class ReportsPage : Page
             doc.Blocks.Add(P("Totals by method", 14, bold: true, bottom: 0));
             doc.Blocks.Add(MakeTable(
                 new[] { "Method", "Payments", "Total" },
-                new[] { 2.0, 1.0, 1.4 },
-                payments.GroupBy(p => string.IsNullOrWhiteSpace(p.Method) ? "Not specified" : p.Method)
+                new[] { 2.0, 1.0, 1.5 },
+                payments.GroupBy(p => string.IsNullOrWhiteSpace(p.Method) ? "Not specified" : p.Method!)
                         .OrderByDescending(g => g.Sum(p => p.Amount))
                         .Select(g => new[] { g.Key, g.Count().ToString(), Money(g.Sum(p => p.Amount)) }),
                 1, 2));
@@ -411,12 +551,13 @@ public partial class ReportsPage : Page
         {
             doc.Blocks.Add(MakeTable(
                 new[] { "Tenant", "Overdue amount" },
-                new[] { 3.0, 1.4 },
+                new[] { 3.0, 1.5 },
                 overdueByTenant.Select(x => new[] { x.Name, Money(x.Amount) }),
                 1));
             doc.Blocks.Add(P($"TOTAL OVERDUE:   {Money(overdueByTenant.Sum(x => x.Amount))}", 13, bold: true));
         }
 
+        doc.Blocks.Add(P("Voided payments are not included.", 10));
         return doc;
     }
 }

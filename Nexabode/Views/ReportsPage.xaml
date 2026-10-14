@@ -2,42 +2,84 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Reports">
-    <Grid Margin="30,20,30,20">
+    <Grid Margin="32,24,32,24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Reports" FontSize="28" FontWeight="Bold" Margin="0,0,0,16" />
+        <controls:PageHeader Title="Reports"
+                             Subtitle="Collections overview, tenant statements, and printable reports."
+                             ActionText="Report settings"
+                             ActionClick="Settings_Click" />
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock Text="Report:" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <ComboBox x:Name="ReportCombo" Width="200" Margin="0,0,16,0"
-                      SelectionChanged="ReportCombo_SelectionChanged">
-                <ComboBoxItem Content="Billing statement" />
-                <ComboBoxItem Content="Occupancy report" />
-                <ComboBoxItem Content="Collection report" />
-            </ComboBox>
+        <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,16">
+            <controls:StatCard x:Name="CollectedCard" Label="Collected this month" Margin="0,0,12,0" />
+            <controls:StatCard x:Name="BilledCard" Label="Billed this month" Margin="0,0,12,0" />
+            <controls:StatCard x:Name="OutstandingCard" Label="Outstanding" Margin="0,0,12,0" />
+            <controls:StatCard x:Name="OverdueCard" Label="Overdue" />
+        </UniformGrid>
 
-            <StackPanel x:Name="TenantPanel" Orientation="Horizontal">
-                <TextBlock Text="Tenant:" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <ComboBox x:Name="TenantCombo" Width="240" DisplayMemberPath="Name" Margin="0,0,16,0" />
-            </StackPanel>
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="360" />
+                <ColumnDefinition Width="20" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-            <StackPanel x:Name="DatePanel" Orientation="Horizontal" Visibility="Collapsed">
-                <TextBlock Text="From:" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <DatePicker x:Name="FromPicker" Width="150" Margin="0,0,12,0" />
-                <TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <DatePicker x:Name="ToPicker" Width="150" Margin="0,0,16,0" />
-            </StackPanel>
+            <!-- Left: chart and report builder -->
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
 
-            <ui:Button Content="Generate" Appearance="Primary" Click="Generate_Click" Margin="0,0,8,0" />
-            <ui:Button Content="Print / Save as PDF" Click="Print_Click" />
-        </StackPanel>
+                    <ui:Card>
+                        <StackPanel>
+                            <TextBlock Text="Create a report" Style="{StaticResource SectionTitle}" Margin="0,0,0,12" />
 
-        <FlowDocumentScrollViewer x:Name="Viewer" Grid.Row="2"
-                                  VerticalScrollBarVisibility="Auto" />
+                            <TextBlock Text="Report" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                            <ComboBox x:Name="ReportCombo" Margin="0,0,0,12"
+                                      SelectionChanged="ReportCombo_SelectionChanged">
+                                <ComboBoxItem Content="Billing statement" />
+                                <ComboBoxItem Content="Occupancy report" />
+                                <ComboBoxItem Content="Collection report" />
+                            </ComboBox>
+
+                            <StackPanel x:Name="TenantPanel">
+                                <TextBlock Text="Tenant" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                                <ComboBox x:Name="TenantCombo" DisplayMemberPath="Name" Margin="0,0,0,12" />
+                                <TextBlock Text="Period" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                                <ComboBox x:Name="PeriodCombo" DisplayMemberPath="Display" Margin="0,0,0,12" />
+                            </StackPanel>
+
+                            <StackPanel x:Name="DatePanel" Visibility="Collapsed">
+                                <TextBlock Text="From" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                                <DatePicker x:Name="FromPicker" Margin="0,0,0,12" />
+                                <TextBlock Text="To" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                                <DatePicker x:Name="ToPicker" Margin="0,0,0,12" />
+                            </StackPanel>
+
+                            <ui:Button Content="Generate" Appearance="Primary" HorizontalAlignment="Stretch"
+                                       Click="Generate_Click" Margin="0,4,0,8" />
+                            <ui:Button Content="Print / Save as PDF" HorizontalAlignment="Stretch"
+                                       Click="Print_Click" />
+                        </StackPanel>
+                    </ui:Card>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Right: preview -->
+            <Border Grid.Column="2" CornerRadius="10" BorderThickness="1"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
+                    Background="{DynamicResource AppSurfaceBrush}">
+                <Grid>
+                    <TextBlock x:Name="PreviewHint" Style="{StaticResource MutedText}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Text="Choose a report and click Generate to preview it here." />
+                    <FlowDocumentScrollViewer x:Name="Viewer" VerticalScrollBarVisibility="Auto" />
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Page>

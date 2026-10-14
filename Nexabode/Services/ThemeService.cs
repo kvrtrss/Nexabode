@@ -67,6 +67,12 @@ public static class ThemeService
 
             if (save) new AppSettings { DarkMode = dark }.Save();
             ThemeChanged?.Invoke();
+            if (save)
+            {
+                var settings = AppSettings.Load();   // keep the other saved settings
+                settings.DarkMode = dark;
+                settings.Save();
+            }
         }
         catch (Exception ex)
         {

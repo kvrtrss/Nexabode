@@ -7,6 +7,8 @@ namespace Nexabode.Services;
 public class AppSettings
 {
     public bool DarkMode { get; set; }
+    public string HouseName { get; set; } = "";
+    public string HouseAddress { get; set; } = "";
 
     private static string FilePath => Path.Combine(DatabaseKeyProvider.AppFolder, "settings.json");
 
