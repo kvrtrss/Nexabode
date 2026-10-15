@@ -11,10 +11,11 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <controls:PageHeader Title="Billing Charges"
-                             Subtitle="Rent and utility charges for each tenant, by month."
+                             Subtitle="Rent and utility charges for each tenant, and who has paid them."
                              ActionText="Generate rent"
                              ActionClick="GenerateRent_Click" />
 
@@ -39,6 +40,21 @@
         </StackPanel>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,12">
+            <ComboBox x:Name="TypeFilter" Width="140" Margin="0,0,8,0"
+                      SelectionChanged="Filter_Changed">
+                <ComboBoxItem Content="All types" IsSelected="True" />
+                <ComboBoxItem Content="Rent" />
+                <ComboBoxItem Content="Utilities" />
+            </ComboBox>
+            <ComboBox x:Name="StatusFilter" Width="160" Margin="0,0,8,0"
+                      SelectionChanged="Filter_Changed">
+                <ComboBoxItem Content="All statuses" IsSelected="True" />
+                <ComboBoxItem Content="Not fully paid" />
+                <ComboBoxItem Content="Fully paid" />
+                <ComboBoxItem Content="Overdue" />
+            </ComboBox>
+            <ui:TextBox x:Name="SearchBox" Width="220" Margin="0,0,20,0"
+                        PlaceholderText="Search by tenant" TextChanged="SearchBox_TextChanged" />
             <ui:Button x:Name="EditButton" Content="Edit charge" Click="EditCharge_Click"
                        IsEnabled="False" Margin="0,0,8,0" />
             <ui:Button x:Name="VoidButton" Content="Void charge" Click="VoidCharge_Click"
@@ -50,8 +66,8 @@
                   SelectionChanged="ChargeGrid_SelectionChanged">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Tenant" Binding="{Binding Tenant}" Width="*" />
-                <DataGridTextColumn Header="Bed" Binding="{Binding Bed}" Width="150" />
-                <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="170" />
+                <DataGridTextColumn Header="Type" Binding="{Binding Kind}" Width="75" />
+                <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="150" />
                 <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat='₱{0:N2}'}"
                                     ElementStyle="{StaticResource RightCell}" Width="105" />
                 <DataGridTextColumn Header="Paid" Binding="{Binding Paid, StringFormat='₱{0:N2}'}"
@@ -59,6 +75,7 @@
                 <DataGridTextColumn Header="Balance" Binding="{Binding Balance, StringFormat='₱{0:N2}'}"
                                     ElementStyle="{StaticResource RightCell}" Width="105" />
                 <DataGridTextColumn Header="Due" Binding="{Binding DueText}" Width="105" />
+                <DataGridTextColumn Header="Paid on" Binding="{Binding LastPaidText}" Width="105" />
                 <DataGridTemplateColumn Header="Status" Width="100">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
@@ -67,8 +84,47 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="160" />
+                <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="170" />
             </DataGrid.Columns>
         </DataGrid>
+
+        <ui:Card Grid.Row="5" Margin="0,12,0,0">
+            <ScrollViewer MaxHeight="230" VerticalScrollBarVisibility="Auto">
+                <Grid>
+                    <TextBlock x:Name="DetailEmpty" Style="{StaticResource MutedText}"
+                               Text="Click a charge to see who paid it, when, and how." />
+
+                    <Grid x:Name="DetailBody" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock x:Name="DetailTitle" Style="{StaticResource SectionTitle}" />
+                            <TextBlock x:Name="DetailSub" Style="{StaticResource MutedText}" Margin="0,2,0,6" />
+                            <ContentPresenter x:Name="DetailBadge" HorizontalAlignment="Left" Margin="0,0,0,8"
+                                              ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                            <StackPanel x:Name="InfoPanel" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Payments on this charge" Style="{StaticResource SectionTitle}"
+                                       Margin="0,0,0,8" />
+                            <StackPanel x:Name="PaymentList" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="4">
+                            <TextBlock x:Name="SummaryTitle" Style="{StaticResource SectionTitle}"
+                                       Margin="0,0,0,8" />
+                            <StackPanel x:Name="SummaryPanel" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </ScrollViewer>
+        </ui:Card>
     </Grid>
 </Page>

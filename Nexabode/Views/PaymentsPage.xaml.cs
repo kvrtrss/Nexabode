@@ -372,6 +372,39 @@ public partial class PaymentsPage : Page
 
     // ---------- Record a payment ----------
 
+    // Works out how a payment would be applied, using the balances in the database right now.
+    private static (List<PaymentAllocation>? Allocations, string? Error) PlanAllocations(
+        AppDbContext db, int tenantId, decimal amount, int? chosenChargeId)
+    {
+        var open = GetOpenCharges(db, tenantId);
+        var totalBalance = open.Sum(r => r.Balance);
+
+        if (open.Count == 0)
+            return (null, "This tenant has no unpaid charges.");
+
+        if (amount > totalBalance)
+            return (null, $"The amount ({Fmt.Peso(amount)}) is more than the tenant's balance ({Fmt.Peso(totalBalance)}).\n" +
+                          "Advance payments are not supported yet.");
+
+        if (chosenChargeId is int chargeId)
+        {
+            var fresh = open.FirstOrDefault(r => r.Id == chargeId);
+            if (fresh == null)
+                return (null, "That charge is already fully paid.");
+            if (amount > fresh.Balance)
+                return (null, $"That charge only has {Fmt.Peso(fresh.Balance)} left. Lower the amount, " +
+                              "or choose \"oldest charges first\".");
+
+            return (new List<PaymentAllocation> { new() { ChargeId = fresh.Id, AmountApplied = amount } }, null);
+        }
+
+        var allocations = PaymentRules.AllocateOldestFirst(amount, open.Select(c => (c.Id, c.Balance)))
+            .Select(a => new PaymentAllocation { ChargeId = a.ChargeId, AmountApplied = a.Applied })
+            .ToList();
+
+        return (allocations, null);
+    }
+
     private void RecordPayment_Click(object sender, RoutedEventArgs e)
     {
         if (TenantCombo.SelectedItem is not TenantOption tenant)
@@ -396,24 +429,7 @@ public partial class PaymentsPage : Page
         }
         amount = Math.Round(amount, 2);
 
-        using var db = new AppDbContext();
-        var open = GetOpenCharges(db, tenant.Id);
-        var totalBalance = open.Sum(r => r.Balance);
-
-        if (open.Count == 0)
-        {
-            Tell("This tenant has no unpaid charges.");
-            return;
-        }
-        if (amount > totalBalance)
-        {
-            Tell($"The amount ({Fmt.Peso(amount)}) is more than the tenant's balance ({Fmt.Peso(totalBalance)}).\n" +
-                 "Advance payments are not supported yet.");
-            return;
-        }
-
-        var allocations = new List<PaymentAllocation>();
-
+        int? chosenChargeId = null;
         if (SelectedRadio.IsChecked == true)
         {
             if (ChargeGrid.SelectedItem is not OpenChargeRow chosen)
@@ -422,44 +438,63 @@ public partial class PaymentsPage : Page
                 Tabs.SelectedIndex = 1;
                 return;
             }
-            var fresh = open.FirstOrDefault(r => r.Id == chosen.Id);
-            if (fresh == null)
+            chosenChargeId = chosen.Id;
+        }
+
+        // A first look, only to describe the payment in the confirmation.
+        int chargeCount;
+        using (var preview = new AppDbContext())
+        {
+            var (planned, previewError) = PlanAllocations(preview, tenant.Id, amount, chosenChargeId);
+            if (planned == null)
             {
-                Tell("That charge is already fully paid.");
+                Tell(previewError!);
                 LoadTenantData();
                 return;
             }
-            if (amount > fresh.Balance)
-            {
-                Tell($"That charge only has {Fmt.Peso(fresh.Balance)} left. Lower the amount, " +
-                     "or choose \"oldest charges first\".");
-                return;
-            }
-            allocations.Add(new PaymentAllocation { ChargeId = fresh.Id, AmountApplied = amount });
-        }
-        else
-        {
-            allocations = PaymentRules.AllocateOldestFirst(amount, open.Select(c => (c.Id, c.Balance)))
-                .Select(a => new PaymentAllocation { ChargeId = a.ChargeId, AmountApplied = a.Applied })
-                .ToList();
+            chargeCount = planned.Count;
         }
 
         var confirm = MessageBox.Show(
-            $"Record a payment of {Fmt.Peso(amount)} from {tenant.Name}?\n\nIt will be applied to {allocations.Count} charge(s).",
+            $"Record a payment of {Fmt.Peso(amount)} from {tenant.Name}?\n\nIt will be applied to {chargeCount} charge(s).",
             "Confirm payment", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes) return;
 
-        db.Payments.Add(new Payment
+        try
         {
-            TenantId = tenant.Id,
-            PaymentDate = DateOnly.FromDateTime(payDate),
-            Amount = amount,
-            Method = Blank(MethodCombo.Text),
-            ReferenceNo = Blank(ReferenceBox.Text),
-            Remarks = Blank(RemarksBox.Text),
-            Allocations = allocations
-        });
-        db.SaveChanges();   // payment and its allocations are saved together or not at all
+            using var db = new AppDbContext();
+            using var transaction = db.Database.BeginTransaction();
+
+            // Check again inside the transaction, in case the balances changed while the confirmation was open.
+            var (allocations, finalError) = PlanAllocations(db, tenant.Id, amount, chosenChargeId);
+            if (allocations == null)
+            {
+                transaction.Rollback();
+                Tell(finalError! + "\n\nThe balances changed while you were confirming. Nothing was saved.");
+                RefreshAll();
+                return;
+            }
+
+            db.Payments.Add(new Payment
+            {
+                TenantId = tenant.Id,
+                PaymentDate = DateOnly.FromDateTime(payDate),
+                Amount = amount,
+                Method = Blank(MethodCombo.Text),
+                ReferenceNo = Blank(ReferenceBox.Text),
+                Remarks = Blank(RemarksBox.Text),
+                Allocations = allocations
+            });
+            db.SaveChanges();
+            transaction.Commit();   // the payment and its allocations are saved together or not at all
+        }
+        catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            Tell("The payment could not be saved because the data changed at the same moment. " +
+                 "Nothing was saved. Please try again.");
+            RefreshAll();
+            return;
+        }
 
         AmountBox.Text = ReferenceBox.Text = RemarksBox.Text = "";
         OldestRadio.IsChecked = true;

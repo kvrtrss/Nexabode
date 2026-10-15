@@ -41,6 +41,7 @@
                     <TextBlock Text="Where your data is stored" FontWeight="SemiBold"
                                Foreground="{DynamicResource AppTextBrush}" Margin="0,0,0,2" />
                     <TextBlock x:Name="DataPathText" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="RulesText" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0" />
                     <TextBlock Text="Everything stays on this computer. The database is encrypted."
                                Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0" />
                 </StackPanel>

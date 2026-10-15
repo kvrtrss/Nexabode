@@ -195,7 +195,17 @@ public partial class UtilityBillsPage : Page
             RoomId = scope.RoomId,
             DueDate = DateOnly.FromDateTime(dueDt)
         });
-        db.SaveChanges();
+
+        try
+        {
+            db.SaveChanges();
+        }
+        catch (DbUpdateException)
+        {
+            Tell("That bill was just added from another window, so nothing was saved.");
+            LoadBills();
+            return;
+        }
 
         BillAmountBox.Text = "";
         LoadBills();
@@ -319,7 +329,16 @@ public partial class UtilityBillsPage : Page
                 UtilityBillId = bill.Id
             });
         }
-        db.SaveChanges();
+
+        try
+        {
+            db.SaveChanges();   // all shares are saved together or not at all
+        }
+        catch (DbUpdateException)
+        {
+            Tell("This bill was just split from another window, so nothing was saved.");
+        }
+
         LoadBills();
     }
 

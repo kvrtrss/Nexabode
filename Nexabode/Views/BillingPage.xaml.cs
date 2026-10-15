@@ -1,6 +1,8 @@
 ﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
 using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
 using Nexabode.Models;
@@ -10,24 +12,40 @@ namespace Nexabode.Views;
 
 public partial class BillingPage : Page
 {
+    public class PaidItem
+    {
+        public DateOnly Date { get; set; }
+        public string Method { get; set; } = "";
+        public string Reference { get; set; } = "";
+        public decimal Amount { get; set; }
+    }
+
     public class ChargeRow
     {
         public int Id { get; set; }
+        public int TenantId { get; set; }
         public string Tenant { get; set; } = "";
         public string Bed { get; set; } = "";
         public string Description { get; set; } = "";
         public ChargeType Type { get; set; }
+        public string Kind => Type.ToString();
         public decimal Amount { get; set; }
         public decimal Paid { get; set; }
         public decimal Balance { get; set; }
         public DateOnly DueDate { get; set; }
         public string DueText => DueDate.ToString("MMM d, yyyy");
+        public DateOnly? LastPaid { get; set; }
+        public string LastPaidText => LastPaid?.ToString("MMM d, yyyy") ?? "-";
         public string Status { get; set; } = "";
         public bool IsVoided { get; set; }
         public string Note { get; set; } = "";
+        public List<PaidItem> Payments { get; set; } = new();
     }
 
+    private List<ChargeRow> _all = new();
+    private int? _selectedId;
     private bool _ready;
+    private bool _binding;
 
     public BillingPage()
     {
@@ -42,6 +60,8 @@ public partial class BillingPage : Page
 
     private Window? Owner => Window.GetWindow(this);
 
+    private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
+
     private static string? Blank(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     private static bool TryDate(string text, out DateOnly date) =>
@@ -53,6 +73,8 @@ public partial class BillingPage : Page
     private DateOnly? SelectedMonth => (MonthCombo.SelectedItem as MonthOption)?.Start;
 
     private ChargeRow? Selected => ChargeGrid.SelectedItem as ChargeRow;
+
+    private static string ChoiceOf(ComboBox box) => (box.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
 
     private void Setup()
     {
@@ -66,6 +88,7 @@ public partial class BillingPage : Page
     {
         if (!_ready || SelectedMonth is not DateOnly start) return;
         RentDuePicker.SelectedDate = start.AddDays(4).ToDateTime(TimeOnly.MinValue);   // the 5th
+        _selectedId = null;
         LoadCharges();
     }
 
@@ -74,7 +97,23 @@ public partial class BillingPage : Page
         if (_ready) LoadCharges();
     }
 
-    private void ChargeGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateButtons();
+    private void Filter_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_ready) ApplyFilter();
+    }
+
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_ready) ApplyFilter();
+    }
+
+    private void ChargeGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_binding) return;
+        _selectedId = Selected?.Id;
+        ShowDetail();
+        UpdateButtons();
+    }
 
     private void UpdateButtons()
     {
@@ -95,13 +134,13 @@ public partial class BillingPage : Page
 
         using var db = new AppDbContext();
         var charges = db.Charges.IgnoreQueryFilters()   // look past the voided-charge filter
-            .Include(c => c.Allocations)
+            .Include(c => c.Allocations).ThenInclude(a => a.Payment)
             .Include(c => c.Occupancy).ThenInclude(o => o.Tenant)
             .Include(c => c.Occupancy).ThenInclude(o => o.Bed).ThenInclude(b => b.Room)
             .Where(c => c.BillingMonth == key && (showVoided || !c.IsVoided))
             .ToList();
 
-        var rows = charges
+        _all = charges
             .Select(c =>
             {
                 var paid = c.Allocations.Sum(a => a.AmountApplied);
@@ -109,6 +148,7 @@ public partial class BillingPage : Page
                 return new ChargeRow
                 {
                     Id = c.Id,
+                    TenantId = c.Occupancy.TenantId,
                     Tenant = c.Occupancy.Tenant.FullName,
                     Bed = $"{c.Occupancy.Bed.Room.RoomName} / {c.Occupancy.Bed.BedLabel}",
                     Description = c.Description ?? c.ChargeType.ToString(),
@@ -119,16 +159,27 @@ public partial class BillingPage : Page
                     DueDate = c.DueDate,
                     IsVoided = c.IsVoided,
                     Note = c.IsVoided ? $"Voided: {c.VoidReason}" : "",
-                    Status = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today, c.IsVoided)
+                    Status = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today, c.IsVoided),
+                    LastPaid = c.Allocations.Count == 0
+                        ? (DateOnly?)null
+                        : c.Allocations.Max(a => a.Payment.PaymentDate),
+                    Payments = c.Allocations
+                        .Select(a => new PaidItem
+                        {
+                            Date = a.Payment.PaymentDate,
+                            Method = a.Payment.Method ?? "",
+                            Reference = a.Payment.ReferenceNo ?? "",
+                            Amount = a.AmountApplied
+                        })
+                        .OrderByDescending(p => p.Date)
+                        .ToList()
                 };
             })
-            .OrderBy(r => r.Tenant).ThenBy(r => r.Description)
+            .OrderBy(r => r.Tenant).ThenBy(r => r.Kind).ThenBy(r => r.Description)
             .ToList();
 
-        ChargeGrid.ItemsSource = rows;
-
-        // Totals ignore voided charges.
-        var live = rows.Where(r => !r.IsVoided).ToList();
+        // The cards ignore voided charges and the filters.
+        var live = _all.Where(r => !r.IsVoided).ToList();
         var billed = live.Sum(r => r.Amount);
         var paidTotal = live.Sum(r => r.Paid);
         var overdue = live.Where(r => r.Status == "Overdue").Sum(r => r.Balance);
@@ -148,7 +199,137 @@ public partial class BillingPage : Page
         OverdueCard.Caption = overdue > 0 ? "Past due date" : "Nothing overdue";
         OverdueCard.Tone = overdue > 0 ? "Danger" : "Success";
 
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        var type = ChoiceOf(TypeFilter);
+        var status = ChoiceOf(StatusFilter);
+        var query = SearchBox.Text.Trim();
+
+        var rows = _all
+            .Where(r => type switch
+            {
+                "Rent" => r.Type == ChargeType.Rent,
+                "Utilities" => r.Type == ChargeType.Utility,
+                _ => true
+            })
+            .Where(r => status switch
+            {
+                "Not fully paid" => !r.IsVoided && r.Balance > 0,
+                "Fully paid" => r.Status == "Paid",
+                "Overdue" => r.Status == "Overdue",
+                _ => true
+            })
+            .Where(r => query == "" || r.Tenant.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        _binding = true;   // ignore selection events while the list is being rebuilt
+        ChargeGrid.ItemsSource = rows;
+        ChargeGrid.SelectedItem = rows.FirstOrDefault(r => r.Id == _selectedId);
+        _binding = false;
+
+        ShowDetail();
         UpdateButtons();
+    }
+
+    // ---------- Details: who paid what ----------
+
+    private static void AddLine(Panel panel, string label, string value, string? tone = null)
+    {
+        var line = new TextBlock { Margin = new Thickness(0, 0, 0, 4), TextWrapping = TextWrapping.Wrap };
+        line.Inlines.Add(new Run(label + "   ") { Foreground = Res("AppSecondaryBrush") });
+        line.Inlines.Add(new Run(value)
+        {
+            FontWeight = FontWeights.SemiBold,
+            Foreground = tone == null ? Res("AppTextBrush") : Res(tone + "Brush")
+        });
+        panel.Children.Add(line);
+    }
+
+    private void ShowDetail()
+    {
+        var row = Selected;
+        DetailEmpty.Visibility = row == null ? Visibility.Visible : Visibility.Collapsed;
+        DetailBody.Visibility = row == null ? Visibility.Collapsed : Visibility.Visible;
+        if (row == null) return;
+
+        DetailTitle.Text = row.Tenant;
+        DetailSub.Text = $"{row.Description}  -  {row.Bed}";
+        DetailBadge.Content = row.Status;
+
+        InfoPanel.Children.Clear();
+        AddLine(InfoPanel, "Amount", Fmt.Peso(row.Amount));
+        AddLine(InfoPanel, "Paid", Fmt.Peso(row.Paid), row.Paid > 0 ? "Success" : null);
+        AddLine(InfoPanel, "Balance", Fmt.Peso(row.Balance),
+            row.IsVoided ? null : row.Balance <= 0 ? "Success" : row.Status == "Overdue" ? "Danger" : "Warning");
+        AddLine(InfoPanel, "Due", row.DueText);
+        if (row.IsVoided) AddLine(InfoPanel, "Voided", row.Note.Replace("Voided: ", ""));
+
+        PaymentList.Children.Clear();
+        if (row.Payments.Count == 0)
+        {
+            PaymentList.Children.Add(new TextBlock
+            {
+                Text = row.IsVoided ? "This charge was voided." : "No payment has been applied to this charge yet.",
+                Style = (Style)FindResource("MutedText"),
+                TextWrapping = TextWrapping.Wrap
+            });
+        }
+        foreach (var payment in row.Payments)
+        {
+            var parts = new List<string> { Fmt.Date(payment.Date) };
+            if (payment.Method != "") parts.Add(payment.Method);
+            if (payment.Reference != "") parts.Add("Ref " + payment.Reference);
+
+            var item = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+            item.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            item.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            item.Children.Add(new TextBlock
+            {
+                Text = string.Join("  -  ", parts),
+                Foreground = Res("AppTextBrush"),
+                TextWrapping = TextWrapping.Wrap
+            });
+            var amount = new TextBlock
+            {
+                Text = Fmt.Peso(payment.Amount),
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Res("SuccessBrush"),
+                Margin = new Thickness(8, 0, 0, 0)
+            };
+            Grid.SetColumn(amount, 1);
+            item.Children.Add(amount);
+
+            PaymentList.Children.Add(item);
+        }
+
+        // This month for the same tenant: rent and utilities, paid against billed.
+        var month = (MonthCombo.SelectedItem as MonthOption)?.Display ?? "this month";
+        SummaryTitle.Text = $"{row.Tenant} in {month}";
+        SummaryPanel.Children.Clear();
+
+        var mine = _all.Where(r => r.TenantId == row.TenantId && !r.IsVoided).ToList();
+
+        void Summarize(string label, IEnumerable<ChargeRow> group)
+        {
+            var list = group.ToList();
+            if (list.Count == 0) return;
+
+            var billed = list.Sum(r => r.Amount);
+            var paid = list.Sum(r => r.Paid);
+            AddLine(SummaryPanel, label, $"{Fmt.Peso(paid)} paid of {Fmt.Peso(billed)}",
+                billed - paid <= 0 ? "Success" : list.Any(r => r.Status == "Overdue") ? "Danger" : "Warning");
+        }
+
+        Summarize("Rent", mine.Where(r => r.Type == ChargeType.Rent));
+        Summarize("Utilities", mine.Where(r => r.Type == ChargeType.Utility));
+        Summarize("Other", mine.Where(r => r.Type == ChargeType.Other));
+
+        var totalBalance = mine.Sum(r => r.Balance);
+        AddLine(SummaryPanel, "Still owed", Fmt.Peso(totalBalance), totalBalance <= 0 ? "Success" : "Warning");
     }
 
     // ---------- Edit and void ----------
@@ -315,7 +496,18 @@ public partial class BillingPage : Page
             created++;
         }
 
-        db.SaveChanges();
+        try
+        {
+            db.SaveChanges();   // all new charges are saved together or not at all
+        }
+        catch (DbUpdateException)
+        {
+            Tell("Some of these rent charges were just created from another window, so nothing was saved.\n\n" +
+                 "The list has been refreshed. Click Generate rent again if anything is still missing.");
+            LoadCharges();
+            return;
+        }
+
         LoadCharges();
 
         var message = $"Rent charges created: {created}.\nAlready billed (skipped): {skipped}.";
