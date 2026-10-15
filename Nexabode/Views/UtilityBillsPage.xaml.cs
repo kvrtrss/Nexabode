@@ -298,12 +298,11 @@ public partial class UtilityBillsPage : Page
             return;
         }
 
-        var share = Math.Round(bill.TotalAmount / stays.Count, 2, MidpointRounding.ToZero);
-        var leftover = bill.TotalAmount - share * stays.Count;
+        var shares = BillingRules.SplitEvenly(bill.TotalAmount, stays.Count);
 
         var confirm = MessageBox.Show(
             $"Split {Fmt.Peso(bill.TotalAmount)} ({bill.UtilityType}) among {stays.Count} tenant(s)?\n\n" +
-            $"Each pays about {Fmt.Peso(share)}.\nYou can undo the split later if nothing has been paid on it.",
+            $"Each pays about {Fmt.Peso(shares[^1])}.\nYou can undo the split later if nothing has been paid on it.",
             "Confirm split", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes) return;
 
@@ -315,7 +314,7 @@ public partial class UtilityBillsPage : Page
                 BillingMonth = bill.BillingMonth,
                 ChargeType = ChargeType.Utility,
                 Description = $"{bill.UtilityType} share",
-                Amount = i == 0 ? share + leftover : share,   // leftover centavos go to the first tenant
+                Amount = shares[i],   // leftover centavos are already in the first share
                 DueDate = bill.DueDate ?? end,
                 UtilityBillId = bill.Id
             });

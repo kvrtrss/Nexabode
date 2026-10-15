@@ -439,14 +439,9 @@ public partial class PaymentsPage : Page
         }
         else
         {
-            var remaining = amount;
-            foreach (var charge in open)
-            {
-                if (remaining <= 0) break;
-                var apply = Math.Min(remaining, charge.Balance);
-                allocations.Add(new PaymentAllocation { ChargeId = charge.Id, AmountApplied = apply });
-                remaining -= apply;
-            }
+            allocations = PaymentRules.AllocateOldestFirst(amount, open.Select(c => (c.Id, c.Balance)))
+                .Select(a => new PaymentAllocation { ChargeId = a.ChargeId, AmountApplied = a.Applied })
+                .ToList();
         }
 
         var confirm = MessageBox.Show(

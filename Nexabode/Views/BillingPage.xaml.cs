@@ -119,10 +119,7 @@ public partial class BillingPage : Page
                     DueDate = c.DueDate,
                     IsVoided = c.IsVoided,
                     Note = c.IsVoided ? $"Voided: {c.VoidReason}" : "",
-                    Status = c.IsVoided ? "Voided"
-                           : balance <= 0 ? "Paid"
-                           : c.DueDate < today ? "Overdue"
-                           : paid > 0 ? "Partial" : "Unpaid"
+                    Status = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today, c.IsVoided)
                 };
             })
             .OrderBy(r => r.Tenant).ThenBy(r => r.Description)
@@ -263,7 +260,6 @@ public partial class BillingPage : Page
 
         var key = BillingHelpers.MonthKey(start);
         var end = start.AddMonths(1).AddDays(-1);
-        var daysInMonth = end.Day;
         var due = DateOnly.FromDateTime(dueDt);
         var prorate = ProrateCheck.IsChecked == true;
 
@@ -297,40 +293,23 @@ public partial class BillingPage : Page
                 && c.BillingMonth == key && c.ChargeType == ChargeType.Rent);
             if (alreadyBilled) { skipped++; continue; }
 
-            var amount = stay.AgreedRent;
-            var description = "Monthly rent";
+            var splitIntoDays = prorate || multiStayTenants.Contains(stay.TenantId);
+            var handover = stay.MoveOutDate is DateOnly outDay &&
+                stays.Any(s => s.TenantId == stay.TenantId && s.Id != stay.Id && s.MoveInDate == outDay);
 
-            if (prorate || multiStayTenants.Contains(stay.TenantId))
-            {
-                var from = stay.MoveInDate > start ? stay.MoveInDate : start;
-                var to = stay.MoveOutDate is DateOnly mo && mo < end ? mo : end;
+            var rent = BillingRules.CalculateRent(stay.AgreedRent, stay.MoveInDate, stay.MoveOutDate,
+                                                  start, splitIntoDays, handover);
+            if (rent == null) continue;
 
-                // If the tenant moved straight into another bed on the day this stay ended,
-                // that day belongs to the new stay, so don't count it twice.
-                if (stay.MoveOutDate is DateOnly outDay &&
-                    stays.Any(s => s.TenantId == stay.TenantId && s.Id != stay.Id && s.MoveInDate == outDay))
-                {
-                    to = to.AddDays(-1);
-                }
-
-                var days = to.DayNumber - from.DayNumber + 1;
-                if (days <= 0) continue;
-
-                if (days < daysInMonth)
-                {
-                    amount = Math.Round(stay.AgreedRent * days / daysInMonth, 2);
-                    description = $"Rent ({days} of {daysInMonth} days)";
-                    if (multiStayTenants.Contains(stay.TenantId)) byDays++;
-                }
-            }
+            if (rent.IsPartial && multiStayTenants.Contains(stay.TenantId)) byDays++;
 
             db.Charges.Add(new Charge
             {
                 OccupancyId = stay.Id,
                 BillingMonth = key,
                 ChargeType = ChargeType.Rent,
-                Description = description,
-                Amount = amount,
+                Description = rent.Description,
+                Amount = rent.Amount,
                 DueDate = due
             });
             created++;
