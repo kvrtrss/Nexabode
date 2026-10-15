@@ -15,9 +15,7 @@
         </Grid.RowDefinitions>
 
         <controls:PageHeader Title="Billing Charges"
-                             Subtitle="Rent and utility charges for each tenant, and who has paid them."
-                             ActionText="Generate rent"
-                             ActionClick="GenerateRent_Click" />
+                             Subtitle="Every charge, who has paid it, and what is still owed." />
 
         <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,16">
             <controls:StatCard x:Name="BilledCard" Label="Billed" Margin="0,0,12,0" />
@@ -31,21 +29,13 @@
                        Style="{StaticResource MutedText}" />
             <ComboBox x:Name="MonthCombo" Width="190" DisplayMemberPath="Display" Margin="0,0,20,0"
                       SelectionChanged="MonthCombo_SelectionChanged" />
-            <TextBlock Text="Rent due date" VerticalAlignment="Center" Margin="0,0,8,0"
-                       Style="{StaticResource MutedText}" />
-            <DatePicker x:Name="RentDuePicker" Width="160" Margin="0,0,20,0" />
-            <CheckBox x:Name="ProrateCheck" Content="Prorate partial months" Margin="0,0,20,0" />
             <CheckBox x:Name="ShowVoidedCheck" Content="Show voided"
                       Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
         </StackPanel>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,12">
-            <ComboBox x:Name="TypeFilter" Width="140" Margin="0,0,8,0"
-                      SelectionChanged="Filter_Changed">
-                <ComboBoxItem Content="All types" IsSelected="True" />
-                <ComboBoxItem Content="Rent" />
-                <ComboBoxItem Content="Utilities" />
-            </ComboBox>
+            <ComboBox x:Name="ItemFilter" Width="150" Margin="0,0,8,0"
+                      SelectionChanged="Filter_Changed" />
             <ComboBox x:Name="StatusFilter" Width="160" Margin="0,0,8,0"
                       SelectionChanged="Filter_Changed">
                 <ComboBoxItem Content="All statuses" IsSelected="True" />
@@ -66,16 +56,16 @@
                   SelectionChanged="ChargeGrid_SelectionChanged">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Tenant" Binding="{Binding Tenant}" Width="*" />
-                <DataGridTextColumn Header="Type" Binding="{Binding Kind}" Width="75" />
-                <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="150" />
+                <DataGridTextColumn Header="Item" Binding="{Binding Item}" Width="95" />
+                <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="140" />
                 <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat='₱{0:N2}'}"
                                     ElementStyle="{StaticResource RightCell}" Width="105" />
                 <DataGridTextColumn Header="Paid" Binding="{Binding Paid, StringFormat='₱{0:N2}'}"
                                     ElementStyle="{StaticResource RightCell}" Width="105" />
                 <DataGridTextColumn Header="Balance" Binding="{Binding Balance, StringFormat='₱{0:N2}'}"
                                     ElementStyle="{StaticResource RightCell}" Width="105" />
-                <DataGridTextColumn Header="Due" Binding="{Binding DueText}" Width="105" />
-                <DataGridTextColumn Header="Paid on" Binding="{Binding LastPaidText}" Width="105" />
+                <DataGridTextColumn Header="Due" Binding="{Binding DueText}" Width="100" />
+                <DataGridTextColumn Header="Paid on" Binding="{Binding LastPaidText}" Width="100" />
                 <DataGridTemplateColumn Header="Status" Width="100">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
@@ -84,7 +74,7 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="170" />
+                <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="140" />
             </DataGrid.Columns>
         </DataGrid>
 

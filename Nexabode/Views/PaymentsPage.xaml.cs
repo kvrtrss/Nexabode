@@ -27,6 +27,7 @@ public partial class PaymentsPage : Page
         public DateOnly DueDate { get; set; }
         public string DueText => DueDate.ToString("MMM d, yyyy");
         public string Status { get; set; } = "";
+        public string Item { get; set; } = "";
     }
 
     public class PaymentRow
@@ -42,6 +43,7 @@ public partial class PaymentsPage : Page
         public string Details { get; set; } = "";
         public bool IsVoided { get; set; }
         public string Status => IsVoided ? "Voided" : "Recorded";
+        public string PaidFor { get; set; } = "";
     }
 
     public class BalanceRow
@@ -55,6 +57,16 @@ public partial class PaymentsPage : Page
 
     private bool _ready;
 
+    public class PayForOption
+    {
+        public string Key { get; set; } = "";
+        public string Display { get; set; } = "";
+        public string Hint { get; set; } = "";
+        public string? Item { get; set; }     // null = any item
+        public bool Specific { get; set; }    // true = one charge picked in the Unpaid charges tab
+    }
+
+    private bool _loadingPayFor;
     public PaymentsPage()
     {
         InitializeComponent();
@@ -182,6 +194,7 @@ public partial class PaymentsPage : Page
         using var db = new AppDbContext();
         var rows = db.Payments
             .Include(p => p.Tenant)
+            .Include(p => p.Allocations).ThenInclude(a => a.Charge).ThenInclude(c => c.UtilityBill)
             .ToList()
             .Where(p => showVoided || !p.IsVoided)
             .Select(p => new PaymentRow
@@ -194,14 +207,17 @@ public partial class PaymentsPage : Page
                 Reference = p.ReferenceNo ?? "",
                 Remarks = p.Remarks,
                 IsVoided = p.IsVoided,
-                Details = p.IsVoided
-                    ? $"Voided: {p.VoidReason}"
-                    : p.Remarks ?? ""
+                PaidFor = string.Join(", ", p.Allocations
+                    .Select(a => BillingHelpers.ItemOf(a.Charge))
+                    .Distinct()
+                    .OrderBy(i => i == "Rent" ? 0 : 1).ThenBy(i => i)),
+                Details = p.IsVoided ? $"Voided: {p.VoidReason}" : p.Remarks ?? ""
             })
             .Where(r => query == ""
                 || r.Tenant.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || r.Method.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || r.Reference.Contains(query, StringComparison.OrdinalIgnoreCase))
+                || r.Reference.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || r.PaidFor.Contains(query, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(r => r.Date).ThenByDescending(r => r.Id)
             .ToList();
 
@@ -291,39 +307,16 @@ public partial class PaymentsPage : Page
     // ---------- Selected tenant: summary and unpaid charges ----------
 
     // Charges of one tenant that still have a balance, oldest due date first.
-    private static List<OpenChargeRow> GetOpenCharges(AppDbContext db, int tenantId)
-    {
-        var today = DateOnly.FromDateTime(DateTime.Today);
-
-        return db.Charges
-            .Include(c => c.Allocations)
-            .Where(c => c.Occupancy.TenantId == tenantId)
-            .ToList()
-            .Select(c =>
-            {
-                var paid = c.Allocations.Sum(a => a.AmountApplied);
-                return new OpenChargeRow
-                {
-                    Id = c.Id,
-                    BillingMonth = c.BillingMonth,
-                    Description = c.Description ?? c.ChargeType.ToString(),
-                    Amount = c.Amount,
-                    Paid = paid,
-                    Balance = c.Amount - paid,
-                    DueDate = c.DueDate,
-                    Status = c.DueDate < today ? "Overdue" : paid > 0 ? "Partial" : "Unpaid"
-                };
-            })
-            .Where(r => r.Balance > 0)
-            .OrderBy(r => r.DueDate).ThenBy(r => r.Id)
-            .ToList();
-    }
 
     private void LoadTenantData()
     {
         if (SelectedTenantId is not int tenantId)
         {
             ChargeGrid.ItemsSource = null;
+            _loadingPayFor = true;
+            PayForCombo.ItemsSource = null;
+            _loadingPayFor = false;
+            PayForHint.Text = "";
             SummaryText.Text = "Select a tenant to begin.";
             return;
         }
@@ -332,6 +325,7 @@ public partial class PaymentsPage : Page
 
         var open = GetOpenCharges(db, tenantId);
         ChargeGrid.ItemsSource = open;
+        LoadPayFor(open);
 
         var allCharges = db.Charges
             .Include(c => c.Allocations)
@@ -342,6 +336,60 @@ public partial class PaymentsPage : Page
         var overdue = open.Where(r => r.Status == "Overdue").Sum(r => r.Balance);
 
         SummaryText.Text = $"Balance {Fmt.Peso(billed - paid)}  -  Overdue {Fmt.Peso(overdue)}";
+    }
+
+    // The "paying for" choices: any item, one item (Rent, Electricity, ...), or one specific charge.
+    private void LoadPayFor(List<OpenChargeRow> open)
+    {
+        var keep = (PayForCombo.SelectedItem as PayForOption)?.Key;
+
+        var options = new List<PayForOption>
+    {
+        new() { Key = "oldest", Display = "Oldest charges first (any item)",
+                Hint = "Pays the oldest unpaid charge first, then the next one." }
+    };
+
+        foreach (var group in open.GroupBy(r => r.Item)
+                                  .OrderBy(g => g.Key == "Rent" ? 0 : 1).ThenBy(g => g.Key))
+        {
+            var due = group.Sum(r => r.Balance);
+            options.Add(new PayForOption
+            {
+                Key = "item:" + group.Key,
+                Item = group.Key,
+                Display = $"{group.Key}  -  {Fmt.Peso(due)} unpaid",
+                Hint = $"Pays only {group.Key} charges, oldest first. Up to {Fmt.Peso(due)}."
+            });
+        }
+
+        options.Add(new PayForOption
+        {
+            Key = "specific",
+            Specific = true,
+            Display = "One specific charge (pick it in Unpaid charges)",
+            Hint = "Click a charge in the Unpaid charges tab, then record the payment."
+        });
+
+        _loadingPayFor = true;
+        PayForCombo.ItemsSource = options;
+        PayForCombo.SelectedItem = options.FirstOrDefault(o => o.Key == keep) ?? options[0];
+        _loadingPayFor = false;
+
+        PayForHint.Text = (PayForCombo.SelectedItem as PayForOption)?.Hint ?? "";
+    }
+
+    private void PayFor_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_ready || _loadingPayFor) return;
+
+        if (PayForCombo.SelectedItem is not PayForOption option)
+        {
+            PayForHint.Text = "";
+            return;
+        }
+
+        PayForHint.Text = option.Hint;
+        if (option.Specific) Tabs.SelectedIndex = 1;   // jump to Unpaid charges so a charge can be picked
     }
 
     private void LoadAllBalances()
@@ -373,18 +421,44 @@ public partial class PaymentsPage : Page
     // ---------- Record a payment ----------
 
     // Works out how a payment would be applied, using the balances in the database right now.
+    // Charges of one tenant that still have a balance, oldest due date first.
+    private static List<OpenChargeRow> GetOpenCharges(AppDbContext db, int tenantId)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        return db.Charges
+            .Include(c => c.UtilityBill)
+            .Include(c => c.Allocations)
+            .Where(c => c.Occupancy.TenantId == tenantId)
+            .ToList()
+            .Select(c =>
+            {
+                var paid = c.Allocations.Sum(a => a.AmountApplied);
+                return new OpenChargeRow
+                {
+                    Id = c.Id,
+                    BillingMonth = c.BillingMonth,
+                    Item = BillingHelpers.ItemOf(c),
+                    Description = c.Description ?? c.ChargeType.ToString(),
+                    Amount = c.Amount,
+                    Paid = paid,
+                    Balance = c.Amount - paid,
+                    DueDate = c.DueDate,
+                    Status = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today)
+                };
+            })
+            .Where(r => r.Balance > 0)
+            .OrderBy(r => r.DueDate).ThenBy(r => r.Id)
+            .ToList();
+    }
+
+    // Works out how a payment would be applied, using the balances in the database right now.
     private static (List<PaymentAllocation>? Allocations, string? Error) PlanAllocations(
-        AppDbContext db, int tenantId, decimal amount, int? chosenChargeId)
+        AppDbContext db, int tenantId, decimal amount, int? chosenChargeId, string? item)
     {
         var open = GetOpenCharges(db, tenantId);
-        var totalBalance = open.Sum(r => r.Balance);
-
         if (open.Count == 0)
             return (null, "This tenant has no unpaid charges.");
-
-        if (amount > totalBalance)
-            return (null, $"The amount ({Fmt.Peso(amount)}) is more than the tenant's balance ({Fmt.Peso(totalBalance)}).\n" +
-                          "Advance payments are not supported yet.");
 
         if (chosenChargeId is int chargeId)
         {
@@ -392,13 +466,24 @@ public partial class PaymentsPage : Page
             if (fresh == null)
                 return (null, "That charge is already fully paid.");
             if (amount > fresh.Balance)
-                return (null, $"That charge only has {Fmt.Peso(fresh.Balance)} left. Lower the amount, " +
-                              "or choose \"oldest charges first\".");
+                return (null, $"That charge only has {Fmt.Peso(fresh.Balance)} left. Lower the amount, or choose another option.");
 
             return (new List<PaymentAllocation> { new() { ChargeId = fresh.Id, AmountApplied = amount } }, null);
         }
 
-        var allocations = PaymentRules.AllocateOldestFirst(amount, open.Select(c => (c.Id, c.Balance)))
+        var scope = item == null ? open : open.Where(r => r.Item == item).ToList();
+        if (scope.Count == 0)
+            return (null, $"This tenant has no unpaid {item} charges.");
+
+        var scopeBalance = scope.Sum(r => r.Balance);
+        if (amount > scopeBalance)
+            return (null, item == null
+                ? $"The amount ({Fmt.Peso(amount)}) is more than the tenant's balance ({Fmt.Peso(scopeBalance)}).\n" +
+                  "Advance payments are not supported yet."
+                : $"The amount ({Fmt.Peso(amount)}) is more than the unpaid {item} ({Fmt.Peso(scopeBalance)}).\n" +
+                  "Lower the amount, or choose a different option.");
+
+        var allocations = PaymentRules.AllocateOldestFirst(amount, scope.Select(c => (c.Id, c.Balance)))
             .Select(a => new PaymentAllocation { ChargeId = a.ChargeId, AmountApplied = a.Applied })
             .ToList();
 
@@ -429,23 +514,35 @@ public partial class PaymentsPage : Page
         }
         amount = Math.Round(amount, 2);
 
+        if (PayForCombo.SelectedItem is not PayForOption option)
+        {
+            Tell("Choose what the tenant is paying for.");
+            return;
+        }
+
         int? chosenChargeId = null;
-        if (SelectedRadio.IsChecked == true)
+        string? item = null;
+
+        if (option.Specific)
         {
             if (ChargeGrid.SelectedItem is not OpenChargeRow chosen)
             {
-                Tell("Click a charge in the Unpaid charges tab first, or choose \"oldest charges first\".");
+                Tell("Click a charge in the Unpaid charges tab first, or choose a different option.");
                 Tabs.SelectedIndex = 1;
                 return;
             }
             chosenChargeId = chosen.Id;
+        }
+        else
+        {
+            item = option.Item;
         }
 
         // A first look, only to describe the payment in the confirmation.
         int chargeCount;
         using (var preview = new AppDbContext())
         {
-            var (planned, previewError) = PlanAllocations(preview, tenant.Id, amount, chosenChargeId);
+            var (planned, previewError) = PlanAllocations(preview, tenant.Id, amount, chosenChargeId, item);
             if (planned == null)
             {
                 Tell(previewError!);
@@ -455,8 +552,10 @@ public partial class PaymentsPage : Page
             chargeCount = planned.Count;
         }
 
+        var purpose = option.Specific ? "one specific charge" : item ?? "oldest charges first";
         var confirm = MessageBox.Show(
-            $"Record a payment of {Fmt.Peso(amount)} from {tenant.Name}?\n\nIt will be applied to {chargeCount} charge(s).",
+            $"Record a payment of {Fmt.Peso(amount)} from {tenant.Name}?\n\n" +
+            $"Paying for: {purpose}\nIt will be applied to {chargeCount} charge(s).",
             "Confirm payment", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes) return;
 
@@ -466,7 +565,7 @@ public partial class PaymentsPage : Page
             using var transaction = db.Database.BeginTransaction();
 
             // Check again inside the transaction, in case the balances changed while the confirmation was open.
-            var (allocations, finalError) = PlanAllocations(db, tenant.Id, amount, chosenChargeId);
+            var (allocations, finalError) = PlanAllocations(db, tenant.Id, amount, chosenChargeId, item);
             if (allocations == null)
             {
                 transaction.Rollback();
@@ -497,7 +596,7 @@ public partial class PaymentsPage : Page
         }
 
         AmountBox.Text = ReferenceBox.Text = RemarksBox.Text = "";
-        OldestRadio.IsChecked = true;
+        PayForCombo.SelectedIndex = 0;   // back to "oldest charges first"
         Tabs.SelectedIndex = 0;
         RefreshAll();
     }

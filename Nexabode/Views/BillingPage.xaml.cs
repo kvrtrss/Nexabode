@@ -26,9 +26,9 @@ public partial class BillingPage : Page
         public int TenantId { get; set; }
         public string Tenant { get; set; } = "";
         public string Bed { get; set; } = "";
+        public string Item { get; set; } = "";
         public string Description { get; set; } = "";
         public ChargeType Type { get; set; }
-        public string Kind => Type.ToString();
         public decimal Amount { get; set; }
         public decimal Paid { get; set; }
         public decimal Balance { get; set; }
@@ -41,6 +41,8 @@ public partial class BillingPage : Page
         public string Note { get; set; } = "";
         public List<PaidItem> Payments { get; set; } = new();
     }
+
+    private const string AllItems = "All items";
 
     private List<ChargeRow> _all = new();
     private int? _selectedId;
@@ -86,8 +88,7 @@ public partial class BillingPage : Page
 
     private void MonthCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_ready || SelectedMonth is not DateOnly start) return;
-        RentDuePicker.SelectedDate = start.AddDays(4).ToDateTime(TimeOnly.MinValue);   // the 5th
+        if (!_ready) return;
         _selectedId = null;
         LoadCharges();
     }
@@ -99,7 +100,7 @@ public partial class BillingPage : Page
 
     private void Filter_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (_ready) ApplyFilter();
+        if (_ready && !_binding) ApplyFilter();
     }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -134,6 +135,7 @@ public partial class BillingPage : Page
 
         using var db = new AppDbContext();
         var charges = db.Charges.IgnoreQueryFilters()   // look past the voided-charge filter
+            .Include(c => c.UtilityBill)
             .Include(c => c.Allocations).ThenInclude(a => a.Payment)
             .Include(c => c.Occupancy).ThenInclude(o => o.Tenant)
             .Include(c => c.Occupancy).ThenInclude(o => o.Bed).ThenInclude(b => b.Room)
@@ -151,6 +153,7 @@ public partial class BillingPage : Page
                     TenantId = c.Occupancy.TenantId,
                     Tenant = c.Occupancy.Tenant.FullName,
                     Bed = $"{c.Occupancy.Bed.Room.RoomName} / {c.Occupancy.Bed.BedLabel}",
+                    Item = BillingHelpers.ItemOf(c),
                     Description = c.Description ?? c.ChargeType.ToString(),
                     Type = c.ChargeType,
                     Amount = c.Amount,
@@ -175,7 +178,7 @@ public partial class BillingPage : Page
                         .ToList()
                 };
             })
-            .OrderBy(r => r.Tenant).ThenBy(r => r.Kind).ThenBy(r => r.Description)
+            .OrderBy(r => r.Tenant).ThenBy(r => r.Item == "Rent" ? 0 : 1).ThenBy(r => r.Item)
             .ToList();
 
         // The cards ignore voided charges and the filters.
@@ -199,22 +202,33 @@ public partial class BillingPage : Page
         OverdueCard.Caption = overdue > 0 ? "Past due date" : "Nothing overdue";
         OverdueCard.Tone = overdue > 0 ? "Danger" : "Success";
 
+        RebuildItemFilter();
         ApplyFilter();
+    }
+
+    // The item filter lists whatever is billed that month: Rent, Electricity, Water, ...
+    private void RebuildItemFilter()
+    {
+        var keep = ItemFilter.SelectedItem as string ?? AllItems;
+
+        var items = new List<string> { AllItems };
+        items.AddRange(_all.Select(r => r.Item).Distinct()
+            .OrderBy(i => i == "Rent" ? 0 : 1).ThenBy(i => i));
+
+        _binding = true;
+        ItemFilter.ItemsSource = items;
+        ItemFilter.SelectedItem = items.Contains(keep) ? keep : AllItems;
+        _binding = false;
     }
 
     private void ApplyFilter()
     {
-        var type = ChoiceOf(TypeFilter);
+        var item = ItemFilter.SelectedItem as string ?? AllItems;
         var status = ChoiceOf(StatusFilter);
         var query = SearchBox.Text.Trim();
 
         var rows = _all
-            .Where(r => type switch
-            {
-                "Rent" => r.Type == ChargeType.Rent,
-                "Utilities" => r.Type == ChargeType.Utility,
-                _ => true
-            })
+            .Where(r => item == AllItems || r.Item == item)
             .Where(r => status switch
             {
                 "Not fully paid" => !r.IsVoided && r.Balance > 0,
@@ -306,27 +320,28 @@ public partial class BillingPage : Page
             PaymentList.Children.Add(item);
         }
 
-        // This month for the same tenant: rent and utilities, paid against billed.
+        // This month for the same tenant, item by item: Rent, Electricity, Water, ...
         var month = (MonthCombo.SelectedItem as MonthOption)?.Display ?? "this month";
         SummaryTitle.Text = $"{row.Tenant} in {month}";
         SummaryPanel.Children.Clear();
 
         var mine = _all.Where(r => r.TenantId == row.TenantId && !r.IsVoided).ToList();
 
-        void Summarize(string label, IEnumerable<ChargeRow> group)
+        foreach (var group in mine.GroupBy(r => r.Item)
+                                  .OrderBy(g => g.Key == "Rent" ? 0 : 1).ThenBy(g => g.Key))
         {
-            var list = group.ToList();
-            if (list.Count == 0) return;
+            var billed = group.Sum(r => r.Amount);
+            var paid = group.Sum(r => r.Paid);
+            var left = billed - paid;
+            var isOverdue = group.Any(r => r.Status == "Overdue");
 
-            var billed = list.Sum(r => r.Amount);
-            var paid = list.Sum(r => r.Paid);
-            AddLine(SummaryPanel, label, $"{Fmt.Peso(paid)} paid of {Fmt.Peso(billed)}",
-                billed - paid <= 0 ? "Success" : list.Any(r => r.Status == "Overdue") ? "Danger" : "Warning");
+            var text = left <= 0 ? "Paid in full"
+                     : paid <= 0 ? $"Not paid yet ({Fmt.Peso(left)})"
+                     : $"{Fmt.Peso(paid)} paid of {Fmt.Peso(billed)}";
+
+            AddLine(SummaryPanel, group.Key, text,
+                left <= 0 ? "Success" : isOverdue ? "Danger" : "Warning");
         }
-
-        Summarize("Rent", mine.Where(r => r.Type == ChargeType.Rent));
-        Summarize("Utilities", mine.Where(r => r.Type == ChargeType.Utility));
-        Summarize("Other", mine.Where(r => r.Type == ChargeType.Other));
 
         var totalBalance = mine.Sum(r => r.Balance);
         AddLine(SummaryPanel, "Still owed", Fmt.Peso(totalBalance), totalBalance <= 0 ? "Success" : "Warning");
@@ -422,97 +437,5 @@ public partial class BillingPage : Page
         db.SaveChanges();
 
         LoadCharges();
-    }
-
-    // ---------- Generate rent ----------
-
-    private void GenerateRent_Click(object sender, RoutedEventArgs e)
-    {
-        if (SelectedMonth is not DateOnly start)
-        {
-            Tell("Select a billing month first.");
-            return;
-        }
-        if (RentDuePicker.SelectedDate is not DateTime dueDt)
-        {
-            Tell("Select a rent due date.");
-            return;
-        }
-
-        var key = BillingHelpers.MonthKey(start);
-        var end = start.AddMonths(1).AddDays(-1);
-        var due = DateOnly.FromDateTime(dueDt);
-        var prorate = ProrateCheck.IsChecked == true;
-
-        using var db = new AppDbContext();
-        var stays = db.Occupancies
-            .Where(o => o.MoveInDate <= end && (o.MoveOutDate == null || o.MoveOutDate >= start))
-            .ToList();
-
-        if (stays.Count == 0)
-        {
-            Tell("No tenants were staying in that month, so there is nothing to bill.");
-            return;
-        }
-
-        // A tenant with more than one stay in the month (for example, a bed change) is billed
-        // by days for each stay, so they never pay the full rent twice.
-        var multiStayTenants = stays
-            .GroupBy(s => s.TenantId)
-            .Where(g => g.Count() > 1)
-            .Select(g => g.Key)
-            .ToHashSet();
-
-        var created = 0;
-        var skipped = 0;
-        var byDays = 0;
-
-        foreach (var stay in stays)
-        {
-            // Voided charges still count, so a rent charge you voided is not created again.
-            var alreadyBilled = db.Charges.IgnoreQueryFilters().Any(c => c.OccupancyId == stay.Id
-                && c.BillingMonth == key && c.ChargeType == ChargeType.Rent);
-            if (alreadyBilled) { skipped++; continue; }
-
-            var splitIntoDays = prorate || multiStayTenants.Contains(stay.TenantId);
-            var handover = stay.MoveOutDate is DateOnly outDay &&
-                stays.Any(s => s.TenantId == stay.TenantId && s.Id != stay.Id && s.MoveInDate == outDay);
-
-            var rent = BillingRules.CalculateRent(stay.AgreedRent, stay.MoveInDate, stay.MoveOutDate,
-                                                  start, splitIntoDays, handover);
-            if (rent == null) continue;
-
-            if (rent.IsPartial && multiStayTenants.Contains(stay.TenantId)) byDays++;
-
-            db.Charges.Add(new Charge
-            {
-                OccupancyId = stay.Id,
-                BillingMonth = key,
-                ChargeType = ChargeType.Rent,
-                Description = rent.Description,
-                Amount = rent.Amount,
-                DueDate = due
-            });
-            created++;
-        }
-
-        try
-        {
-            db.SaveChanges();   // all new charges are saved together or not at all
-        }
-        catch (DbUpdateException)
-        {
-            Tell("Some of these rent charges were just created from another window, so nothing was saved.\n\n" +
-                 "The list has been refreshed. Click Generate rent again if anything is still missing.");
-            LoadCharges();
-            return;
-        }
-
-        LoadCharges();
-
-        var message = $"Rent charges created: {created}.\nAlready billed (skipped): {skipped}.";
-        if (byDays > 0)
-            message += $"\n\n{byDays} charge(s) were billed by days because the tenant had more than one stay this month.";
-        Tell(message);
     }
 }

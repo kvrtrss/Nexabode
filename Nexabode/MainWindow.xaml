@@ -33,6 +33,8 @@
                                        TargetPageType="{x:Type views:RoomsPage}" />
                 <ui:NavigationViewItem Content="Tenants" Icon="{ui:SymbolIcon People24}"
                                        TargetPageType="{x:Type views:TenantsPage}" />
+                <ui:NavigationViewItem Content="Rent Billing" Icon="{ui:SymbolIcon Calendar24}"
+                       TargetPageType="{x:Type views:RentBillingPage}" />
                 <ui:NavigationViewItem Content="Billing Charges" Icon="{ui:SymbolIcon Receipt24}"
                                        TargetPageType="{x:Type views:BillingPage}" />
                 <ui:NavigationViewItem Content="Utility Bills" Icon="{ui:SymbolIcon Flash24}"

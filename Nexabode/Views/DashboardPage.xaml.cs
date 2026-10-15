@@ -31,7 +31,7 @@ public partial class DashboardPage : Page
 
     private void AddTenant_Click(object sender, RoutedEventArgs e) => Go(typeof(TenantsPage));
     private void RecordPayment_Click(object sender, RoutedEventArgs e) => Go(typeof(PaymentsPage));
-    private void GenerateRent_Click(object sender, RoutedEventArgs e) => Go(typeof(BillingPage));
+    private void GenerateRent_Click(object sender, RoutedEventArgs e) => Go(typeof(RentBillingPage));
     private void AddUtility_Click(object sender, RoutedEventArgs e) => Go(typeof(UtilityBillsPage));
 
     private void Setup()
