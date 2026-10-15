@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Nexabode.Models;
+using System.IO;
 
 namespace Nexabode.Data;
 
@@ -8,7 +9,12 @@ public static class DbInitializer
     public static void Initialize()
     {
         using var db = new AppDbContext();
-        db.Database.EnsureCreated();   // creates the encrypted DB and all tables if missing
+
+        // Only create the database on a first run. An existing database is opened as it is.
+        var path = DatabaseKeyProvider.DbPath;
+        var hasData = File.Exists(path) && new FileInfo(path).Length > 0;
+        if (!hasData)
+            db.Database.EnsureCreated();   // creates the encrypted DB and all tables
 
         UpgradeSchema(db);
 

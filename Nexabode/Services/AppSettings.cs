@@ -33,4 +33,13 @@ public class AppSettings
         }
         catch { /* not critical */ }
     }
+
+    // Changes one setting without touching the others.
+    public static void Update(Action<AppSettings> change)
+    {
+        var settings = Load();
+        change(settings);
+        settings.Save();
+    }
+
 }

@@ -149,12 +149,7 @@ public static class BackupService
 
         try
         {
-            var connection = new SqliteConnectionStringBuilder
-            {
-                DataSource = temp,
-                Password = Convert.ToBase64String(key),
-                Pooling = false
-            }.ToString();
+            var connection = DatabaseKeyProvider.BuildConnectionString(temp, Convert.ToBase64String(key), pooling: false);
 
             using var check = new SqliteConnection(connection);
             check.Open();

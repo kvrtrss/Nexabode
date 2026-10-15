@@ -18,13 +18,8 @@ public class AppDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
-        var connection = new SqliteConnectionStringBuilder
-        {
-            DataSource = DatabaseKeyProvider.DbPath,
-            Password = DatabaseKeyProvider.GetOrCreateKey()   // enables SQLCipher encryption
-        }.ToString();
-
-        options.UseSqlite(connection);
+        options.UseSqlite(DatabaseKeyProvider.BuildConnectionString(
+            DatabaseKeyProvider.DbPath, DatabaseKeyProvider.GetOrCreateKey()));
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

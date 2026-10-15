@@ -65,7 +65,7 @@ public static class ThemeService
                 SetBrush(name + "SoftBrush", hex, alpha: 0x26);
             }
 
-            if (save) new AppSettings { DarkMode = dark }.Save();
+            if (save) AppSettings.Update(s => s.DarkMode = dark);
             ThemeChanged?.Invoke();
             if (save)
             {
