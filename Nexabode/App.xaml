@@ -52,12 +52,96 @@
                 <Setter Property="Padding" Value="18" />
             </Style>
 
-            <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+            <!-- Tables: every part follows the app palette in light and dark mode -->
+            <Style x:Key="AppColumnHeaderStyle" TargetType="DataGridColumnHeader">
+                <Setter Property="Foreground" Value="{DynamicResource AppSecondaryBrush}" />
                 <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
+                <Setter Property="FontSize" Value="12.5" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Padding" Value="12,10" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="DataGridColumnHeader">
+                            <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="{TemplateBinding Padding}">
+                                <Grid>
+                                    <ContentPresenter VerticalAlignment="Center" />
+                                    <Path x:Name="SortArrow" Visibility="Collapsed" Data="M0,0 L8,0 L4,5 Z"
+                              Fill="{DynamicResource AppSecondaryBrush}"
+                              HorizontalAlignment="Right" VerticalAlignment="Center"
+                              RenderTransformOrigin="0.5,0.5" Margin="0,0,14,0" />
+                                    <Thumb x:Name="PART_RightHeaderGripper" HorizontalAlignment="Right"
+                               Width="8" Cursor="SizeWE" Background="Transparent"
+                               BorderBrush="Transparent" />
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="SortDirection" Value="Ascending">
+                                    <Setter TargetName="SortArrow" Property="Visibility" Value="Visible" />
+                                    <Setter TargetName="SortArrow" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <RotateTransform Angle="180" />
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <Trigger Property="SortDirection" Value="Descending">
+                                    <Setter TargetName="SortArrow" Property="Visibility" Value="Visible" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="AppRowStyle" TargetType="DataGridRow">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource NeutralSoftBrush}" />
+                    </Trigger>
+                    <Trigger Property="IsSelected" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource OccupiedSoftBrush}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <Style x:Key="AppCellStyle" TargetType="DataGridCell">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="12,0" />
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="DataGridCell">
+                            <Border Background="{TemplateBinding Background}"
+                        Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                                <ContentPresenter VerticalAlignment="Center" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+                <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="GridLinesVisibility" Value="Horizontal" />
                 <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource AppBorderBrush}" />
-                <Setter Property="RowHeight" Value="40" />
+                <Setter Property="HeadersVisibility" Value="Column" />
+                <Setter Property="RowBackground" Value="Transparent" />
+                <Setter Property="AlternatingRowBackground" Value="Transparent" />
+                <Setter Property="RowHeight" Value="42" />
+                <Setter Property="ColumnHeaderStyle" Value="{StaticResource AppColumnHeaderStyle}" />
+                <Setter Property="RowStyle" Value="{StaticResource AppRowStyle}" />
+                <Setter Property="CellStyle" Value="{StaticResource AppCellStyle}" />
             </Style>
 
             <!-- Right-aligned cells for money columns -->
