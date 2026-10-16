@@ -30,6 +30,14 @@ Everything is stored **on your own computer** in an encrypted database. There is
 
 Boarding house owners often track occupied beds, unpaid rent, and utility bills by hand. It is easy to lose track of empty beds, miscalculate charges, and miss overdue payments, especially when tenants move in and out during the school year. Nexabode puts all of this in one place and shows, at a glance, which beds are taken and what is still owed.
 
+## Disclaimer
+
+Nexabode is provided "AS IS", without warranties of any kind, express or implied, to the fullest extent permitted by applicable law. The authors and copyright holders make no guarantee that the software will be error-free, uninterrupted, secure, or suitable for any particular purpose.
+
+Users are responsible for maintaining appropriate backups, verifying records, and evaluating the software before relying on it for important operations. Nexabode should be tested carefully before being used to manage real tenant, financial, or other sensitive information.
+
+Nothing in this disclaimer excludes or limits any liability that cannot lawfully be excluded or limited under applicable law.
+
 ## Download
 
 1. Go to the [**latest release**](https://github.com/kvrtrss/Nexabode/releases/latest) and download `Nexabode-x.y.z-win-x64.zip`.
@@ -158,12 +166,11 @@ dotnet run
 
 Or open `Nexabode/Nexabode.slnx` in Visual Studio and press **F5**.
 
-<!-- Uncomment after the test project is added:
+
 ### Run the tests
 ```
 dotnet test Nexabode.Tests
 ```
--->
 
 ### Project layout
 ```
