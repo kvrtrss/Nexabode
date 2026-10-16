@@ -92,8 +92,6 @@ The application requires the default password to be changed on first sign-in. Ch
 |---|---|
 | ![Billing charges](docs/screenshots/billing.png) | ![Reports](docs/screenshots/reports.png) |
 
-<sub>Screenshots use fictional sample data. Light and dark themes are included.</sub>
-
 ## Features
 
 ### Dashboard
