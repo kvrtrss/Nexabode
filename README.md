@@ -142,16 +142,6 @@ The database key is tied to your Windows account. **If the computer is lost or r
 - Nexabode has a single administrator account.
 - To report a security problem, see [SECURITY.md](SECURITY.md).
 
-## Scope and limitations
-
-- One boarding house and one admin account
-- No online or digital payment integration. Payments such as cash or GCash are recorded by hand
-- Utility bills are split equally among the tenants staying in the room or house that month (no sub-metering)
-- No advance payments or credit balance
-- No one-off charges (such as a damage fee) yet
-- No tenant login or tenant view
-- Windows only
-
 ## Ideas for the future
 
 These are ideas, not promises: one-off charges, advance payments, automatic lock after inactivity, a global search bar, and an audit log. Suggestions are welcome as [issues](https://github.com/kvrtrss/Nexabode/issues).
