@@ -314,6 +314,18 @@ Accessibility feedback is also welcome. See [ACCESSIBILITY.md](ACCESSIBILITY.md)
 - [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) — MVVM utilities.
 
 These projects are maintained by their respective authors and communities. Refer to the applicable package licenses and notices for details about third-party software included with Nexabode.
+## AI Assistance
+
+AI tools were used during the development of Nexabode as aids for programming, debugging, documentation, and technical problem-solving.
+
+Tools used include:
+
+- **ChatGPT by OpenAI** — assistance with development discussions, code analysis, troubleshooting, documentation, and release preparation.
+- **Claude by Anthropic** — assistance with development tasks, code review, and technical problem-solving.
+
+AI-generated suggestions and outputs were evaluated and adapted as appropriate during development. The project maintainer remains responsible for the project's implementation, testing, final decisions, and maintenance.
+
+AI tools served as development assistants; they are not project maintainers or substitutes for human review.
 
 ## License
 
