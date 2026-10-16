@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kvrtrss/Nexabode/releases/latest"><img src="https://img.shields.io/github/v/release/kvrtrss/Nexabode?color=4F46E5" alt="Latest release"></a>
+  <a href="https://github.com/kvrtrss/Nexabode/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Download-Nexabode-4F46E5?style=for-the-badge" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4F46E5" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/.NET-10-512BD4" alt=".NET 10">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4" alt="Windows 10 and 11">
