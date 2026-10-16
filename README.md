@@ -186,11 +186,15 @@ Ideas and fixes are welcome. Please open an issue first for larger changes.
 
 ## Built with
 
-- C# and .NET 10, with WPF for the interface
-- [WPF-UI](https://github.com/lepoco/wpfui) for the modern look
-- [Entity Framework Core](https://learn.microsoft.com/ef/core/) with SQLite
-- [SQLite3 Multiple Ciphers](https://github.com/utelle/SQLite3MultipleCiphers-NuGet) for database encryption
-- [BCrypt.Net-Next](https://github.com/BcryptNet/bcrypt.net) for password hashing
+- **C# and .NET 10** — application logic and runtime
+- **WPF** — desktop user interface
+- [WPF-UI](https://github.com/lepoco/wpfui) — modern WPF controls and styling
+- [Entity Framework Core](https://learn.microsoft.com/ef/core/) with SQLite — data access and database management
+- [SQLite3 Multiple Ciphers](https://github.com/utelle/SQLite3MultipleCiphers-NuGet) — database encryption
+- [BCrypt.Net-Next](https://github.com/BcryptNet/bcrypt.net) — password hashing
+- [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) — MVVM utilities
+
+Thanks to the authors and maintainers of these projects. Please refer to their respective repositories and package documentation for licensing information.
 
 Thanks to the authors of these projects. See each project for its own license.
 
