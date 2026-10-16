@@ -15,6 +15,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!--Title bar-->
         <ui:TitleBar Grid.Row="0" Title="Nexabode">
             <ui:TitleBar.TrailingContent>
                 <ui:Button x:Name="ThemeButton" Appearance="Transparent"
@@ -23,7 +24,8 @@
             </ui:TitleBar.TrailingContent>
         </ui:TitleBar>
 
-        <ui:NavigationView x:Name="RootNavigation" Grid.Row="1"
+        <!--Side nav bar icons = 24 for px size-->
+            <ui:NavigationView x:Name="RootNavigation" Grid.Row="1"
                            PaneDisplayMode="Left" OpenPaneLength="240"
                            IsBackButtonVisible="Collapsed">
             <ui:NavigationView.MenuItems>
@@ -33,7 +35,7 @@
                                        TargetPageType="{x:Type views:RoomsPage}" />
                 <ui:NavigationViewItem Content="Tenants" Icon="{ui:SymbolIcon People24}"
                                        TargetPageType="{x:Type views:TenantsPage}" />
-                <ui:NavigationViewItem Content="Rent Billing" Icon="{ui:SymbolIcon Calendar24}"
+                <ui:NavigationViewItem Content="Rent Billing" Icon="{ui:SymbolIcon DocumentText24}"
                        TargetPageType="{x:Type views:RentBillingPage}" />
                 <ui:NavigationViewItem Content="Billing Charges" Icon="{ui:SymbolIcon Receipt24}"
                                        TargetPageType="{x:Type views:BillingPage}" />
@@ -44,7 +46,6 @@
                 <ui:NavigationViewItem Content="Reports" Icon="{ui:SymbolIcon DataBarVertical24}"
                                        TargetPageType="{x:Type views:ReportsPage}" />
             </ui:NavigationView.MenuItems>
-            
             <ui:NavigationView.FooterMenuItems>
                 <ui:NavigationViewItem Content="Settings" Icon="{ui:SymbolIcon Settings24}"
                            TargetPageType="{x:Type views:SettingsPage}" />

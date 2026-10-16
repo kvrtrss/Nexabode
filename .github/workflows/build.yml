@@ -1,0 +1,24 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build Nexabode/Nexabode.slnx -c Release
+
+      # Runs only once a test project exists in the repository.
+      - name: Test
+        if: ${{ hashFiles('**/*.Tests.csproj') != '' }}
+        run: dotnet test Nexabode.Tests/Nexabode.Tests.csproj -c Release

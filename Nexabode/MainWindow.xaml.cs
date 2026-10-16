@@ -31,7 +31,7 @@ public partial class MainWindow : FluentWindow
 
         ThemeService.Toggle();            // saves and applies the new theme
 
-        var fresh = new MainWindow(current);   // a new window starts in the new theme
+        var fresh = new MainWindow(current);   // a new window starts in the new theme -
         fresh.Show();
         Close();
     }
