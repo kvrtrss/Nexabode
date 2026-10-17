@@ -1,5 +1,9 @@
 # Nexabode
 
+> **Academic / School Project**
+>
+> Nexabode is a school project developed to apply software development concepts to a practical boarding house management scenario. It is a Windows desktop application for organizing rooms and beds, tenant occupancy, rent, utility charges, payments, and outstanding balances.
+
 <p align="center">
   <img src="docs/banner.svg" alt="Nexabode - Boarding House Bed Occupancy and Payment Monitoring System" width="100%">
 </p>
