@@ -182,13 +182,47 @@ public static class BackupService
             throw new IOException("A safety copy of your current data could not be saved, so nothing was changed.");
         }
 
-        // 3. Swap in the restored data and its key.
+        // 3. Swap in the restored data and its key. If anything fails, put the old data back.
         SqliteConnection.ClearAllPools();
-        File.Move(temp, DatabaseKeyProvider.DbPath, overwrite: true);
-        DeleteQuietly(DatabaseKeyProvider.DbPath + "-wal");
-        DeleteQuietly(DatabaseKeyProvider.DbPath + "-shm");
-        DatabaseKeyProvider.SetKey(key);
 
+        var dbPath = DatabaseKeyProvider.DbPath;
+        var oldDb = dbPath + ".before-restore";
+        var previousKey = Convert.FromBase64String(DatabaseKeyProvider.GetOrCreateKey());
+        var movedOldDb = false;
+
+        DeleteQuietly(oldDb);   // a leftover from an earlier attempt must never be mistaken for the current data
+
+        try
+        {
+            if (File.Exists(dbPath))
+            {
+                File.Move(dbPath, oldDb, overwrite: true);
+                movedOldDb = true;
+            }
+
+            File.Move(temp, dbPath, overwrite: true);
+            DeleteQuietly(dbPath + "-wal");
+            DeleteQuietly(dbPath + "-shm");
+            DatabaseKeyProvider.SetKey(key);
+        }
+        catch (Exception)
+        {
+            try
+            {
+                if (movedOldDb) File.Move(oldDb, dbPath, overwrite: true);
+                DatabaseKeyProvider.SetKey(previousKey);
+            }
+            catch (Exception)
+            {
+                throw new IOException("The backup could not be put in place, and your previous data could not be put back automatically. " +
+                                      $"Your previous data was saved here: {safety}");
+            }
+
+            DeleteQuietly(temp);
+            throw new IOException("The backup could not be put in place, so your current data was left as it was.");
+        }
+
+        DeleteQuietly(oldDb);
         return safety;
     }
 }
