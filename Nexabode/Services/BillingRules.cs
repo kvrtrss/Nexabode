@@ -1,10 +1,19 @@
-﻿namespace Nexabode.Services;
+﻿using Nexabode.Models;
+
+namespace Nexabode.Services;
 
 public record RentCalculation(decimal Amount, string Description, bool IsPartial);
 
 // Billing rules kept free of screens and database code, so they can be tested on their own.
 public static class BillingRules
 {
+    public static List<Occupancy> OneStayPerTenant(IEnumerable<Occupancy> stays) =>
+    stays
+        .GroupBy(s => s.TenantId)
+        .Select(g => g.OrderByDescending(s => s.MoveInDate).ThenByDescending(s => s.Id).First())
+        .OrderBy(s => s.Id)
+        .ToList();
+
     // Splits a bill into equal shares that always add up to the exact total.
     // Leftover centavos go to the first share.
     public static decimal[] SplitEvenly(decimal total, int count)
