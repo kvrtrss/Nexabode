@@ -1,9 +1,5 @@
 # Nexabode
 
-> **Academic / School Project**
->
-> Nexabode is a school project developed to apply software development concepts to a practical boarding house management scenario. It is a Windows desktop application for organizing rooms and beds, tenant occupancy, rent, utility charges, payments, and outstanding balances.
-
 <p align="center">
   <img src="docs/banner.svg" alt="Nexabode - Boarding House Bed Occupancy and Payment Monitoring System" width="100%">
 </p>
@@ -27,18 +23,13 @@
 </p>
 
 ---
+## Nexabode
 
-Nexabode is a free, open-source Windows desktop application for managing a boarding house. It helps organize rooms and beds, tenant occupancy, monthly rent, utility bills, payments, and outstanding balances in one place.
+Nexabode is a free, open-source Windows desktop application developed as an **academic project** to apply software development concepts to a practical boarding house management scenario. It provides a centralized way to manage rooms and beds, tenant occupancy, monthly rent, utility charges, payments, and outstanding balances.
 
-Instead of relying entirely on notebooks and spreadsheets, you can use Nexabode to keep your occupancy and billing records organized on your computer.
+Designed to simplify everyday boarding house operations, Nexabode helps operators organize occupancy records, track tenant move-ins and move-outs, monitor bills and payments, and review unpaid balances. By bringing these tasks together in one application, it offers an alternative to managing records manually through notebooks and spreadsheets.
 
-**Nexabode is designed for local use.** Its application data is stored on your computer in an encrypted database, without requiring an online account. Review the application's security and data-handling limitations before using it with real tenant or financial information.
-
-## Why Nexabode?
-
-Managing a boarding house involves keeping track of available beds, tenant move-ins and move-outs, rent due dates, utility expenses, and payments. Handling these records manually can make it difficult to maintain consistent and accurate information.
-
-Nexabode brings these tasks together in a single desktop application, helping boarding house operators monitor occupancy, organize charges, record payments, and review outstanding balances.
+Nexabode is designed for local use, storing application data on the user's computer in an encrypted database without requiring an online account. Users should review the application's security measures and data-handling limitations before storing real tenant or financial information.
 
 ## Disclaimer
 
@@ -99,70 +90,52 @@ The application requires the default password to be changed on first sign-in. Ch
 ## Features
 
 ### Dashboard
-
-- Occupancy rate and occupied bed counts.
-- Monthly collections compared with the previous month.
-- Outstanding balance overview.
+- Overview of occupancy, monthly collections, and outstanding balances.
 - Calendar for rent due dates, payments, utility bills, and tenant move-ins and move-outs.
 - Recent activity and quick actions.
 
-### Rooms and beds
+### Rooms and Beds
+- Manage rooms and beds with search, filters, and visual status indicators.
+- Track available, occupied, reserved, maintenance, and inactive beds.
+- Deactivate rooms and beds while preserving historical records.
 
-- Room cards with colored bed indicators, filters, and search.
-- Bed statuses: Available, Occupied, Reserved, Maintenance, and Inactive.
-- Add and edit rooms and beds.
-- Deactivate rooms and beds instead of deleting them, preserving historical records.
+### Tenant Management
+- Search and manage tenant records, occupancy status, and balances.
+- Record move-ins and move-outs and review tenant stay history.
+- Flag potentially duplicate tenant names.
 
-### Tenant management
+### Billing and Payments
+- Generate monthly rent charges, with optional prorated rent calculations.
+- Record electricity, water, and other utility bills and split eligible expenses among tenants.
+- Review, correct, or void billing charges while retaining historical records.
+- Record payments and allocate them to outstanding charges using different allocation methods.
+- Search payment history, edit payment details, and void payments with a reason.
 
-- Searchable tenant list with status, current bed, move-in date, and balance.
-- Edit tenant details and record move-ins and move-outs.
-- View tenant stay history.
-- Flag duplicate tenant names.
-
-### Billing
-
-- **Rent Billing:** Review monthly billing status and generate rent charges in one operation.
-- **Prorated rent:** Optional day-based rent calculation for applicable stays.
-- **Multiple stays:** Calculate rent by stay duration when a tenant has more than one stay during a month.
-- **Utility Bills:** Enter electricity, water, and other utility expenses for the whole house or a room, then split eligible bills equally among tenants staying there.
-- **Billing Charges:** Review charges by tenant, date, payment details, or category, including Rent, Electricity, and Water.
-- **Charge corrections:** Edit charges, void them with a reason, and undo utility splits. Voided items remain visible and are excluded from totals.
-
-### Payments
-
-- Record payments and choose how they are allocated: oldest charges first, rent only, electricity only, water only, or a specific charge.
-- Review payment history and search for records.
-- Edit payment details or void a payment with a reason.
-- Block overpayments and future-dated payments.
-
-### Reports and printing
-
-- Tenant billing statements covering all time or a selected month.
-- Occupancy reports and collection reports.
-- Print reports or save them as PDFs through the Windows print dialog.
+### Reports and Printing
+- Generate tenant billing statements, occupancy reports, and collection reports.
+- Print reports or save them as PDFs using the Windows print dialog.
 - Include the boarding house name and address in report headers.
 
-### Security and data protection
-
-- Encrypted SQLite database using the SQLCipher 4 file format.
-- Sign-in passwords hashed using BCrypt.
-- Required change of the default password on first sign-in.
+### Security and Data Protection
+- Locally stored, encrypted SQLite database using the SQLCipher 4 file format.
+- Password hashing using BCrypt and a required password change on first sign-in.
 - Password-protected database backup and restore.
-- Database rules designed to prevent duplicate rent charges and utility splits.
-- A guard intended to prevent multiple instances of the application from running simultaneously.
+- Database safeguards against duplicate rent charges and utility splits.
+- Protection intended to prevent multiple application instances from running simultaneously.
+
+### Customization
 - Light and dark themes.
 
 These features provide safeguards, but they should not be interpreted as a guarantee that the application is immune to unauthorized access, data loss, or other security issues.
 
 ## How It Works
 
-1. **Set up rooms and beds.** Create your rooms and assign a monthly rent to each bed.
-2. **Register tenants.** Add tenant records and move tenants into available beds.
-3. **Generate rent charges.** Open Rent Billing and generate the charges for the applicable month.
-4. **Enter utility bills.** Record electricity, water, and other applicable expenses, then split them among eligible tenants.
-5. **Record payments.** Enter payments as they arrive and select the charges they should cover.
-6. **Review records.** Use the Dashboard and Billing Charges pages to monitor collections and outstanding balances. Print reports when needed.
+1. **Set up rooms and beds.** Create rooms, add beds, and assign monthly rent rates.
+2. **Register tenants.** Add tenant records and assign tenants to available beds.
+3. **Generate rent charges.** Generate monthly rent charges for the applicable billing period.
+4. **Manage utility bills.** Record electricity, water, and other applicable expenses, then split eligible bills among tenants.
+5. **Record payments.** Enter payments and allocate them to the appropriate outstanding charges.
+6. **Monitor and review.** Use the Dashboard, Billing Charges, and Reports sections to track collections, review outstanding balances, and print reports.
 
 ## Data Storage and Backups
 
@@ -220,20 +193,6 @@ Test the restored database and verify important records before relying on it. Ke
 - Keep backups separate from the computer and protect them with a strong backup password.
 - Do not commit databases, encryption keys, backups, real tenant information, or credentials to the repository.
 - Review the [security policy](SECURITY.md) for information about reporting potential vulnerabilities.
-
-## Known Limitations and Future Ideas
-
-Nexabode is an independently maintained project. Features, compatibility, and security behavior may change between releases.
-
-Ideas for future development include:
-
-- One-off charges.
-- Advance payments.
-- Automatic locking after inactivity.
-- Global search.
-- An audit log.
-
-These are possible future improvements, not promises of implementation. Suggestions are welcome through [GitHub Issues](https://github.com/kvrtrss/Nexabode/issues).
 
 ## Build from Source
 
@@ -316,6 +275,7 @@ Accessibility feedback is also welcome. See [ACCESSIBILITY.md](ACCESSIBILITY.md)
 - [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) — MVVM utilities.
 
 These projects are maintained by their respective authors and communities. Refer to the applicable package licenses and notices for details about third-party software included with Nexabode.
+
 ## AI Assistance
 
 AI tools were used during the development of Nexabode as aids for programming, debugging, documentation, and technical problem-solving.
