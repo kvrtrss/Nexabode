@@ -356,8 +356,9 @@ public partial class RoomsPage : Page
             {
                 var name = v[0].Trim();
                 if (name == "") return "Please enter a room name.";
+                var lower = name.ToLower();
                 using var check = new AppDbContext();
-                return check.Rooms.Any(r => r.RoomName == name) ? "A room with that name already exists." : null;
+                return check.Rooms.Any(r => r.RoomName.ToLower() == lower) ? "A room with that name already exists." : null;
             });
         if (values == null) return;
 
@@ -380,9 +381,10 @@ public partial class RoomsPage : Page
             {
                 var name = v[0].Trim();
                 if (name == "") return "Please enter a room name.";
+                var lower = name.ToLower();
                 using var check = new AppDbContext();
-                return check.Rooms.Any(r => r.RoomName == name && r.Id != room.Id)
-                    ? "Another room already has that name." : null;
+                return check.Rooms.Any(r => r.RoomName.ToLower() == lower && r.Id != room.Id)
+                                    ? "Another room already has that name." : null;
             });
         if (values == null) return;
 

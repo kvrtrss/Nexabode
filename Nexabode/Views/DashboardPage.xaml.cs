@@ -64,8 +64,13 @@ public partial class DashboardPage : Page
         var vacant = Math.Max(0, totalBeds - occupied);
         var rate = totalBeds == 0 ? 0 : occupied * 100.0 / totalBeds;
 
-        OccupancyCard.Value = $"{rate:0}%";
-        OccupancyCard.Caption = totalBeds == 0 ? "Add rooms and beds to begin" : "of active beds";
+        // Never show 100% while a bed is still vacant.
+        var shownRate = occupied >= totalBeds
+            ? rate
+            : Math.Min(99, Math.Round(rate, MidpointRounding.AwayFromZero));
+
+        OccupancyCard.Value = $"{shownRate:0}%";
+        OccupancyCard.Caption = totalBeds == 0 ? "Add rooms and beds to begin" : "of active beds, incl. reserved";
         OccupancyCard.Tone = "Info";
 
         BedsCard.Value = $"{occupied} / {totalBeds}";

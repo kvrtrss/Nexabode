@@ -78,7 +78,7 @@
                             <ui:TextBox x:Name="SearchBox" Width="240" Margin="0,0,12,0"
                                         PlaceholderText="Search tenant, method, or reference"
                                         TextChanged="SearchBox_TextChanged" />
-                            <CheckBox x:Name="ShowVoidedCheck" Content="Show voided" IsChecked="True"
+                            <CheckBox x:Name="ShowVoidedCheck" Content="Show voided"
                                       VerticalAlignment="Center" Margin="0,0,16,0"
                                       Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
                             <ui:Button x:Name="EditButton" Content="Edit payment" Click="EditPayment_Click"

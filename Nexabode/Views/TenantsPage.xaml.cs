@@ -17,6 +17,7 @@ public partial class TenantsPage : Page
         public DateOnly MoveIn { get; set; }
         public DateOnly? MoveOut { get; set; }
         public decimal Rent { get; set; }
+        public decimal Deposit { get; set; }
     }
 
     public class TenantRow
@@ -141,7 +142,8 @@ public partial class TenantsPage : Page
                     Bed = BedName(o),
                     MoveIn = o.MoveInDate,
                     MoveOut = o.MoveOutDate,
-                    Rent = o.AgreedRent
+                    Rent = o.AgreedRent,
+                    Deposit = o.Deposit
                 }).ToList()
             };
         }).ToList();
@@ -176,8 +178,14 @@ public partial class TenantsPage : Page
     {
         var filter = (FilterCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "All tenants";
         var query = SearchBox.Text.Trim();
+        var showArchived = ShowArchivedCheck.IsChecked == true;
 
         var rows = _all
+            .Where(r => filter != "All tenants"      // a specific filter always shows what it names
+                     || showArchived
+                     || query != ""                  // searching looks through everyone
+                     || r.Id == _selectedId          // keep the tenant you are working on in view
+                     || !IsArchived(r))
             .Where(r => filter switch
             {
                 "Staying" => r.Status == "Staying",
@@ -202,6 +210,14 @@ public partial class TenantsPage : Page
     }
 
     private void FilterCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_ready) ApplyFilter();
+    }
+
+    // A moved-out tenant with nothing owed is "archived": hidden from the default list, never deleted.
+    private static bool IsArchived(TenantRow r) => r.Status == "Moved out" && r.Balance <= 0;
+
+    private void ShowArchived_Changed(object sender, RoutedEventArgs e)
     {
         if (_ready) ApplyFilter();
     }
@@ -263,9 +279,11 @@ public partial class TenantsPage : Page
                 FontWeight = FontWeights.SemiBold,
                 Foreground = Res("AppTextBrush")
             });
+            var details = $"{Fmt.Date(stay.MoveIn)} to {(stay.MoveOut is DateOnly mo ? Fmt.Date(mo) : "present")}  -  {Fmt.Peso(stay.Rent)} / month";
+            if (stay.Deposit > 0) details += $"  -  Deposit {Fmt.Peso(stay.Deposit)}";
             box.Children.Add(new TextBlock
             {
-                Text = $"{Fmt.Date(stay.MoveIn)} to {(stay.MoveOut is DateOnly mo ? Fmt.Date(mo) : "present")}  -  {Fmt.Peso(stay.Rent)} / month",
+                Text = details,
                 Style = (Style)FindResource("MutedText")
             });
             HistoryPanel.Children.Add(box);

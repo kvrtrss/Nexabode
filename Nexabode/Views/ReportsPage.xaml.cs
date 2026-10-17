@@ -462,7 +462,7 @@ public partial class ReportsPage : Page
         AddHeader(doc, "Occupancy Report", $"As of {D(today)}");
 
         doc.Blocks.Add(P($"Beds in use: {usable}     Occupied: {occupied}     Reserved: {reserved}     " +
-                         $"Available: {available}     Occupancy rate: {rate:0.#}%", 12, bold: true, bottom: 8));
+                         $"Available: {available}     Occupancy rate (incl. reserved): {rate:0.#}%", 12, bold: true, bottom: 8));
 
         if (rows.Count == 0)
             doc.Blocks.Add(P("No beds have been added yet."));
