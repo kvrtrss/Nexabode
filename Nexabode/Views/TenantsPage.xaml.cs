@@ -384,6 +384,17 @@ public partial class TenantsPage : Page
                 return "That bed was just taken. Please choose another.";
             if (lastOut != null && r.Date < lastOut)
                 return $"The move-in date can't be before this tenant's previous move-out ({Fmt.Date(lastOut.Value)}).";
+            // The bed's earlier occupants must be gone before the new stay starts.
+            var bedOuts = check.Occupancies
+                .Where(o => o.BedId == r.BedId && o.MoveOutDate != null)
+                .Select(o => o.MoveOutDate)
+                .ToList();
+            if (bedOuts.Count > 0)
+            {
+                var bedLastOut = bedOuts.Max()!.Value;
+                if (r.Date < bedLastOut)
+                    return $"That bed was occupied until {Fmt.Date(bedLastOut)}. The move-in date can't be before that.";
+            }
             return null;
         });
         if (result == null) return;
