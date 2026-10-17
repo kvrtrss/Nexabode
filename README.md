@@ -56,11 +56,14 @@ Windows may display a message such as **"Windows protected your PC"** when openi
 
 Do not bypass a security warning automatically. First, verify that the ZIP came from the official [Nexabode GitHub Releases page](https://github.com/kvrtrss/Nexabode/releases) and, where provided, compare its SHA-256 checksum with the value published in the release notes.
 
-For the `v1.0.0` release, after downloading the ZIP, run PowerShell in the folder containing the downloaded file:
+After downloading the ZIP file (e.g., the v1.0.0 release), open PowerShell in the folder containing the downloaded file.
 
 ```powershell
-Get-FileHash .\Nexabode-v1.0.0-win-x64.zip -Algorithm SHA256
+> `Get-FileHash .\Nexabode-x.y.z-win-x64.zip -Algorithm SHA256`
 ```
+
+Example: If you downloaded Nexabode-1.0.1-win-x64.zip, run:
+> Get-FileHash .\Nexabode-1.0.1-win-x64.zip -Algorithm SHA256
 
 Compare the resulting hash with the SHA-256 value published for that exact release asset. A matching hash verifies that the file matches the published checksum; it does not independently prove that the software is free from vulnerabilities.
 
