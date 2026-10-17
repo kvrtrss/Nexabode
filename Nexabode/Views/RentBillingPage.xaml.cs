@@ -55,7 +55,7 @@ public partial class RentBillingPage : Page
         LoadList();
     }
 
-    private void Prorate_Changed(object sender, RoutedEventArgs e)
+    private void FullRent_Changed(object sender, RoutedEventArgs e)
     {
         if (_ready) LoadList();
     }
@@ -67,7 +67,7 @@ public partial class RentBillingPage : Page
 
     // ---------- The list: what rent exists and what is still to be generated ----------
 
-    private static List<RentRow> BuildRows(AppDbContext db, DateOnly start, bool prorate)
+    private static List<RentRow> BuildRows(AppDbContext db, DateOnly start, bool fullRentForPartial)
     {
         var end = start.AddMonths(1).AddDays(-1);
         var key = BillingHelpers.MonthKey(start);
@@ -117,7 +117,9 @@ public partial class RentBillingPage : Page
                 continue;
             }
 
-            var byDays = prorate || multiStayTenants.Contains(stay.TenantId);
+            // Partial months are billed by days unless the user chose full rent. A tenant with more
+            // than one stay in the month is always billed by days, so they never pay full rent twice.
+            var byDays = !fullRentForPartial || multiStayTenants.Contains(stay.TenantId);
             var handover = stay.MoveOutDate is DateOnly outDay &&
                 stays.Any(s => s.TenantId == stay.TenantId && s.Id != stay.Id && s.MoveInDate == outDay);
 
@@ -145,7 +147,7 @@ public partial class RentBillingPage : Page
         var today = DateOnly.FromDateTime(DateTime.Today);
 
         using var db = new AppDbContext();
-        _rows = BuildRows(db, start, ProrateCheck.IsChecked == true);
+        _rows = BuildRows(db, start, FullRentCheck.IsChecked == true);
         RentGrid.ItemsSource = _rows;
 
         var live = _rows.Where(r => !r.IsVoided).ToList();
