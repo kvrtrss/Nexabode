@@ -241,6 +241,7 @@ public partial class TenantsPage : Page
 
         MoveInButton.IsEnabled = t.Status is "Moved out" or "No stay yet";
         MoveOutButton.IsEnabled = t.Status is "Staying" or "Reserved";
+        MoveOutButton.Content = t.Status == "Reserved" ? "Cancel reservation" : "Move out";
 
         HistoryPanel.Children.Clear();
         if (t.Stays.Count == 0)
@@ -406,6 +407,12 @@ public partial class TenantsPage : Page
         if (t?.OccupancyId == null || t.ActiveMoveIn == null) return;
 
         var today = DateOnly.FromDateTime(DateTime.Today);
+        // A reservation has not started yet, so cancelling it removes it instead of ending a stay.
+        if (t.ActiveMoveIn.Value > today)
+        {
+            CancelReservation(t);
+            return;
+        }
         var min = t.ActiveMoveIn.Value;
         var max = today > min ? today : min;   // a reserved stay can only be cancelled on its move-in date
 
@@ -423,4 +430,40 @@ public partial class TenantsPage : Page
 
         Reload(t.Id);
     }
-}
+
+        private void CancelReservation(TenantRow t)
+    {
+        using var db = new AppDbContext();
+        var occupancy = db.Occupancies.Find(t.OccupancyId!.Value)!;
+
+        var message = $"Cancel the reservation of {t.FullName}?\n\n" +
+                      $"They were due to move in on {Fmt.Date(occupancy.MoveInDate)}. " +
+                      "The reservation will be removed and will not be billed.";
+
+        if (occupancy.Deposit > 0)
+            message += $"\n\nA deposit of {Fmt.Peso(occupancy.Deposit)} was recorded for this stay. " +
+                       "Nexabode will not keep that record, so settle the deposit separately.";
+
+        var confirm = MessageBox.Show(message, "Cancel reservation",
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        // Billing records (even voided ones) point at the stay, so it can't be removed.
+        var hasBilling = db.Charges.IgnoreQueryFilters().Any(c => c.OccupancyId == occupancy.Id);
+
+        if (hasBilling)
+        {
+            occupancy.MoveOutDate = occupancy.MoveInDate;
+            db.SaveChanges();
+            Tell("This reservation already has billing records, so it was kept and ended on its move-in date. " +
+                 "Void its charges in Billing Charges so the tenant is not billed.");
+        }
+        else
+        {
+            db.Occupancies.Remove(occupancy);
+            db.SaveChanges();
+        }
+
+        Reload(t.Id);
+    }
+}   
