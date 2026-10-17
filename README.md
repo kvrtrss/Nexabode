@@ -59,11 +59,14 @@ Do not bypass a security warning automatically. First, verify that the ZIP came 
 After downloading the ZIP file, open PowerShell in the folder containing the downloaded file.
 
 ```powershell
-> `Get-FileHash .\Nexabode-x.y.z-win-x64.zip -Algorithm SHA256`
+Get-FileHash .\Nexabode-x.y.z-win-x64.zip -Algorithm SHA256
 ```
 
-> Example: If you downloaded Nexabode-1.0.0-win-x64.zip, run:
-> Get-FileHash .\Nexabode-1.0.0-win-x64.zip -Algorithm SHA256
+**Example:** If you downloaded `Nexabode-1.0.0-win-x64.zip`, run:
+
+```powershell
+Get-FileHash .\Nexabode-1.0.0-win-x64.zip -Algorithm SHA256
+```
 
 Compare the resulting hash with the SHA-256 value published for that exact release asset. A matching hash verifies that the file matches the published checksum; it does not independently prove that the software is free from vulnerabilities.
 
