@@ -191,7 +191,18 @@ public partial class BillingPage : Page
         BilledCard.Caption = $"{live.Count} charge(s)";
 
         PaidCard.Value = Fmt.Peso(paidTotal);
-        PaidCard.Caption = billed == 0 ? "Nothing billed yet" : $"{paidTotal * 100 / billed:0}% collected";
+        if (billed == 0)
+        {
+            PaidCard.Caption = "Nothing billed yet";
+        }
+        else
+        {
+            // Never show 100% until everything billed has actually been collected.
+            var percent = paidTotal >= billed
+                ? 100m
+                : Math.Min(99m, Math.Round(paidTotal * 100 / billed, MidpointRounding.AwayFromZero));
+            PaidCard.Caption = $"{percent:0}% collected";
+        }
         PaidCard.Tone = "Success";
 
         BalanceCard.Value = Fmt.Peso(billed - paidTotal);

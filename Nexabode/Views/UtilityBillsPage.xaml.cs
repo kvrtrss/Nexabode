@@ -202,7 +202,7 @@ public partial class UtilityBillsPage : Page
         }
         catch (DbUpdateException)
         {
-            Tell("That bill was just added from another window, so nothing was saved.");
+            Tell("This bill could not be saved, so nothing was saved. A bill for the same month, utility and room may already exist.");
             LoadBills();
             return;
         }
@@ -338,7 +338,7 @@ public partial class UtilityBillsPage : Page
         }
         catch (DbUpdateException)
         {
-            Tell("This bill was just split from another window, so nothing was saved.");
+            Tell("This bill could not be split, so nothing was saved. Its shares may already exist.");
         }
 
         LoadBills();

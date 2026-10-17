@@ -60,6 +60,11 @@ public partial class RentBillingPage : Page
         if (_ready) LoadList();
     }
 
+    private void ShowVoided_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_ready) LoadList();
+    }
+
     private void RentGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateButtons();
 
     private void UpdateButtons() =>
@@ -148,7 +153,8 @@ public partial class RentBillingPage : Page
 
         using var db = new AppDbContext();
         _rows = BuildRows(db, start, FullRentCheck.IsChecked == true);
-        RentGrid.ItemsSource = _rows;
+        var showVoided = ShowVoidedCheck.IsChecked == true;
+        RentGrid.ItemsSource = showVoided ? _rows : _rows.Where(r => !r.IsVoided).ToList();
 
         var live = _rows.Where(r => !r.IsVoided).ToList();
         var generated = live.Where(r => r.Generated).ToList();
@@ -254,7 +260,7 @@ public partial class RentBillingPage : Page
             }
             catch (DbUpdateException)
             {
-                Tell("Some of these rent charges were just created from another window, so nothing was saved.\n\n" +
+                Tell("The rent charges could not be saved, so nothing was saved. Some of them may already exist for this month.\n\n" +
                      "The list has been refreshed.");
                 LoadList();
                 return;

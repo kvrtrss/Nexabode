@@ -35,6 +35,10 @@
                     <ComboBoxItem Content="No stay yet" />
                     <ComboBoxItem Content="Has balance" />
                 </ComboBox>
+                <CheckBox x:Name="ShowArchivedCheck" Content="Show moved-out tenants" Margin="0,0,12,0"
+                          VerticalAlignment="Center"
+                          ToolTip="Moved-out tenants who still owe money are always shown."
+                          Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
                 <ui:TextBox x:Name="SearchBox" Width="280"
                             PlaceholderText="Search by name, contact, or bed"
                             TextChanged="SearchBox_TextChanged" />

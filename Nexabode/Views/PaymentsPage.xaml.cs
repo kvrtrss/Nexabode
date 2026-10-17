@@ -281,7 +281,7 @@ public partial class PaymentsPage : Page
             new[] { ("Reason for voiding", "") },
             vals => vals[0].Trim() == "" ? "Please enter a reason." : null,
             note: $"This cancels the payment of {Fmt.Peso(row.Amount)} from {row.DateText}. The charges it paid become unpaid again, " +
-                  "and the payment stays in the history marked Voided. This can't be undone.");
+                  "and the payment stays in the history marked Voided (tick Show voided to see it). This can't be undone.");
         if (v == null) return;
 
         using var db = new AppDbContext();

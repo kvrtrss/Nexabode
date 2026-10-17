@@ -28,6 +28,7 @@ public partial class SettingsPage : Page
 
         AccountText.Text = $"Signed in as {_username}. Use a password only you know.";
         DataPathText.Text = DatabaseKeyProvider.AppFolder;
+        VersionText.Text = $"Version {typeof(SettingsPage).Assembly.GetName().Version?.ToString(3)}";
         ShowLastBackup();
         RulesText.Text = $"Data safety rules active: {DbInitializer.CountActiveSafetyRules(db)} of {DbInitializer.SafetyRuleCount}";
     }

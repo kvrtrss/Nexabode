@@ -37,6 +37,8 @@
             <CheckBox x:Name="FullRentCheck" Content="Charge full rent for partial months" Margin="0,0,20,0"
           ToolTip="By default, a stay that doesn't cover the whole month is billed by days. Tick this to bill the full monthly rent instead."
           Checked="FullRent_Changed" Unchecked="FullRent_Changed" />
+            <CheckBox x:Name="ShowVoidedCheck" Content="Show voided" Margin="0,0,20,0"
+                      Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
             <ui:Button x:Name="GenerateSelectedButton" Content="Generate for selected tenant"
                        IsEnabled="False" Click="GenerateSelected_Click" />
         </StackPanel>

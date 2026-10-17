@@ -44,7 +44,8 @@ public static class BillingRules
         var from = moveIn > monthStart ? moveIn : monthStart;
         var to = moveOut is DateOnly mo && mo < monthEnd ? mo : monthEnd;
 
-        if (movedStraightIntoAnotherBed && moveOut != null)
+        // On a handover day the new stay takes over, so this stay ends one day earlier.
+        if (movedStraightIntoAnotherBed && moveOut is DateOnly handoverDay && handoverDay <= monthEnd)
             to = to.AddDays(-1);
 
         var days = to.DayNumber - from.DayNumber + 1;
