@@ -37,10 +37,10 @@
                                        TargetPageType="{x:Type views:TenantsPage}" />
                 <ui:NavigationViewItem Content="Rent Billing" Icon="{ui:SymbolIcon DocumentText24}"
                        TargetPageType="{x:Type views:RentBillingPage}" />
-                <ui:NavigationViewItem Content="Billing Charges" Icon="{ui:SymbolIcon Receipt24}"
-                                       TargetPageType="{x:Type views:BillingPage}" />
                 <ui:NavigationViewItem Content="Utility Bills" Icon="{ui:SymbolIcon Flash24}"
                                        TargetPageType="{x:Type views:UtilityBillsPage}" />
+                <ui:NavigationViewItem Content="Billing Charges" Icon="{ui:SymbolIcon Receipt24}"
+                                       TargetPageType="{x:Type views:BillingPage}" />
                 <ui:NavigationViewItem Content="Payments" Icon="{ui:SymbolIcon Money24}"
                                        TargetPageType="{x:Type views:PaymentsPage}" />
                 <ui:NavigationViewItem Content="Reports" Icon="{ui:SymbolIcon DataBarVertical24}"
