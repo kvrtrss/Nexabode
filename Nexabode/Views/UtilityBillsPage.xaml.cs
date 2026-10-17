@@ -294,13 +294,15 @@ public partial class UtilityBillsPage : Page
         using var db = new AppDbContext();
         var bill = db.UtilityBills.Find(row.Id)!;
 
-        var stays = db.Occupancies
+        var staysInScope = db.Occupancies
             .Include(o => o.Bed)
             .Where(o => o.MoveInDate <= end && (o.MoveOutDate == null || o.MoveOutDate >= start))
             .ToList()
             .Where(o => bill.RoomId == null || o.Bed.RoomId == bill.RoomId)
-            .OrderBy(o => o.Id)
             .ToList();
+
+        // One share per tenant: a tenant with two stays in scope (a bed change) is not charged twice.
+        var stays = BillingRules.OneStayPerTenant(staysInScope);
 
         if (stays.Count == 0)
         {
