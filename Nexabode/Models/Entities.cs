@@ -54,6 +54,9 @@ public class Occupancy
     public DateOnly? MoveOutDate { get; set; }   // ?null = still staying
     public decimal AgreedRent { get; set; }
     public decimal Deposit { get; set; }
+    public decimal DepositRefunded { get; set; }
+    public DateOnly? DepositRefundedOn { get; set; }
+    public string? DepositRefundNote { get; set; }
     public List<Charge> Charges { get; set; } = new();
 }
 
@@ -101,6 +104,7 @@ public class Payment
     public string? VoidReason { get; set; }
     public DateOnly? VoidedOn { get; set; }
     public List<PaymentAllocation> Allocations { get; set; } = new();
+    public string? Source { get; set; }   // "Deposit" for a payment made from a tenant's deposit
 }
 
 public class PaymentAllocation

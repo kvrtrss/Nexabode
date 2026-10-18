@@ -396,7 +396,26 @@ public partial class ReportsPage : Page
             doc.Blocks.Add(P($"Total balance due, all months, as of today:   {Money(totalDue)}", 12, bold: true, bottom: 10));
         }
 
+        if (monthStart != null)
+        {
+            var totalDue = allCharges.Sum(c => c.Amount - c.Allocations.Sum(a => a.AmountApplied));
+            doc.Blocks.Add(P($"Total balance due, all months, as of today:   {Money(totalDue)}", 12, bold: true, bottom: 10));
+        }
+
+        // Deposit across all of this tenant's stays.
+        var deposit = DepositService.Summary(db, tenantId);
+        if (deposit.Paid > 0)
+        {
+            doc.Blocks.Add(P("Deposit", 14, bold: true, bottom: 2));
+            doc.Blocks.Add(P($"Deposit paid:   {Money(deposit.Paid)}", bottom: 0));
+            if (deposit.Applied > 0)
+                doc.Blocks.Add(P($"Used for unpaid charges:   {Money(deposit.Applied)}", bottom: 0));
+            doc.Blocks.Add(P($"Refunded:   {Money(deposit.Refunded)}", bottom: 0));
+            doc.Blocks.Add(P($"DEPOSIT HELD:   {Money(deposit.Held)}", 12, bold: true, bottom: 10));
+        }
+
         return doc;
+
     }
 
     // ---------- 2. Occupancy report ----------
