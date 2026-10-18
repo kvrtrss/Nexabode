@@ -53,3 +53,13 @@ All notable changes to this project are listed here.
 - A payment larger than the tenant's balance is refused with a clearer message
 - Switching theme keeps the window's size, position and state
 - The database gets seven new columns on first start (automatic). Back up before upgrading
+
+## [1.1.1] Summary
+
+- Update the application version from 1.1.0 to 1.1.1.
+- Prepare the project for the v1.1.1 Windows x64 release.
+
+## Release packaging
+
+- Prepare a refreshed Windows x64 release package.
+- Publish the release ZIP separately through GitHub Releases after the source change is merged.
