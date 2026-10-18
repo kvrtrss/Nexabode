@@ -57,6 +57,9 @@ public static class DbInitializer
         AddColumnIfMissing(db, "Occupancies", "DepositRefundedOn", "TEXT NULL");
         AddColumnIfMissing(db, "Occupancies", "DepositRefundNote", "TEXT NULL");
         AddColumnIfMissing(db, "Payments", "Source", "TEXT NULL");
+        AddColumnIfMissing(db, "Charges", "IsArchived", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "Payments", "IsArchived", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "UtilityBills", "IsArchived", "INTEGER NOT NULL DEFAULT 0");
     }
 
     // Rules the database itself enforces, so even two writers at once can't create duplicates.

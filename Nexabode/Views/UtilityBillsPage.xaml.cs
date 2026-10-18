@@ -25,10 +25,13 @@ public partial class UtilityBillsPage : Page
         public DateOnly? Due { get; set; }
         public string DueText => Due?.ToString("MMM d, yyyy") ?? "-";
         public bool IsSplit { get; set; }
-        public string StatusText => IsSplit ? "Split" : "Draft";
+        public bool IsArchived { get; set; }
+        public bool Settled { get; set; }   // split, and every share is fully paid
+        public string StatusText => IsArchived && Settled ? "Archived" : IsSplit ? "Split" : "Draft";
     }
 
-    private bool _ready;
+    private bool _ready; 
+    private List<BillRow> _bills = new();
 
     public UtilityBillsPage()
     {
@@ -51,7 +54,11 @@ public partial class UtilityBillsPage : Page
 
     private DateOnly? SelectedMonth => (MonthCombo.SelectedItem as MonthOption)?.Start;
 
-    private BillRow? Selected => BillGrid.SelectedItem as BillRow;
+    private BillRow? Selected =>
+    BillGrid.SelectedItems.Count == 1 ? BillGrid.SelectedItem as BillRow : null;
+
+    private List<BillRow> SelectedBills =>
+        BillGrid.SelectedItems.OfType<BillRow>().ToList();
 
     private void Setup()
     {
@@ -80,6 +87,65 @@ public partial class UtilityBillsPage : Page
 
     private void BillGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateButtons();
 
+    private void ShowArchived_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_ready) return;
+
+        var keep = SelectedMonth;
+        var months = ShowArchivedCheck.IsChecked == true
+            ? BillingHelpers.BuildMonthsWithData()
+            : BillingHelpers.BuildMonths();
+
+        MonthCombo.ItemsSource = months;
+        MonthCombo.SelectedItem = months.FirstOrDefault(m => m.Start == keep)
+                                  ?? months.First(m => m.Start == BillingHelpers.CurrentMonthStart());
+    }
+
+    private void Archive_Click(object sender, RoutedEventArgs e) => SetArchived(true);
+
+    private void Unarchive_Click(object sender, RoutedEventArgs e) => SetArchived(false);
+
+    private void SetArchived(bool archived)
+    {
+        var ids = SelectedBills
+            .Where(r => r.IsArchived != archived && (!archived || r.Settled))
+            .Select(r => r.Id)
+            .ToList();
+        ArchiveBills(ids, archived);
+    }
+
+    private void ArchiveSettled_Click(object sender, RoutedEventArgs e)
+    {
+        var ids = _bills.Where(r => !r.IsArchived && r.Settled).Select(r => r.Id).ToList();
+        if (ids.Count == 0)
+        {
+            Tell("There are no fully paid bills left to archive in this month.");
+            return;
+        }
+
+        var month = (MonthCombo.SelectedItem as MonthOption)?.Display;
+        var answer = MessageBox.Show(
+            $"Archive {ids.Count} fully paid bill(s) for {month}?\n\n" +
+            "They are only hidden from this list. Totals, reports and statements are not affected. " +
+            "The bills' charges stay in Billing Charges until you archive them there.",
+            "Archive settled bills", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes) return;
+
+        ArchiveBills(ids, true);
+    }
+
+    private void ArchiveBills(List<int> ids, bool archived)
+    {
+        if (ids.Count == 0) return;
+
+        using var db = new AppDbContext();
+        foreach (var bill in db.UtilityBills.Where(b => ids.Contains(b.Id)).ToList())
+            bill.IsArchived = archived;
+        db.SaveChanges();
+
+        LoadBills();
+    }
+
     private void UpdateButtons()
     {
         var row = Selected;
@@ -87,6 +153,9 @@ public partial class UtilityBillsPage : Page
         UndoButton.IsEnabled = row is { IsSplit: true };
         EditButton.IsEnabled = row is { IsSplit: false };
         DeleteButton.IsEnabled = row is { IsSplit: false };
+        var rows = SelectedBills;
+        ArchiveButton.IsEnabled = rows.Any(r => !r.IsArchived && r.Settled);
+        UnarchiveButton.IsEnabled = rows.Any(r => r.IsArchived);
     }
 
     // ---------- Loading ----------
@@ -110,17 +179,37 @@ public partial class UtilityBillsPage : Page
             .Where(b => b.BillingMonth == key)
             .ToList();
 
-        BillGrid.ItemsSource = bills
+        // A bill is settled when it is split and none of its shares still has a balance.
+        var unpaidBillIds = db.Charges
+            .Include(c => c.Allocations)
+            .Where(c => c.UtilityBillId != null)
+            .ToList()
+            .Where(c => c.Amount - c.Allocations.Sum(a => a.AmountApplied) > 0)
+            .Select(c => c.UtilityBillId!.Value)
+            .ToHashSet();
+
+        _bills = bills
             .OrderBy(b => b.UtilityType)
-            .Select(b => new BillRow
+            .Select(b =>
             {
-                Id = b.Id,
-                UtilityType = b.UtilityType,
-                Scope = b.Room?.RoomName ?? "Whole house",
-                Total = b.TotalAmount,
-                Due = b.DueDate,
-                IsSplit = splitIds.Contains(b.Id)
+                var split = splitIds.Contains(b.Id);
+                return new BillRow
+                {
+                    Id = b.Id,
+                    UtilityType = b.UtilityType,
+                    Scope = b.Room?.RoomName ?? "Whole house",
+                    Total = b.TotalAmount,
+                    Due = b.DueDate,
+                    IsSplit = split,
+                    IsArchived = b.IsArchived,
+                    Settled = split && !unpaidBillIds.Contains(b.Id)
+                };
             })
+            .ToList();
+
+        var showArchived = ShowArchivedCheck.IsChecked == true;
+        BillGrid.ItemsSource = _bills
+            .Where(r => showArchived || !(r.IsArchived && r.Settled))
             .ToList();
 
         bool Is(UtilityBill b, string name) => b.UtilityType.Trim().Equals(name, StringComparison.OrdinalIgnoreCase);

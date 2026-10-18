@@ -1,5 +1,7 @@
 ﻿using System.Globalization;
 using Nexabode.Models;
+using Microsoft.EntityFrameworkCore;
+using Nexabode.Data;
 
 namespace Nexabode.Services;
 
@@ -22,6 +24,24 @@ public static class BillingHelpers
             .Select(i => new MonthOption { Start = thisMonth.AddMonths(i) })
             .Reverse()
             .ToList();
+    }
+
+    // The usual window plus every month that has billing records (used when archived records are shown).
+    public static List<MonthOption> BuildMonthsWithData()
+    {
+        using var db = new AppDbContext();
+
+        var keys = db.Charges.IgnoreQueryFilters().Select(c => c.BillingMonth)
+            .Union(db.UtilityBills.Select(b => b.BillingMonth))
+            .ToList();
+
+        var starts = BuildMonths().Select(m => m.Start).ToHashSet();
+        foreach (var key in keys)
+            if (DateOnly.TryParseExact(key + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                                       DateTimeStyles.None, out var start))
+                starts.Add(start);
+
+        return starts.OrderByDescending(s => s).Select(s => new MonthOption { Start = s }).ToList();
     }
 
     public static DateOnly CurrentMonthStart() =>

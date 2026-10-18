@@ -26,27 +26,43 @@
             <controls:StatCard x:Name="OverdueCard" Label="Overdue" />
         </UniformGrid>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,16">
-            <TextBlock Text="Month" VerticalAlignment="Center" Margin="0,0,8,0"
-                       Style="{StaticResource MutedText}" />
-            <ComboBox x:Name="MonthCombo" Width="190" DisplayMemberPath="Display" Margin="0,0,20,0"
-                      SelectionChanged="MonthCombo_SelectionChanged" />
-            <TextBlock Text="Rent due date" VerticalAlignment="Center" Margin="0,0,8,0"
-                       Style="{StaticResource MutedText}" />
-            <DatePicker x:Name="RentDuePicker" Width="170" Margin="0,0,20,0" />
-            <CheckBox x:Name="FullRentCheck" Content="Charge full rent for partial months" Margin="0,0,20,0"
-          ToolTip="By default, a stay that doesn't cover the whole month is billed by days. Tick this to bill the full monthly rent instead."
-          Checked="FullRent_Changed" Unchecked="FullRent_Changed" />
-            <CheckBox x:Name="ShowVoidedCheck" Content="Show voided" Margin="0,0,20,0"
-                      Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
-            <ui:Button x:Name="GenerateSelectedButton" Content="Generate for selected tenant"
-                       IsEnabled="False" Click="GenerateSelected_Click" />
+        <StackPanel Grid.Row="2" Margin="0,0,0,12">
+            <WrapPanel Orientation="Horizontal">
+                <TextBlock Text="Month" VerticalAlignment="Center" Margin="0,0,8,8"
+                   Style="{StaticResource MutedText}" />
+                <ComboBox x:Name="MonthCombo" Width="190" DisplayMemberPath="Display" Margin="0,0,20,8"
+                  SelectionChanged="MonthCombo_SelectionChanged" />
+                <TextBlock Text="Rent due date" VerticalAlignment="Center" Margin="0,0,8,8"
+                   Style="{StaticResource MutedText}" />
+                <DatePicker x:Name="RentDuePicker" Width="170" Margin="0,0,20,8" />
+                <CheckBox x:Name="FullRentCheck" Content="Charge full rent for partial months"
+                  VerticalAlignment="Center" Margin="0,0,20,8"
+                  ToolTip="By default, a stay that doesn't cover the whole month is billed by days. Tick this to bill the full monthly rent instead."
+                  Checked="FullRent_Changed" Unchecked="FullRent_Changed" />
+                <CheckBox x:Name="ShowVoidedCheck" Content="Show voided"
+                  VerticalAlignment="Center" Margin="0,0,20,8"
+                  Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
+                <CheckBox x:Name="ShowArchivedCheck" Content="Show archived"
+                  VerticalAlignment="Center" Margin="0,0,0,8"
+                  Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
+            </WrapPanel>
+
+            <WrapPanel Orientation="Horizontal">
+                <ui:Button x:Name="GenerateSelectedButton" Content="Generate for selected tenant"
+                   IsEnabled="False" Click="GenerateSelected_Click" Margin="0,0,32,0" />
+                <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click"
+                   IsEnabled="False" Margin="0,0,8,0" />
+                <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click"
+                   IsEnabled="False" Margin="0,0,8,0" />
+                <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled"
+                   Click="ArchiveSettled_Click" />
+            </WrapPanel>
         </StackPanel>
 
         <TextBlock Grid.Row="3" Text="Rent charges" Style="{StaticResource SectionTitle}" Margin="0,0,0,8" />
 
         <DataGrid x:Name="RentGrid" Grid.Row="4" AutoGenerateColumns="False"
-                  IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single"
+                  IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended"
                   SelectionChanged="RentGrid_SelectionChanged">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Tenant" Binding="{Binding Tenant}" Width="*" />
