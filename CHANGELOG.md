@@ -39,3 +39,17 @@ All notable changes to this project are listed here.
 - "100% collected" and 100% occupancy no longer show while something is outstanding
 - Room names are checked without regard to capitalisation
 - Error messages no longer blame "another window"
+
+## [1.1.0] - New features and changes
+
+### Added
+- Archive: hide settled payments, charges, rent and utility bills from the lists, with Archive and Unarchive buttons, multi-select, "Archive all settled" for a month, and a "Show archived" toggle that also reveals older months. Archiving never changes totals, reports or statements
+- Apply deposit: use a tenant's deposit to pay their oldest unpaid charges
+- Deposit refunds: record a full or partial refund; the billing statement shows deposit paid, used, refunded and held
+- Edit stay: change a stay's rent, deposit and (before billing exists) move-in date
+- Backup reminder on the Dashboard and in Settings after 7 days, and a prompt when closing with a backup overdue
+
+### Changed
+- A payment larger than the tenant's balance is refused with a clearer message
+- Switching theme keeps the window's size, position and state
+- The database gets seven new columns on first start (automatic). Back up before upgrading
