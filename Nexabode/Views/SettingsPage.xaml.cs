@@ -164,6 +164,7 @@ public partial class SettingsPage : Page
             $"Your previous data was saved here:\n{safety}",
             "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
+        MainWindow.SkipBackupPrompt = true;   // no "back up?" prompt right after a restore
         Application.Current.Shutdown();
     }
 }
