@@ -10,6 +10,7 @@ public class AppSettings
     public string HouseName { get; set; } = "";
     public string HouseAddress { get; set; } = "";
     public string LastBackup { get; set; } = "";
+    public DateTime? LastBackupAt { get; set; }
 
     private static string FilePath => Path.Combine(DatabaseKeyProvider.AppFolder, "settings.json");
 
