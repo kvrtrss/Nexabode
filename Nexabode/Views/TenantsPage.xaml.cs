@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
 using Nexabode.Models;
 using Nexabode.Services;
+using System.Globalization;
 
 namespace Nexabode.Views;
 
@@ -63,6 +64,8 @@ public partial class TenantsPage : Page
     private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
 
     private static string? Blank(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static bool TryMoney(string text, out decimal value) =>
+    decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value) && value >= 0;
 
     private TenantRow? Current => TenantGrid.SelectedItem as TenantRow;
 
@@ -258,6 +261,7 @@ public partial class TenantsPage : Page
         MoveInButton.IsEnabled = t.Status is "Moved out" or "No stay yet";
         MoveOutButton.IsEnabled = t.Status is "Staying" or "Reserved";
         MoveOutButton.Content = t.Status == "Reserved" ? "Cancel reservation" : "Move out";
+        EditStayButton.IsEnabled = t.Stays.Count > 0;
 
         HistoryPanel.Children.Clear();
         if (t.Stays.Count == 0)
@@ -359,6 +363,89 @@ public partial class TenantsPage : Page
         entity.EmergencyContact = Blank(v[2]);
         entity.SchoolOrWork = Blank(v[3]);
         entity.Notes = Blank(v[4]);
+        db.SaveChanges();
+
+        Reload(t.Id);
+    }
+
+    private void EditStay_Click(object sender, RoutedEventArgs e)
+    {
+        var t = Current;
+        if (t == null) return;
+
+        using var db = new AppDbContext();
+        var stay = db.Occupancies
+            .Include(o => o.Bed).ThenInclude(b => b.Room)
+            .Where(o => o.TenantId == t.Id)
+            .ToList()
+            .OrderByDescending(o => o.MoveInDate)
+            .FirstOrDefault();
+        if (stay == null) return;
+
+        // Any charge at all (even a voided one) means billing has started for this stay.
+        var hasCharges = db.Charges.IgnoreQueryFilters().Any(c => c.OccupancyId == stay.Id);
+
+        string? Validate(string[] vals)
+        {
+            if (!TryMoney(vals[0], out _))
+                return "Enter the monthly rent as a number (e.g. 1500).";
+            if (vals[1].Trim() != "" && !TryMoney(vals[1], out _))
+                return "Enter the deposit as a number, or leave it blank.";
+            if (!DateOnly.TryParse(vals[2].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var date))
+                return "Enter the move-in date like 2026-10-14.";
+
+            if (date == stay.MoveInDate) return null;   // date unchanged: nothing more to check
+
+            if (hasCharges)
+                return "Billing already exists for this stay, so its move-in date can't be changed. " +
+                       "Rent and deposit can still be edited.";
+
+            if (stay.MoveOutDate is DateOnly outDate && date > outDate)
+                return $"The move-in date can't be after the move-out date ({Fmt.Date(outDate)}).";
+
+            // The tenant's own earlier stays must be over before this one starts.
+            var tenantOuts = db.Occupancies
+                .Where(o => o.TenantId == stay.TenantId && o.Id != stay.Id
+                            && o.MoveInDate < stay.MoveInDate && o.MoveOutDate != null)
+                .Select(o => o.MoveOutDate)
+                .ToList();
+            if (tenantOuts.Count > 0 && date < tenantOuts.Max()!.Value)
+                return $"The move-in date can't be before this tenant's previous move-out ({Fmt.Date(tenantOuts.Max()!.Value)}).";
+
+            // So must the bed's earlier occupants.
+            var bedOuts = db.Occupancies
+                .Where(o => o.BedId == stay.BedId && o.Id != stay.Id
+                            && o.MoveInDate < stay.MoveInDate && o.MoveOutDate != null)
+                .Select(o => o.MoveOutDate)
+                .ToList();
+            if (bedOuts.Count > 0 && date < bedOuts.Max()!.Value)
+                return $"That bed was occupied until {Fmt.Date(bedOuts.Max()!.Value)}. The move-in date can't be before that.";
+
+            return null;
+        }
+
+        var note = $"{stay.Bed.Room.RoomName} / {stay.Bed.BedLabel}. Rent changes apply to rent generated from now on; " +
+                   "charges that already exist keep their amounts." +
+                   (hasCharges ? "\nThe move-in date is locked because billing already exists for this stay." : "");
+
+        var v = FormDialog.Ask(Owner, $"Edit stay - {t.FullName}", "Save changes",
+            new[]
+            {
+            ("Monthly rent", stay.AgreedRent.ToString("0.##", CultureInfo.CurrentCulture)),
+            ("Deposit (blank for none)", stay.Deposit == 0 ? "" : stay.Deposit.ToString("0.##", CultureInfo.CurrentCulture)),
+            ("Move-in date (e.g. 2026-10-14)", stay.MoveInDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+            },
+            Validate, note);
+        if (v == null) return;
+
+        TryMoney(v[0], out var rent);
+        decimal deposit = 0;
+        if (v[1].Trim() != "") TryMoney(v[1], out deposit);
+        DateOnly.TryParse(v[2].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var newDate);
+
+        stay.AgreedRent = Math.Round(rent, 2);
+        stay.Deposit = Math.Round(deposit, 2);
+        stay.MoveInDate = newDate;
         db.SaveChanges();
 
         Reload(t.Id);

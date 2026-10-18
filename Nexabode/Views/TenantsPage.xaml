@@ -87,6 +87,7 @@
 
                         <WrapPanel Margin="0,0,0,12">
                             <ui:Button x:Name="EditButton" Content="Edit tenant" Click="EditTenant_Click" Margin="0,0,8,8" />
+                            <ui:Button x:Name="EditStayButton" Content="Edit stay" Click="EditStay_Click" Margin="0,0,8,8" />
                             <ui:Button x:Name="MoveInButton" Content="Move in" Appearance="Primary"
                                        Click="MoveIn_Click" Margin="0,0,8,8" />
                             <ui:Button x:Name="MoveOutButton" Content="Move out" Click="MoveOut_Click" Margin="0,0,0,8" />
