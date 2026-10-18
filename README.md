@@ -73,37 +73,45 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 
 <br>
 
-**Dashboard**
+## Dashboard
+
 - Overview of occupancy, monthly collections, and outstanding balances.
 - Calendar for rent due dates, payments, utility bills, and tenant move-ins and move-outs.
-- Recent activity and quick actions.
+- Recent activity, quick actions, and backup reminders.
 
-**Rooms and Beds**
+## Rooms and Beds
+
 - Manage rooms and beds with search, filters, and visual status indicators.
 - Track available, occupied, reserved, maintenance, and inactive beds.
-- Deactivate rooms and beds while preserving historical records.
+- Activate or deactivate rooms and beds while preserving historical records.
 
-**Tenant Management**
+## Tenant Management
+
 - Search and manage tenant records, occupancy status, and balances.
 - Record move-ins and move-outs and review tenant stay history.
-- Flag potentially duplicate tenant names.
+- Manage tenant deposits and edit stay details.
+- Archive settled, moved-out tenants and flag potentially duplicate names.
 
-**Billing and Payments**
-- Generate monthly rent charges, with optional prorated rent calculations.
+## Billing and Payments
+
+- Generate monthly rent charges with optional day-based proration.
 - Record electricity, water, and other utility bills and split eligible expenses among tenants.
-- Review, correct, or void billing charges while retaining historical records.
-- Record payments and allocate them to outstanding charges using different allocation methods.
-- Search payment history, edit payment details, and void payments with a reason.
+- Review, edit, void, archive, and restore billing records.
+- Record payments and allocate them to outstanding charges using different methods.
+- Apply deposits to unpaid balances and record full or partial deposit refunds.
+- Search payment history and manage archived or voided transactions.
 
-**Reports and Printing**
+## Reports and Printing
+
 - Generate tenant billing statements, occupancy reports, and collection reports.
 - Print reports or save them as PDFs using the Windows print dialog.
 - Include the boarding house name and address in report headers.
 
-**Security and Data Protection**
+## Security and Data Protection
+
 - Locally stored, encrypted SQLite database using the SQLCipher 4 file format.
 - Password hashing using BCrypt and a required password change on first sign-in.
-- Password-protected database backup and restore.
+- Password-protected database backup and restore, with automatic backup reminders.
 - Database safeguards against duplicate rent charges and utility splits.
 - Protection intended to prevent multiple application instances from running simultaneously.
 
