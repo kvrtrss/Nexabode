@@ -32,8 +32,21 @@ public partial class MainWindow : FluentWindow
         ThemeService.Toggle();            // saves and applies the new theme
 
         var fresh = new MainWindow(current);   // a new window starts in the new theme -
+
+        // Put the new window exactly where this one was, with the same size and state.
+        var bounds = WindowState == WindowState.Normal
+            ? new Rect(Left, Top, ActualWidth, ActualHeight)
+            : RestoreBounds;
+        fresh.WindowStartupLocation = WindowStartupLocation.Manual;
+        fresh.Left = bounds.Left;
+        fresh.Top = bounds.Top;
+        fresh.Width = bounds.Width;
+        fresh.Height = bounds.Height;
+        fresh.WindowState = WindowState;
+
         fresh.Show();
         Close();
+
     }
     public void NavigateTo(Type page) => RootNavigation.Navigate(page);
 }

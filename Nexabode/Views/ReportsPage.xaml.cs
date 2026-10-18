@@ -45,8 +45,6 @@ public partial class ReportsPage : Page
     private static void Tell(string message) =>
         MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
-    private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
-
     private void LoadTenants()
     {
         using var db = new AppDbContext();
@@ -139,17 +137,6 @@ public partial class ReportsPage : Page
         OverdueCard.Caption = overdue.Count == 0 ? "Nothing overdue" : $"{overdue.Count} overdue charge(s)";
         OverdueCard.Tone = overdue.Count == 0 ? "Success" : "Danger";
     }
-
-    private static Border MakeBar(decimal value, decimal max, double area, string brush, string tip) => new()
-    {
-        Width = 13,
-        Height = value <= 0 ? 0 : Math.Max(3, (double)(value / max) * area),
-        Margin = new Thickness(1.5, 0, 1.5, 0),
-        CornerRadius = new CornerRadius(3, 3, 0, 0),
-        Background = Res(brush),
-        VerticalAlignment = VerticalAlignment.Bottom,
-        ToolTip = tip
-    };
 
     // ---------- Generate and print reports w microsoft to pdf ----------
 

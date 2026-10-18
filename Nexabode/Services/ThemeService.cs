@@ -65,14 +65,8 @@ public static class ThemeService
                 SetBrush(name + "SoftBrush", hex, alpha: 0x26);
             }
 
-            if (save) AppSettings.Update(s => s.DarkMode = dark);
+            if (save) AppSettings.Update(s => s.DarkMode = dark);   // keeps the other saved settings
             ThemeChanged?.Invoke();
-            if (save)
-            {
-                var settings = AppSettings.Load();   // keep the other saved settings
-                settings.DarkMode = dark;
-                settings.Save();
-            }
         }
         catch (Exception ex)
         {
