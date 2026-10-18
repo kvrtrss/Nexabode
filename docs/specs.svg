@@ -79,7 +79,7 @@
   <circle cx="322" cy="140" r="46" fill="none" stroke="#5c5c5c" stroke-width="0.6" stroke-dasharray="1 4"/>
   <circle cx="322" cy="140" r="34" fill="none" stroke="#c4c4c4" stroke-width="6"/>
   <circle cx="322" cy="140" r="34" fill="none" stroke="#000000" stroke-width="6" stroke-linecap="round" stroke-dasharray="213.6 0" transform="rotate(-90 322 140)"/>
-  <text class="m" x="322" y="148" text-anchor="middle" fill="#000000" font-size="22" font-weight="700">v1.1.1</text>
+  <text class="m" x="322" y="148" text-anchor="middle" fill="#000000" font-size="22" font-weight="700">v1.1</text>
   <g class="orb">
     <circle cx="322" cy="94" r="3" fill="#000000"/>
   </g>
