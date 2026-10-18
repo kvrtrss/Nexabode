@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="288" height="150" viewBox="0 0 288 150" role="img" aria-label="Tenants: Move-in and move-out records; Stay history and balances; Duplicate name flags">
+<title>Tenants: Move-in and move-out records; Stay history and balances; Duplicate name flags</title>
+<style>
+  .m { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
+  .n { font-family: Impact, 'Arial Black', 'Helvetica Neue', Arial, sans-serif; }
+  
+</style>
+<rect x="8" y="8" width="280" height="142" fill="#c4c4c4"/>
+<rect x="2" y="2" width="280" height="142" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+<text class="m" x="20" y="32" fill="#5c5c5c" font-size="11" letter-spacing="2">03</text>
+<g transform="translate(244,18)" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="4" r="3.5"/><path d="M1 15c0-4 3-6 7-6s7 2 7 6"/></g>
+<text class="m" x="20" y="60" fill="#000000" font-size="13" font-weight="700" letter-spacing="1">TENANTS</text>
+<line x1="20" y1="70" x2="260" y2="70" stroke="#000000" stroke-width="1.5"/>
+<text class="m" x="20" y="92" fill="#5c5c5c" font-size="10.5">Move-in and move-out records</text>
+<text class="m" x="20" y="109" fill="#5c5c5c" font-size="10.5">Stay history and balances</text>
+<text class="m" x="20" y="126" fill="#5c5c5c" font-size="10.5">Duplicate name flags</text>
+</svg>

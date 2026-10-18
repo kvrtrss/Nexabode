@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="288" height="164" viewBox="0 0 288 164" role="img" aria-label="Step 02: Register Tenants. Add tenant records and assign them to open beds.">
+<title>Step 02: Register Tenants. Add tenant records and assign them to open beds.</title>
+<style>
+  .m { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
+  .n { font-family: Impact, 'Arial Black', 'Helvetica Neue', Arial, sans-serif; }
+  
+</style>
+<rect x="8" y="8" width="280" height="156" fill="#c4c4c4"/>
+<rect x="2" y="2" width="280" height="156" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+<text class="n" x="20" y="68" font-size="58" fill="#ffffff" stroke="#000000" stroke-width="2" stroke-linejoin="round">02</text>
+<line x1="22" y1="82" x2="62" y2="82" stroke="#000000" stroke-width="3"/>
+<text class="m" x="20" y="108" fill="#000000" font-size="11" font-weight="700" letter-spacing="1">REGISTER TENANTS</text>
+<text class="m" x="20" y="127" fill="#5c5c5c" font-size="10">Add tenant records and</text>
+<text class="m" x="20" y="141" fill="#5c5c5c" font-size="10">assign them to open beds.</text>
+</svg>
