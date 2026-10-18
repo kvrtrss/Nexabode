@@ -45,7 +45,7 @@
     <polygon points="1,1 8,1 13,7 7,13 1,7"/><circle cx="4.5" cy="4.5" r="1"/>
   </g>
   <text class="m lb" x="46" y="80">VERSION</text>
-  <text class="m v" x="246" y="80">1.0.0</text>
+  <text class="m v" x="246" y="80">1.1.0</text>
 
   <!-- Platform -->
   <g class="ic" transform="translate(24,97)">
