@@ -458,7 +458,8 @@ public partial class PaymentsPage : Page
     {
         var open = GetOpenCharges(db, tenantId);
         if (open.Count == 0)
-            return (null, "This tenant has no unpaid charges.");
+            return (null, "This tenant has no unpaid charges, so there is nothing to apply this payment to.\n\n" +
+               "Nexabode does not hold advance payments, so nothing was recorded.");
 
         if (chosenChargeId is int chargeId)
         {
@@ -477,11 +478,17 @@ public partial class PaymentsPage : Page
 
         var scopeBalance = scope.Sum(r => r.Balance);
         if (amount > scopeBalance)
-            return (null, item == null
-                ? $"The amount ({Fmt.Peso(amount)}) is more than the tenant's balance ({Fmt.Peso(scopeBalance)}).\n" +
-                  "Advance payments are not supported yet."
-                : $"The amount ({Fmt.Peso(amount)}) is more than the unpaid {item} ({Fmt.Peso(scopeBalance)}).\n" +
-                  "Lower the amount, or choose a different option.");
+        {
+            if (item != null)
+                return (null, $"The amount ({Fmt.Peso(amount)}) is more than the unpaid {item} ({Fmt.Peso(scopeBalance)}).\n" +
+                              "Lower the amount, or choose a different option.");
+
+            var excess = amount - scopeBalance;
+            return (null, $"The amount ({Fmt.Peso(amount)}) is {Fmt.Peso(excess)} more than the tenant's balance ({Fmt.Peso(scopeBalance)}).\n\n" +
+                          "Nexabode does not hold advance payments, so nothing was recorded.\n" +
+                          $"Record {Fmt.Peso(scopeBalance)} here and return the extra {Fmt.Peso(excess)} to the tenant. " +
+                          "If it is a payment for next month's rent, generate that rent in Rent Billing first, then record the payment again.");
+        }
 
         var allocations = PaymentRules.AllocateOldestFirst(amount, scope.Select(c => (c.Id, c.Balance)))
             .Select(a => new PaymentAllocation { ChargeId = a.ChargeId, AmountApplied = a.Applied })
