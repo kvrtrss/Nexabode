@@ -21,7 +21,12 @@ public partial class RentBillingPage : Page
         public bool IsVoided { get; set; }
         public DateOnly? DueDate { get; set; }
         public decimal Balance => Amount - Paid;
-        public string Status => IsVoided ? "Voided" : Generated ? "Generated" : "Not generated";
+        public int? ChargeId { get; set; }
+        public bool IsArchived { get; set; }
+        public bool Settled => Generated && (IsVoided || Balance <= 0);
+        public string Status => IsVoided ? "Voided"
+                              : IsArchived && Settled ? "Archived"
+                              : Generated ? "Generated" : "Not generated";
     }
 
     private List<RentRow> _rows = new();
@@ -60,6 +65,68 @@ public partial class RentBillingPage : Page
         if (_ready) LoadList();
     }
 
+    private void ShowArchived_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_ready) return;
+
+        var keep = SelectedMonth;
+        var months = ShowArchivedCheck.IsChecked == true
+            ? BillingHelpers.BuildMonthsWithData()
+            : BillingHelpers.BuildMonths();
+
+        MonthCombo.ItemsSource = months;
+        MonthCombo.SelectedItem = months.FirstOrDefault(m => m.Start == keep)
+                                  ?? months.First(m => m.Start == BillingHelpers.CurrentMonthStart());
+    }
+
+    private void Archive_Click(object sender, RoutedEventArgs e) => SetArchived(true);
+
+    private void Unarchive_Click(object sender, RoutedEventArgs e) => SetArchived(false);
+
+    private void SetArchived(bool archived)
+    {
+        var ids = SelectedRows
+            .Where(r => r.ChargeId != null && r.IsArchived != archived && (!archived || r.Settled))
+            .Select(r => r.ChargeId!.Value)
+            .ToList();
+        ArchiveCharges(ids, archived);
+    }
+
+    private void ArchiveSettled_Click(object sender, RoutedEventArgs e)
+    {
+        var ids = _rows
+            .Where(r => r.ChargeId != null && !r.IsArchived && !r.IsVoided && r.Settled)
+            .Select(r => r.ChargeId!.Value)
+            .ToList();
+        if (ids.Count == 0)
+        {
+            Tell("There is no fully paid rent left to archive in this month.");
+            return;
+        }
+
+        var month = (MonthCombo.SelectedItem as MonthOption)?.Display;
+        var answer = MessageBox.Show(
+            $"Archive {ids.Count} fully paid rent charge(s) for {month}?\n\n" +
+            "They are only hidden from this list. Totals, reports and statements are not affected, " +
+            "and the rent is still counted as generated.",
+            "Archive settled rent", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes) return;
+
+        ArchiveCharges(ids, true);
+    }
+
+    private void ArchiveCharges(List<int> ids, bool archived)
+    {
+        if (ids.Count == 0) return;
+
+        using var db = new AppDbContext();
+        foreach (var charge in db.Charges.IgnoreQueryFilters().Where(c => ids.Contains(c.Id)).ToList())
+            charge.IsArchived = archived;
+        db.SaveChanges();
+
+        LoadList();
+    }
+
     private void ShowVoided_Changed(object sender, RoutedEventArgs e)
     {
         if (_ready) LoadList();
@@ -67,8 +134,20 @@ public partial class RentBillingPage : Page
 
     private void RentGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateButtons();
 
-    private void UpdateButtons() =>
-        GenerateSelectedButton.IsEnabled = RentGrid.SelectedItem is RentRow { Generated: false, IsVoided: false };
+    private RentRow? SelectedRow =>
+        RentGrid.SelectedItems.Count == 1 ? RentGrid.SelectedItem as RentRow : null;
+
+    private List<RentRow> SelectedRows =>
+        RentGrid.SelectedItems.OfType<RentRow>().ToList();
+
+    private void UpdateButtons()
+    {
+        GenerateSelectedButton.IsEnabled = SelectedRow is { Generated: false, IsVoided: false };
+
+        var rows = SelectedRows;
+        ArchiveButton.IsEnabled = rows.Any(r => r.ChargeId != null && !r.IsArchived && r.Settled);
+        UnarchiveButton.IsEnabled = rows.Any(r => r.IsArchived);
+    }
 
     // ---------- The list: what rent exists and what is still to be generated ----------
 
@@ -117,6 +196,8 @@ public partial class RentBillingPage : Page
                     Paid = charge.Allocations.Sum(a => a.AmountApplied),
                     Generated = true,
                     IsVoided = charge.IsVoided,
+                    ChargeId = charge.Id,
+                    IsArchived = charge.IsArchived,
                     DueDate = charge.DueDate
                 });
                 continue;
@@ -154,7 +235,11 @@ public partial class RentBillingPage : Page
         using var db = new AppDbContext();
         _rows = BuildRows(db, start, FullRentCheck.IsChecked == true);
         var showVoided = ShowVoidedCheck.IsChecked == true;
-        RentGrid.ItemsSource = showVoided ? _rows : _rows.Where(r => !r.IsVoided).ToList();
+        var showArchived = ShowArchivedCheck.IsChecked == true;
+        RentGrid.ItemsSource = _rows
+            .Where(r => showVoided || !r.IsVoided)
+            .Where(r => showArchived || !(r.IsArchived && r.Settled))
+            .ToList();
 
         var live = _rows.Where(r => !r.IsVoided).ToList();
         var generated = live.Where(r => r.Generated).ToList();
@@ -204,7 +289,7 @@ public partial class RentBillingPage : Page
 
     private void GenerateSelected_Click(object sender, RoutedEventArgs e)
     {
-        if (RentGrid.SelectedItem is not RentRow { Generated: false, IsVoided: false } row)
+        if (SelectedRow is not RentRow { Generated: false, IsVoided: false } row)
         {
             Tell("Select a tenant whose rent is not generated yet.");
             return;

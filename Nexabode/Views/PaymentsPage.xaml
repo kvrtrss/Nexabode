@@ -74,21 +74,28 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <ui:TextBox x:Name="SearchBox" Width="240" Margin="0,0,12,0"
-                                        PlaceholderText="Search tenant, method, or reference"
-                                        TextChanged="SearchBox_TextChanged" />
+                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <ui:TextBox x:Name="SearchBox" Width="240" Margin="0,0,12,6"
+                PlaceholderText="Search tenant, method, or reference"
+                TextChanged="SearchBox_TextChanged" />
                             <CheckBox x:Name="ShowVoidedCheck" Content="Show voided"
-                                      VerticalAlignment="Center" Margin="0,0,16,0"
-                                      Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
+              VerticalAlignment="Center" Margin="0,0,16,6"
+              Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
+                            <CheckBox x:Name="ShowArchivedCheck" Content="Show archived"
+              VerticalAlignment="Center" Margin="0,0,16,6"
+              Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
                             <ui:Button x:Name="EditButton" Content="Edit payment" Click="EditPayment_Click"
-                                       IsEnabled="False" Margin="0,0,8,0" />
+               IsEnabled="False" Margin="0,0,8,6" />
                             <ui:Button x:Name="VoidButton" Content="Void payment" Click="VoidPayment_Click"
-                                       IsEnabled="False" />
-                        </StackPanel>
+               IsEnabled="False" Margin="0,0,16,6" />
+                            <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click"
+               IsEnabled="False" Margin="0,0,8,6" />
+                            <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click"
+               IsEnabled="False" Margin="0,0,0,6" />
+                        </WrapPanel>
 
                         <DataGrid x:Name="PaymentGrid" Grid.Row="1" AutoGenerateColumns="False"
-                                  IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single"
+                                  IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended"
                                   SelectionChanged="PaymentGrid_SelectionChanged">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Date" Binding="{Binding DateText}" Width="105" />

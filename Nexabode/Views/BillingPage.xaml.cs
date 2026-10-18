@@ -40,6 +40,9 @@ public partial class BillingPage : Page
         public bool IsVoided { get; set; }
         public string Note { get; set; } = "";
         public List<PaidItem> Payments { get; set; } = new();
+        public bool IsArchived { get; set; }
+        public string ArchivedText => IsArchived ? "Archived" : "";
+        public bool Settled => IsVoided || Balance <= 0;
     }
 
     private const string AllItems = "All items";
@@ -74,7 +77,11 @@ public partial class BillingPage : Page
 
     private DateOnly? SelectedMonth => (MonthCombo.SelectedItem as MonthOption)?.Start;
 
-    private ChargeRow? Selected => ChargeGrid.SelectedItem as ChargeRow;
+    private ChargeRow? Selected =>
+        ChargeGrid.SelectedItems.Count == 1 ? ChargeGrid.SelectedItem as ChargeRow : null;
+
+    private List<ChargeRow> SelectedCharges =>
+        ChargeGrid.SelectedItems.OfType<ChargeRow>().ToList();
 
     private static string ChoiceOf(ComboBox box) => (box.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
 
@@ -96,6 +103,65 @@ public partial class BillingPage : Page
     private void ShowVoided_Changed(object sender, RoutedEventArgs e)
     {
         if (_ready) LoadCharges();
+    }
+
+    private void ShowArchived_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_ready) return;
+
+        var keep = SelectedMonth;
+        var months = ShowArchivedCheck.IsChecked == true
+            ? BillingHelpers.BuildMonthsWithData()
+            : BillingHelpers.BuildMonths();
+
+        MonthCombo.ItemsSource = months;
+        MonthCombo.SelectedItem = months.FirstOrDefault(m => m.Start == keep)
+                                  ?? months.First(m => m.Start == BillingHelpers.CurrentMonthStart());
+    }
+
+    private void Archive_Click(object sender, RoutedEventArgs e) => SetArchived(true);
+
+    private void Unarchive_Click(object sender, RoutedEventArgs e) => SetArchived(false);
+
+    private void SetArchived(bool archived)
+    {
+        var ids = SelectedCharges
+            .Where(r => r.IsArchived != archived && (!archived || r.Settled))
+            .Select(r => r.Id)
+            .ToList();
+        ArchiveCharges(ids, archived);
+    }
+
+    private void ArchiveSettled_Click(object sender, RoutedEventArgs e)
+    {
+        var ids = _all.Where(r => !r.IsArchived && !r.IsVoided && r.Balance <= 0).Select(r => r.Id).ToList();
+        if (ids.Count == 0)
+        {
+            Tell("There are no fully paid charges left to archive in this month.");
+            return;
+        }
+
+        var month = (MonthCombo.SelectedItem as MonthOption)?.Display;
+        var answer = MessageBox.Show(
+            $"Archive {ids.Count} fully paid charge(s) for {month}?\n\n" +
+            "They are only hidden from this list. Totals, reports and statements are not affected, " +
+            "and you can bring them back with Show archived and Unarchive.",
+            "Archive settled charges", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes) return;
+
+        ArchiveCharges(ids, true);
+    }
+
+    private void ArchiveCharges(List<int> ids, bool archived)
+    {
+        if (ids.Count == 0) return;
+
+        using var db = new AppDbContext();
+        foreach (var charge in db.Charges.IgnoreQueryFilters().Where(c => ids.Contains(c.Id)).ToList())
+            charge.IsArchived = archived;
+        db.SaveChanges();
+
+        LoadCharges();
     }
 
     private void Filter_Changed(object sender, SelectionChangedEventArgs e)
@@ -121,6 +187,10 @@ public partial class BillingPage : Page
         var row = Selected;
         EditButton.IsEnabled = row is { IsVoided: false };
         VoidButton.IsEnabled = row is { IsVoided: false };
+
+        var rows = SelectedCharges;
+        ArchiveButton.IsEnabled = rows.Any(r => !r.IsArchived && r.Settled);
+        UnarchiveButton.IsEnabled = rows.Any(r => r.IsArchived);
     }
 
     // ---------- Loading ----------
@@ -161,6 +231,7 @@ public partial class BillingPage : Page
                     Balance = balance,
                     DueDate = c.DueDate,
                     IsVoided = c.IsVoided,
+                    IsArchived = c.IsArchived,
                     Note = c.IsVoided ? $"Voided: {c.VoidReason}" : "",
                     Status = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today, c.IsVoided),
                     LastPaid = c.Allocations.Count == 0
@@ -237,8 +308,10 @@ public partial class BillingPage : Page
         var item = ItemFilter.SelectedItem as string ?? AllItems;
         var status = ChoiceOf(StatusFilter);
         var query = SearchBox.Text.Trim();
+        var showArchived = ShowArchivedCheck.IsChecked == true;
 
         var rows = _all
+            .Where(r => showArchived || !(r.IsArchived && r.Settled))   // archived rows hide only while settled
             .Where(r => item == AllItems || r.Item == item)
             .Where(r => status switch
             {

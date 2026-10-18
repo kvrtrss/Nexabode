@@ -13,8 +13,23 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <controls:PageHeader x:Name="Header" Title="Dashboard"
-                                 ActionText="Add tenant" ActionClick="AddTenant_Click" />
+            <StackPanel Grid.Row="0">
+                <controls:PageHeader x:Name="Header" Title="Dashboard"
+                         ActionText="Add tenant" ActionClick="AddTenant_Click" />
+
+                <Border x:Name="BackupBanner" Visibility="Collapsed" Margin="0,0,0,16" Padding="16,12"
+            CornerRadius="8" Background="{DynamicResource WarningSoftBrush}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="BackupBannerText" VerticalAlignment="Center" TextWrapping="Wrap"
+                       Foreground="{DynamicResource AppTextBrush}" />
+                        <ui:Button Grid.Column="1" Content="Back up now" Click="BackupNow_Click" Margin="12,0,0,0" />
+                    </Grid>
+                </Border>
+            </StackPanel>
 
             <!-- Stat cards -->
             <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,16">

@@ -35,17 +35,26 @@ public partial class SettingsPage : Page
 
     private void ShowLastBackup()
     {
-        var last = AppSettings.Load().LastBackup;
+        var settings = AppSettings.Load();
+        var last = BackupReminder.LastBackupTime();
 
-        if (string.IsNullOrWhiteSpace(last))
+        if (last == null && string.IsNullOrWhiteSpace(settings.LastBackup))
         {
             LastBackupText.Text = "No backup yet. Create one before you enter real data.";
             LastBackupText.Foreground = (System.Windows.Media.Brush)FindResource("WarningBrush");
         }
+        else if (last == null)
+        {
+            LastBackupText.Text = $"Last backup: {settings.LastBackup}. Create a new one to start the backup reminder.";
+            LastBackupText.Foreground = (System.Windows.Media.Brush)FindResource("WarningBrush");
+        }
         else
         {
-            LastBackupText.Text = $"Last backup: {last}";
-            LastBackupText.Foreground = (System.Windows.Media.Brush)FindResource("SuccessBrush");
+            var days = BackupReminder.DaysSinceBackup();
+            var age = days == 0 ? "today" : $"{days} day(s) ago";
+            LastBackupText.Text = $"Last backup: {last.Value.ToString("MMM d, yyyy h:mm tt", CultureInfo.CurrentCulture)} ({age})";
+            LastBackupText.Foreground = (System.Windows.Media.Brush)FindResource(
+                BackupReminder.IsDue ? "WarningBrush" : "SuccessBrush");
         }
     }
 
@@ -98,6 +107,7 @@ public partial class SettingsPage : Page
 
         var settings = AppSettings.Load();
         settings.LastBackup = DateTime.Now.ToString("MMM d, yyyy h:mm tt", CultureInfo.CurrentCulture);
+        settings.LastBackupAt = DateTime.Now;
         settings.Save();
         ShowLastBackup();
 
@@ -154,6 +164,7 @@ public partial class SettingsPage : Page
             $"Your previous data was saved here:\n{safety}",
             "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
+        MainWindow.SkipBackupPrompt = true;   // no "back up?" prompt right after a restore
         Application.Current.Shutdown();
     }
 }

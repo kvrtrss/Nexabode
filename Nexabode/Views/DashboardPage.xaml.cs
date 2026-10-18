@@ -34,6 +34,23 @@ public partial class DashboardPage : Page
     private void GenerateRent_Click(object sender, RoutedEventArgs e) => Go(typeof(RentBillingPage));
     private void AddUtility_Click(object sender, RoutedEventArgs e) => Go(typeof(UtilityBillsPage));
 
+    private void ShowBackupBanner()
+    {
+        if (!BackupReminder.IsDue)
+        {
+            BackupBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var days = BackupReminder.DaysSinceBackup();
+        BackupBannerText.Text = days == null
+            ? "You haven't made a backup yet. If this computer is lost or reformatted, your data cannot be recovered."
+            : $"Your last backup was {days} day(s) ago. Make a fresh one so your recent payments are protected.";
+        BackupBanner.Visibility = Visibility.Visible;
+    }
+
+    private void BackupNow_Click(object sender, RoutedEventArgs e) => Go(typeof(SettingsPage));
+
     private void Setup()
     {
         var now = DateTime.Now;
@@ -45,6 +62,7 @@ public partial class DashboardPage : Page
         _selected = today;
 
         LoadStats();
+        ShowBackupBanner();
         LoadActivity();
         BuildCalendar();
     }

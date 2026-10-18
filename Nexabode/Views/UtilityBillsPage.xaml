@@ -31,6 +31,8 @@
                        Style="{StaticResource MutedText}" />
             <ComboBox x:Name="MonthCombo" Width="190" DisplayMemberPath="Display"
                       SelectionChanged="MonthCombo_SelectionChanged" />
+            <CheckBox x:Name="ShowArchivedCheck" Content="Show archived" Margin="20,0,0,0"
+          Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
         </StackPanel>
 
         <ui:Card Grid.Row="3" Margin="0,0,0,12">
@@ -51,19 +53,25 @@
             </StackPanel>
         </ui:Card>
 
-        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,12">
+        <WrapPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,6">
             <ui:Button x:Name="SplitButton" Content="Split selected bill" Appearance="Primary"
-                       Click="SplitBill_Click" IsEnabled="False" Margin="0,0,8,0" />
+               Click="SplitBill_Click" IsEnabled="False" Margin="0,0,8,6" />
             <ui:Button x:Name="UndoButton" Content="Undo split" Click="UndoSplit_Click"
-                       IsEnabled="False" Margin="0,0,8,0" />
+               IsEnabled="False" Margin="0,0,8,6" />
             <ui:Button x:Name="EditButton" Content="Edit bill" Click="EditBill_Click"
-                       IsEnabled="False" Margin="0,0,8,0" />
+               IsEnabled="False" Margin="0,0,8,6" />
             <ui:Button x:Name="DeleteButton" Content="Delete bill" Click="DeleteBill_Click"
-                       IsEnabled="False" />
-        </StackPanel>
+               IsEnabled="False" Margin="0,0,20,6" />
+            <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click"
+               IsEnabled="False" Margin="0,0,8,6" />
+            <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click"
+               IsEnabled="False" Margin="0,0,8,6" />
+            <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled"
+               Click="ArchiveSettled_Click" Margin="0,0,0,6" />
+        </WrapPanel>
 
         <DataGrid x:Name="BillGrid" Grid.Row="5" AutoGenerateColumns="False"
-                  IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single"
+                  IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended"
                   SelectionChanged="BillGrid_SelectionChanged">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Utility" Binding="{Binding UtilityType}" Width="*" />

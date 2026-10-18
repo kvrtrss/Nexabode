@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
 using Nexabode.Models;
 using Nexabode.Services;
+using System.Globalization;
 
 namespace Nexabode.Views;
 
@@ -18,6 +19,8 @@ public partial class TenantsPage : Page
         public DateOnly? MoveOut { get; set; }
         public decimal Rent { get; set; }
         public decimal Deposit { get; set; }
+        public decimal DepositRefunded { get; set; }
+        public DateOnly? DepositRefundedOn { get; set; }
     }
 
     public class TenantRow
@@ -63,6 +66,8 @@ public partial class TenantsPage : Page
     private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
 
     private static string? Blank(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static bool TryMoney(string text, out decimal value) =>
+    decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value) && value >= 0;
 
     private TenantRow? Current => TenantGrid.SelectedItem as TenantRow;
 
@@ -143,7 +148,9 @@ public partial class TenantsPage : Page
                     MoveIn = o.MoveInDate,
                     MoveOut = o.MoveOutDate,
                     Rent = o.AgreedRent,
-                    Deposit = o.Deposit
+                    Deposit = o.Deposit,
+                    DepositRefunded = o.DepositRefunded,
+                    DepositRefundedOn = o.DepositRefundedOn
                 }).ToList()
             };
         }).ToList();
@@ -258,6 +265,9 @@ public partial class TenantsPage : Page
         MoveInButton.IsEnabled = t.Status is "Moved out" or "No stay yet";
         MoveOutButton.IsEnabled = t.Status is "Staying" or "Reserved";
         MoveOutButton.Content = t.Status == "Reserved" ? "Cancel reservation" : "Move out";
+        EditStayButton.IsEnabled = t.Stays.Count > 0;
+        RefundDepositButton.IsEnabled = t.Stays.Any(s => s.Deposit > 0);
+        ApplyDepositButton.IsEnabled = t.Stays.Any(s => s.Deposit > 0);
 
         HistoryPanel.Children.Clear();
         if (t.Stays.Count == 0)
@@ -280,7 +290,13 @@ public partial class TenantsPage : Page
                 Foreground = Res("AppTextBrush")
             });
             var details = $"{Fmt.Date(stay.MoveIn)} to {(stay.MoveOut is DateOnly mo ? Fmt.Date(mo) : "present")}  -  {Fmt.Peso(stay.Rent)} / month";
-            if (stay.Deposit > 0) details += $"  -  Deposit {Fmt.Peso(stay.Deposit)}";
+            if (stay.Deposit > 0)
+            {
+                details += $"  -  Deposit {Fmt.Peso(stay.Deposit)}";
+                if (stay.DepositRefunded > 0)
+                    details += $" (refunded {Fmt.Peso(stay.DepositRefunded)}" +
+                               (stay.DepositRefundedOn is DateOnly refundedOn ? $" on {Fmt.Date(refundedOn)}" : "") + ")";
+            }
             box.Children.Add(new TextBlock
             {
                 Text = details,
@@ -360,6 +376,249 @@ public partial class TenantsPage : Page
         entity.SchoolOrWork = Blank(v[3]);
         entity.Notes = Blank(v[4]);
         db.SaveChanges();
+
+        Reload(t.Id);
+    }
+
+    private void EditStay_Click(object sender, RoutedEventArgs e)
+    {
+        var t = Current;
+        if (t == null) return;
+
+        using var db = new AppDbContext();
+        var stay = db.Occupancies
+            .Include(o => o.Bed).ThenInclude(b => b.Room)
+            .Where(o => o.TenantId == t.Id)
+            .ToList()
+            .OrderByDescending(o => o.MoveInDate)
+            .FirstOrDefault();
+        if (stay == null) return;
+
+        // Any charge at all (even a voided one) means billing has started for this stay.
+        var hasCharges = db.Charges.IgnoreQueryFilters().Any(c => c.OccupancyId == stay.Id);
+
+        DepositSummary depositSummary;
+        using (var sumDb = new AppDbContext())
+            depositSummary = DepositService.Summary(sumDb, stay.TenantId);
+
+        string? Validate(string[] vals)
+        {
+            if (!TryMoney(vals[0], out _))
+                return "Enter the monthly rent as a number (e.g. 1500).";
+            decimal newDeposit = 0;
+            if (vals[1].Trim() != "" && !TryMoney(vals[1], out newDeposit))
+                return "Enter the deposit as a number, or leave it blank.";
+            var minDeposit = Math.Max(stay.DepositRefunded, stay.Deposit - depositSummary.Held);
+            if (newDeposit < minDeposit)
+                return $"The deposit can't be less than {Fmt.Peso(minDeposit)}, the part already refunded or used for unpaid charges.";
+            if (!DateOnly.TryParse(vals[2].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var date))
+                return "Enter the move-in date like 2026-10-14.";
+
+            if (date == stay.MoveInDate) return null;   // date unchanged: nothing more to check
+
+            if (hasCharges)
+                return "Billing already exists for this stay, so its move-in date can't be changed. " +
+                       "Rent and deposit can still be edited.";
+
+            if (stay.MoveOutDate is DateOnly outDate && date > outDate)
+                return $"The move-in date can't be after the move-out date ({Fmt.Date(outDate)}).";
+
+            // The tenant's own earlier stays must be over before this one starts.
+            var tenantOuts = db.Occupancies
+                .Where(o => o.TenantId == stay.TenantId && o.Id != stay.Id
+                            && o.MoveInDate < stay.MoveInDate && o.MoveOutDate != null)
+                .Select(o => o.MoveOutDate)
+                .ToList();
+            if (tenantOuts.Count > 0 && date < tenantOuts.Max()!.Value)
+                return $"The move-in date can't be before this tenant's previous move-out ({Fmt.Date(tenantOuts.Max()!.Value)}).";
+
+            // So must the bed's earlier occupants.
+            var bedOuts = db.Occupancies
+                .Where(o => o.BedId == stay.BedId && o.Id != stay.Id
+                            && o.MoveInDate < stay.MoveInDate && o.MoveOutDate != null)
+                .Select(o => o.MoveOutDate)
+                .ToList();
+            if (bedOuts.Count > 0 && date < bedOuts.Max()!.Value)
+                return $"That bed was occupied until {Fmt.Date(bedOuts.Max()!.Value)}. The move-in date can't be before that.";
+
+            return null;
+        }
+
+        var note = $"{stay.Bed.Room.RoomName} / {stay.Bed.BedLabel}. Rent changes apply to rent generated from now on; " +
+                   "charges that already exist keep their amounts." +
+                   (hasCharges ? "\nThe move-in date is locked because billing already exists for this stay." : "");
+
+        var v = FormDialog.Ask(Owner, $"Edit stay - {t.FullName}", "Save changes",
+            new[]
+            {
+            ("Monthly rent", stay.AgreedRent.ToString("0.##", CultureInfo.CurrentCulture)),
+            ("Deposit (blank for none)", stay.Deposit == 0 ? "" : stay.Deposit.ToString("0.##", CultureInfo.CurrentCulture)),
+            ("Move-in date (e.g. 2026-10-14)", stay.MoveInDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+            },
+            Validate, note);
+        if (v == null) return;
+
+        TryMoney(v[0], out var rent);
+        decimal deposit = 0;
+        if (v[1].Trim() != "") TryMoney(v[1], out deposit);
+        DateOnly.TryParse(v[2].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var newDate);
+
+        stay.AgreedRent = Math.Round(rent, 2);
+        stay.Deposit = Math.Round(deposit, 2);
+        stay.MoveInDate = newDate;
+        db.SaveChanges();
+
+        Reload(t.Id);
+    }
+
+    private void RefundDeposit_Click(object sender, RoutedEventArgs e)
+    {
+        var t = Current;
+        if (t == null) return;
+
+        using var db = new AppDbContext();
+        var stay = db.Occupancies
+            .Include(o => o.Bed).ThenInclude(b => b.Room)
+            .Where(o => o.TenantId == t.Id)
+            .ToList()
+            .Where(o => o.Deposit > 0)
+            .OrderByDescending(o => o.MoveInDate)
+            .FirstOrDefault();
+        if (stay == null) return;
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        DepositSummary summary;
+        using (var sumDb = new AppDbContext())
+            summary = DepositService.Summary(sumDb, t.Id);
+        var maxTotal = Math.Max(0, Math.Min(stay.Deposit,
+            summary.Paid - (summary.Refunded - stay.DepositRefunded) - summary.Applied));
+
+        string? Validate(string[] vals)
+        {
+            if (!TryMoney(vals[0], out var total))
+                return "Enter the total refunded as a number (use 0 for none).";
+            if (total > maxTotal)
+                return $"The refund can't be more than {Fmt.Peso(maxTotal)}" +
+                       (summary.Applied > 0 ? $" ({Fmt.Peso(summary.Applied)} of the deposit was used for unpaid charges)." : ".");
+            if (total > 0)
+            {
+                if (!DateOnly.TryParse(vals[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var date))
+                    return "Enter the refund date like 2026-10-14.";
+                if (date > today)
+                    return "The refund date can't be in the future.";
+            }
+            return null;
+        }
+
+        var note = $"{stay.Bed.Room.RoomName} / {stay.Bed.BedLabel}, stay from {Fmt.Date(stay.MoveInDate)}.\n" +
+                   $"Deposit paid: {Fmt.Peso(stay.Deposit)}. Refunded so far: {Fmt.Peso(stay.DepositRefunded)}.\n" +
+                   "Enter the TOTAL refunded so far. Enter 0 to remove a refund recorded by mistake.";
+
+        var first = stay.DepositRefunded == 0 ? maxTotal : stay.DepositRefunded;
+
+        var v = FormDialog.Ask(Owner, $"Deposit refund - {t.FullName}", "Save",
+            new[]
+            {
+            ("Total refunded so far", first.ToString("0.##", CultureInfo.CurrentCulture)),
+            ("Refund date (e.g. 2026-10-14)", (stay.DepositRefundedOn ?? today).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+            ("Note (optional)", stay.DepositRefundNote ?? "")
+            },
+            Validate, note);
+        if (v == null) return;
+
+        TryMoney(v[0], out var newTotal);
+        newTotal = Math.Round(newTotal, 2);
+
+        if (newTotal == 0)
+        {
+            stay.DepositRefunded = 0;
+            stay.DepositRefundedOn = null;
+            stay.DepositRefundNote = null;
+        }
+        else
+        {
+            DateOnly.TryParse(v[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var refundDate);
+            stay.DepositRefunded = newTotal;
+            stay.DepositRefundedOn = refundDate;
+            stay.DepositRefundNote = string.IsNullOrWhiteSpace(v[2]) ? null : v[2].Trim();
+        }
+
+        db.SaveChanges();
+        Reload(t.Id);
+    }
+
+    private void ApplyDeposit_Click(object sender, RoutedEventArgs e)
+    {
+        var t = Current;
+        if (t == null) return;
+
+        DepositSummary summary;
+        using (var db = new AppDbContext())
+            summary = DepositService.Summary(db, t.Id);
+
+        if (summary.Held <= 0)
+        {
+            Tell("There is no deposit left to use.");
+            return;
+        }
+        if (t.Balance <= 0)
+        {
+            Tell("This tenant has no unpaid charges, so there is nothing to apply the deposit to.");
+            return;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var suggested = Math.Min(summary.Held, t.Balance);
+
+        string? Validate(string[] vals)
+        {
+            if (!TryMoney(vals[0], out var amount) || amount <= 0)
+                return "Enter the amount to apply as a number greater than zero.";
+            if (amount > summary.Held)
+                return $"That is more than the deposit still held ({Fmt.Peso(summary.Held)}).";
+            if (amount > t.Balance)
+                return $"That is more than the unpaid balance ({Fmt.Peso(t.Balance)}).";
+            if (!DateOnly.TryParse(vals[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var date))
+                return "Enter the date like 2026-10-14.";
+            if (date > today)
+                return "The date can't be in the future.";
+            return null;
+        }
+
+        var note = $"Deposit still held: {Fmt.Peso(summary.Held)}. Unpaid balance: {Fmt.Peso(t.Balance)}.\n" +
+                   "It is paid against the oldest unpaid charges first, and recorded as a payment with the method \"Deposit\".";
+
+        var v = FormDialog.Ask(Owner, $"Apply deposit - {t.FullName}", "Apply",
+            new[]
+            {
+            ("Amount to apply", suggested.ToString("0.##", CultureInfo.CurrentCulture)),
+            ("Date (e.g. 2026-10-14)", today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+            ("Note (optional)", "")
+            },
+            Validate, note);
+        if (v == null) return;
+
+        TryMoney(v[0], out var applyAmount);
+        DateOnly.TryParse(v[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var applyDate);
+        var remarks = string.IsNullOrWhiteSpace(v[2]) ? "Deposit applied" : "Deposit applied - " + v[2].Trim();
+
+        try
+        {
+            using var db = new AppDbContext();   // a fresh context, so the check runs on current data
+            var error = DepositService.Apply(db, t.Id, Math.Round(applyAmount, 2), applyDate, remarks);
+            if (error != null)
+            {
+                Tell(error);
+                return;
+            }
+        }
+        catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            Tell("The deposit could not be applied because the data changed at the same moment. " +
+                 "Nothing was saved. Please try again.");
+            return;
+        }
 
         Reload(t.Id);
     }

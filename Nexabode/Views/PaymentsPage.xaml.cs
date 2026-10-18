@@ -42,7 +42,8 @@ public partial class PaymentsPage : Page
         public string? Remarks { get; set; }
         public string Details { get; set; } = "";
         public bool IsVoided { get; set; }
-        public string Status => IsVoided ? "Voided" : "Recorded";
+        public bool IsArchived { get; set; }
+        public string Status => IsVoided ? "Voided" : IsArchived ? "Archived" : "Recorded";
         public string PaidFor { get; set; } = "";
     }
 
@@ -91,7 +92,11 @@ public partial class PaymentsPage : Page
 
     private int? SelectedTenantId => (TenantCombo.SelectedItem as TenantOption)?.Id;
 
-    private PaymentRow? SelectedPayment => PaymentGrid.SelectedItem as PaymentRow;
+    private PaymentRow? SelectedPayment =>
+    PaymentGrid.SelectedItems.Count == 1 ? PaymentGrid.SelectedItem as PaymentRow : null;
+
+    private List<PaymentRow> SelectedPayments =>
+        PaymentGrid.SelectedItems.OfType<PaymentRow>().ToList();
 
     private void RefreshAll()
     {
@@ -186,17 +191,39 @@ public partial class PaymentsPage : Page
         if (_ready) LoadHistory();
     }
 
+    private void ShowArchived_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_ready) LoadHistory();
+    }
+
+    private void Archive_Click(object sender, RoutedEventArgs e) => SetArchived(true);
+
+    private void Unarchive_Click(object sender, RoutedEventArgs e) => SetArchived(false);
+
+    private void SetArchived(bool archived)
+    {
+        var ids = SelectedPayments.Where(r => r.IsArchived != archived).Select(r => r.Id).ToList();
+        if (ids.Count == 0) return;
+
+        using var db = new AppDbContext();
+        foreach (var payment in db.Payments.Where(p => ids.Contains(p.Id)).ToList())
+            payment.IsArchived = archived;
+        db.SaveChanges();
+
+        LoadHistory();
+    }
+
     private void LoadHistory()
     {
         var query = SearchBox.Text.Trim();
         var showVoided = ShowVoidedCheck.IsChecked == true;
-
+        var showArchived = ShowArchivedCheck.IsChecked == true;
         using var db = new AppDbContext();
         var rows = db.Payments
             .Include(p => p.Tenant)
             .Include(p => p.Allocations).ThenInclude(a => a.Charge).ThenInclude(c => c.UtilityBill)
             .ToList()
-            .Where(p => showVoided || !p.IsVoided)
+            .Where(p => (showVoided || !p.IsVoided) && (showArchived || !p.IsArchived))
             .Select(p => new PaymentRow
             {
                 Id = p.Id,
@@ -207,6 +234,7 @@ public partial class PaymentsPage : Page
                 Reference = p.ReferenceNo ?? "",
                 Remarks = p.Remarks,
                 IsVoided = p.IsVoided,
+                IsArchived = p.IsArchived,
                 PaidFor = string.Join(", ", p.Allocations
                     .Select(a => BillingHelpers.ItemOf(a.Charge))
                     .Distinct()
@@ -232,6 +260,10 @@ public partial class PaymentsPage : Page
         var selected = SelectedPayment;
         EditButton.IsEnabled = selected is { IsVoided: false };
         VoidButton.IsEnabled = selected is { IsVoided: false };
+
+        var rows = SelectedPayments;
+        ArchiveButton.IsEnabled = rows.Any(r => !r.IsArchived);
+        UnarchiveButton.IsEnabled = rows.Any(r => r.IsArchived);
     }
 
     private void EditPayment_Click(object sender, RoutedEventArgs e)
@@ -458,7 +490,8 @@ public partial class PaymentsPage : Page
     {
         var open = GetOpenCharges(db, tenantId);
         if (open.Count == 0)
-            return (null, "This tenant has no unpaid charges.");
+            return (null, "This tenant has no unpaid charges, so there is nothing to apply this payment to.\n\n" +
+               "Nexabode does not hold advance payments, so nothing was recorded.");
 
         if (chosenChargeId is int chargeId)
         {
@@ -477,11 +510,17 @@ public partial class PaymentsPage : Page
 
         var scopeBalance = scope.Sum(r => r.Balance);
         if (amount > scopeBalance)
-            return (null, item == null
-                ? $"The amount ({Fmt.Peso(amount)}) is more than the tenant's balance ({Fmt.Peso(scopeBalance)}).\n" +
-                  "Advance payments are not supported yet."
-                : $"The amount ({Fmt.Peso(amount)}) is more than the unpaid {item} ({Fmt.Peso(scopeBalance)}).\n" +
-                  "Lower the amount, or choose a different option.");
+        {
+            if (item != null)
+                return (null, $"The amount ({Fmt.Peso(amount)}) is more than the unpaid {item} ({Fmt.Peso(scopeBalance)}).\n" +
+                              "Lower the amount, or choose a different option.");
+
+            var excess = amount - scopeBalance;
+            return (null, $"The amount ({Fmt.Peso(amount)}) is {Fmt.Peso(excess)} more than the tenant's balance ({Fmt.Peso(scopeBalance)}).\n\n" +
+                          "Nexabode does not hold advance payments, so nothing was recorded.\n" +
+                          $"Record {Fmt.Peso(scopeBalance)} here and return the extra {Fmt.Peso(excess)} to the tenant. " +
+                          "If it is a payment for next month's rent, generate that rent in Rent Billing first, then record the payment again.");
+        }
 
         var allocations = PaymentRules.AllocateOldestFirst(amount, scope.Select(c => (c.Id, c.Balance)))
             .Select(a => new PaymentAllocation { ChargeId = a.ChargeId, AmountApplied = a.Applied })
