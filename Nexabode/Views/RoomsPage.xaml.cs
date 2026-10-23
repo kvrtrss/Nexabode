@@ -6,11 +6,20 @@ using System.Windows.Media;
 using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
 using Nexabode.Models;
+using Nexabode.Services;
 
 namespace Nexabode.Views;
 
 public partial class RoomsPage : Page
 {
+    public class OccupantInfo
+    {
+        public string Name { get; set; } = "";
+        public string BedLabel { get; set; } = "";
+        public DateOnly MoveIn { get; set; }
+        public bool IsReserved { get; set; }
+    }
+
     public class BedInfo
     {
         public int Id { get; set; }
@@ -18,6 +27,7 @@ public partial class RoomsPage : Page
         public decimal Rate { get; set; }
         public bool IsActive { get; set; }
         public string Status { get; set; } = "";
+        public List<OccupantInfo> Occupants { get; set; } = new();
     }
 
     public class RoomInfo
@@ -75,8 +85,6 @@ public partial class RoomsPage : Page
     private RoomInfo? CurrentRoom => _rooms.FirstOrDefault(r => r.Id == _roomId);
     private BedInfo? SelectedBed => BedGrid.SelectedItem as BedInfo;
 
-    // ---------- Loading and drawing ----------
-
     private void Reload(int? selectRoom = null)
     {
         if (selectRoom != null && selectRoom != _roomId)
@@ -89,11 +97,18 @@ public partial class RoomsPage : Page
 
         using var db = new AppDbContext();
 
-        var moveIns = db.Occupancies
+        var openStays = db.Occupancies
+            .Include(o => o.Tenant)
             .Where(o => o.MoveOutDate == null)
-            .ToList()
+            .ToList();
+
+        var moveIns = openStays
             .GroupBy(o => o.BedId)
             .ToDictionary(g => g.Key, g => g.Min(o => o.MoveInDate));
+
+        var staysByBed = openStays
+            .GroupBy(o => o.BedId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(o => o.MoveInDate).ToList());
 
         _rooms = db.Rooms
             .Include(r => r.Beds)
@@ -114,7 +129,8 @@ public partial class RoomsPage : Page
                         Label = b.BedLabel,
                         Rate = b.MonthlyRate,
                         IsActive = b.IsActive,
-                        Status = StatusOf(r, b, MoveInOf(moveIns, b.Id), today)
+                        Status = StatusOf(r, b, MoveInOf(moveIns, b.Id), today),
+                        Occupants = OccupantsOf(staysByBed, b, today)
                     })
                     .ToList()
             })
@@ -127,6 +143,17 @@ public partial class RoomsPage : Page
 
     private static DateOnly? MoveInOf(Dictionary<int, DateOnly> map, int bedId) =>
         map.TryGetValue(bedId, out var date) ? date : null;
+
+    private static List<OccupantInfo> OccupantsOf(Dictionary<int, List<Occupancy>> map, Bed bed, DateOnly today) =>
+    map.TryGetValue(bed.Id, out var stays)
+        ? stays.Select(o => new OccupantInfo
+        {
+            Name = o.Tenant.FullName,
+            BedLabel = bed.BedLabel,
+            MoveIn = o.MoveInDate,
+            IsReserved = o.MoveInDate > today
+        }).ToList()
+        : new List<OccupantInfo>();
 
     private void Render()
     {
@@ -323,12 +350,76 @@ public partial class RoomsPage : Page
         _bedId = keep;
 
         UpdateBedButtons();
+        RenderOccupants();
+    }
+
+    // Shows who is staying in the selected bed, or in the whole room when no bed is selected.
+    private void RenderOccupants()
+    {
+        if (OccupantPanel == null) return;   // the page is still being built
+
+        var room = CurrentRoom;
+        if (room == null) return;
+
+        var bed = room.Beds.FirstOrDefault(b => b.Id == _bedId);
+
+        List<OccupantInfo> shown;
+        if (bed != null)
+        {
+            OccupantTitle.Text = $"Staying in {bed.Label}";
+            shown = bed.Occupants;
+        }
+        else
+        {
+            OccupantTitle.Text = $"Staying in {room.Name}";
+            shown = room.Beds.SelectMany(b => b.Occupants).ToList();
+        }
+
+        OccupantPanel.Children.Clear();
+
+        if (shown.Count == 0)
+        {
+            OccupantPanel.Children.Add(new TextBlock
+            {
+                Text = bed != null
+                    ? "No one is staying in this bed right now."
+                    : "No one is staying in this room right now.",
+                Style = (Style)FindResource("MutedText"),
+                TextWrapping = TextWrapping.Wrap
+            });
+            return;
+        }
+
+        foreach (var occupant in shown)
+        {
+            // With a bed selected the bed is already known, so only the date is shown.
+            var detail = bed != null ? "" : occupant.BedLabel + "  -  ";
+            detail += occupant.IsReserved
+                ? $"Reserved, moves in {Fmt.Date(occupant.MoveIn)}"
+                : $"Since {Fmt.Date(occupant.MoveIn)}";
+
+            var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
+            stack.Children.Add(new TextBlock
+            {
+                Text = occupant.Name,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Res("AppTextBrush")
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = detail,
+                Style = (Style)FindResource("MutedText"),
+                FontSize = 12.5
+            });
+            OccupantPanel.Children.Add(stack);
+        }
     }
 
     private void BedGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         _bedId = SelectedBed?.Id;
         UpdateBedButtons();
+        RenderOccupants();
     }
 
     // Each button is enabled only when it applies to the current selection.

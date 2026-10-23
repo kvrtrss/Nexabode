@@ -84,6 +84,17 @@
                             <ui:Button x:Name="StartMaintButton" Content="Start maintenance" Click="StartMaintenance_Click" Margin="0,0,8,8" />
                             <ui:Button x:Name="EndMaintButton" Content="End maintenance" Click="EndMaintenance_Click" Margin="0,0,0,8" />
                         </WrapPanel>
+
+                        <!-- Who is staying here right now -->
+                        <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0"
+        Margin="0,8,0,0" Padding="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock x:Name="OccupantTitle" Style="{StaticResource SectionTitle}"
+                   FontSize="15" Margin="0,0,0,8" />
+                                <StackPanel x:Name="OccupantPanel" />
+                            </StackPanel>
+                        </Border>
+                        
                     </StackPanel>
                 </Grid>
             </ui:Card>
