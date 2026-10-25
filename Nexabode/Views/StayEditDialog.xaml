@@ -1,0 +1,62 @@
+﻿<Window x:Class="Nexabode.Views.StayEditDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Width="480" SizeToContent="Height" MaxHeight="760" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="24">
+            <TextBlock x:Name="TitleText" Style="{StaticResource SectionTitle}"
+                       FontSize="18" Margin="0,0,0,6" />
+            <TextBlock x:Name="NoteText" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                       Visibility="Collapsed" Margin="0,0,0,8" />
+
+            <TextBlock Text="Bed" Style="{StaticResource MutedText}" Margin="0,10,0,4" />
+            <ComboBox x:Name="BedCombo" DisplayMemberPath="Display" Margin="0,0,0,12" />
+
+            <TextBlock Text="Move-in date" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <DatePicker x:Name="MoveInPicker" Margin="0,0,0,12" />
+
+            <TextBlock Text="Move-out date (the tenant's last day in the bed)"
+                       Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <CheckBox x:Name="OngoingCheck" Content="Ongoing stay (no move-out date)"
+                      Click="Ongoing_Click" Margin="0,0,0,6" />
+            <DatePicker x:Name="MoveOutPicker" Margin="0,0,0,12" />
+
+            <TextBlock Text="Agreed monthly rent" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <ui:TextBox x:Name="RentBox" Margin="0,0,0,12" />
+
+            <TextBlock Text="Deposit (blank for none)" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <ui:TextBox x:Name="DepositBox" Margin="0,0,0,12" />
+
+            <TextBlock Text="Reason for this change (required, saved in the audit trail)"
+                       Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <ui:TextBox x:Name="ReasonBox" Margin="0,0,0,12" />
+
+            <Border x:Name="ConflictPanel" Visibility="Collapsed" Margin="0,0,0,12" Padding="12"
+                    BorderBrush="{DynamicResource WarningBrush}" BorderThickness="1" CornerRadius="6">
+                <StackPanel>
+                    <TextBlock Text="Overlap warning" FontWeight="SemiBold"
+                               Foreground="{DynamicResource WarningBrush}" Margin="0,0,0,6" />
+                    <TextBlock x:Name="ConflictText" TextWrapping="Wrap"
+                               Foreground="{DynamicResource AppTextBrush}" Margin="0,0,0,10" />
+                    <CheckBox x:Name="ExceptionCheck">
+                        <TextBlock TextWrapping="Wrap"
+                                   Text="I understand these stays overlap. Save this as an exception and record it in the audit trail." />
+                    </CheckBox>
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="ErrorText" Foreground="{DynamicResource DangerBrush}"
+                       TextWrapping="Wrap" Visibility="Collapsed" Margin="0,0,0,8" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                <ui:Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
+                <ui:Button x:Name="OkButton" Content="Save changes" Appearance="Primary"
+                           IsDefault="True" Click="Ok_Click" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

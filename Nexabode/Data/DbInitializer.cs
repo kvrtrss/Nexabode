@@ -25,7 +25,9 @@ public static class DbInitializer
         if (!hasData)
             db.Database.EnsureCreated();   // creates the encrypted DB and all tables
 
+        if (hasData) BackupBeforeUpgrade(db);
         UpgradeSchema(db);
+
         var warnings = AddSafetyRules(db);
 
         if (!db.AdminUsers.Any())
@@ -57,9 +59,28 @@ public static class DbInitializer
         AddColumnIfMissing(db, "Occupancies", "DepositRefundedOn", "TEXT NULL");
         AddColumnIfMissing(db, "Occupancies", "DepositRefundNote", "TEXT NULL");
         AddColumnIfMissing(db, "Payments", "Source", "TEXT NULL");
+        AddColumnIfMissing(db, "Payments", "AmountReceived", "TEXT NULL");
         AddColumnIfMissing(db, "Charges", "IsArchived", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "Charges", "AdjustsChargeId", "INTEGER NULL");
         AddColumnIfMissing(db, "Payments", "IsArchived", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "UtilityBills", "IsArchived", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "UtilityBills", "PeriodStart", "TEXT NULL");
+        AddColumnIfMissing(db, "UtilityBills", "PeriodEnd", "TEXT NULL");
+        db.Database.ExecuteSqlRaw(
+        "CREATE TABLE IF NOT EXISTS AuditLog (" +
+        "Id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+        "ChangedAt TEXT NOT NULL, " +
+        "Administrator TEXT NOT NULL, " +
+        "EntityType TEXT NOT NULL, " +
+        "EntityId INTEGER NOT NULL, " +
+        "TenantId INTEGER NULL, " +
+        "Field TEXT NOT NULL, " +
+        "OldValue TEXT NULL, " +
+        "NewValue TEXT NULL, " +
+        "Reason TEXT NOT NULL, " +
+        "IsConflictException INTEGER NOT NULL DEFAULT 0)");
+            db.Database.ExecuteSqlRaw(
+                "CREATE INDEX IF NOT EXISTS IX_AuditLog_Entity ON AuditLog (EntityType, EntityId)");
     }
 
     // Rules the database itself enforces, so even two writers at once can't create duplicates.
@@ -101,12 +122,52 @@ public static class DbInitializer
 
     public static int CountActiveSafetyRules(AppDbContext db) => SafetyRuleNames.Count(name => IndexExists(db, name));
 
+    private static bool TableExists(AppDbContext db, string name) =>
+    db.Database
+        .SqlQuery<int>($"SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'table' AND name = '{name}'")
+        .AsEnumerable()
+        .First() > 0;
+
+    // Copies the encrypted database before its first upgrade. If the copy fails, the upgrade is stopped.
+    private static void BackupBeforeUpgrade(AppDbContext db)
+    {
+        if (TableExists(db, "AuditLog") &&
+            ColumnExists(db, "Charges", "AdjustsChargeId") &&
+            ColumnExists(db, "UtilityBills", "PeriodStart") &&
+            ColumnExists(db, "Payments", "AmountReceived")) return;
+
+        try
+        {
+            db.Database.ExecuteSqlRaw("PRAGMA wal_checkpoint(TRUNCATE);");
+
+            var folder = Path.Combine(DatabaseKeyProvider.AppFolder, "SafetyCopies");
+            Directory.CreateDirectory(folder);
+            var target = Path.Combine(folder, $"before-upgrade-{DateTime.Now:yyyyMMdd-HHmmss}.db");
+
+            using var source = new FileStream(DatabaseKeyProvider.DbPath, FileMode.Open,
+                                              FileAccess.Read, FileShare.ReadWrite);
+            using var copy = new FileStream(target, FileMode.CreateNew, FileAccess.Write);
+            source.CopyTo(copy);
+        }
+        catch (Exception ex)
+        {
+            throw new IOException("A safety copy of your data could not be saved, so the upgrade was stopped. " +
+                                  ex.Message, ex);
+        }
+    }
+
 #pragma warning disable EF1002   // the table, column, and index names below are fixed constants, never user input
     private static bool IndexExists(AppDbContext db, string name) =>
         db.Database
             .SqlQueryRaw<int>($"SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'index' AND name = '{name}'")
             .AsEnumerable()
             .First() > 0;
+
+    private static bool ColumnExists(AppDbContext db, string table, string column) =>
+    db.Database
+        .SqlQueryRaw<int>($"SELECT COUNT(*) AS Value FROM pragma_table_info('{table}') WHERE name = '{column}'")
+        .AsEnumerable()
+        .First() > 0;
 
     // Creates the index unless it exists, or unless the data already breaks the rule (then it returns a warning).
     private static string? CreateIndexIfSafe(AppDbContext db, string indexName, string createSql,

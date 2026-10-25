@@ -16,14 +16,36 @@ public static class BillingHelpers
     public static string MonthKey(DateOnly monthStart) =>
         monthStart.ToString("yyyy-MM", CultureInfo.InvariantCulture);
 
-    // Newest first: next month, this month, then 6 months back.
+    // Newest first: next month, this month, then back to the month of the earliest stay (at least 6 months).
     public static List<MonthOption> BuildMonths()
     {
         var thisMonth = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1);
-        return Enumerable.Range(-6, 8)
-            .Select(i => new MonthOption { Start = thisMonth.AddMonths(i) })
-            .Reverse()
-            .ToList();
+        var earliest = thisMonth.AddMonths(-6);
+
+        try
+        {
+            using var db = new AppDbContext();
+            var firstMoveIn = db.Occupancies
+                .OrderBy(o => o.MoveInDate)
+                .Select(o => (DateOnly?)o.MoveInDate)
+                .FirstOrDefault();
+
+            if (firstMoveIn is DateOnly first)
+            {
+                var firstMonth = new DateOnly(first.Year, first.Month, 1);
+                var limit = thisMonth.AddMonths(-120);   // never more than 10 years back
+                if (firstMonth < earliest) earliest = firstMonth < limit ? limit : firstMonth;
+            }
+        }
+        catch
+        {
+            // the usual 6 months are enough if the stays can't be read
+        }
+
+        var months = new List<MonthOption>();
+        for (var m = thisMonth.AddMonths(1); m >= earliest; m = m.AddMonths(-1))
+            months.Add(new MonthOption { Start = m });
+        return months;
     }
 
     // The usual window plus every month that has billing records (used when archived records are shown).

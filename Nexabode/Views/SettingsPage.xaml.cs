@@ -167,4 +167,25 @@ public partial class SettingsPage : Page
         MainWindow.SkipBackupPrompt = true;   // no "back up?" prompt right after a restore
         Application.Current.Shutdown();
     }
+
+    private void CheckStays_Click(object sender, RoutedEventArgs e)
+    {
+        var problems = StayConflicts.ScanExisting();
+        if (problems.Count == 0)
+        {
+            MessageBox.Show("No overlapping or invalid stays were found.", "Nexabode",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var more = problems.Count > 15 ? $"\n\n...and {problems.Count - 15} more." : "";
+        MessageBox.Show($"{problems.Count} problem(s) found. Nothing was changed.\n\n" +
+                        string.Join("\n\n", problems.Take(15)) + more +
+                        "\n\nTo fix one: open the tenant, click Edit this stay on one of the stays, and correct its dates. " +
+                        "A correction that makes an overlap smaller never needs an exception.",
+            "Nexabode", MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+    private void ViewHistory_Click(object sender, RoutedEventArgs e) =>
+    AuditHistoryWindow.ShowFor(Owner);
+
 }

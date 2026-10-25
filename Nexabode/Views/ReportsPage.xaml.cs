@@ -431,14 +431,15 @@ public partial class ReportsPage : Page
 
         var active = db.Occupancies
             .Include(o => o.Tenant)
-            .Where(o => o.MoveOutDate == null)
+            .CurrentOrUpcoming()
             .ToList()
             .GroupBy(o => o.BedId)
-            .ToDictionary(g => g.Key, g => g.First());
+            .ToDictionary(g => g.Key, g => g.OrderBy(o => o.MoveInDate).ToList());
 
         var rows = beds.Select(b =>
         {
-            active.TryGetValue(b.Id, out var occ);
+            active.TryGetValue(b.Id, out var stays);
+            var occ = stays?.FirstOrDefault();
             var status = !b.IsActive || !b.Room.IsActive ? "Inactive"
                        : b.IsMaintenance ? "Maintenance"
                        : occ == null ? "Available"
@@ -451,7 +452,8 @@ public partial class ReportsPage : Page
                     b.Room.RoomName,
                     b.BedLabel,
                     status,
-                    occ?.Tenant.FullName ?? "-",
+                        stays == null ? "-" : string.Join(" / ", stays.Select(s => s.Tenant.FullName))
+                        + (stays.Count > 1 ? " (overlap)" : ""),
                     occ == null ? "-" : D(occ.MoveInDate),
                     Money(occ?.AgreedRent ?? b.MonthlyRate)
                 }

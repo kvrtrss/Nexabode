@@ -18,6 +18,8 @@ public partial class RoomsPage : Page
         public string BedLabel { get; set; } = "";
         public DateOnly MoveIn { get; set; }
         public bool IsReserved { get; set; }
+        public DateOnly? MoveOut { get; set; }
+        public string OverlapNote { get; set; } = "";
     }
 
     public class BedInfo
@@ -26,6 +28,7 @@ public partial class RoomsPage : Page
         public string Label { get; set; } = "";
         public decimal Rate { get; set; }
         public bool IsActive { get; set; }
+        public bool HasOverlap => Occupants.Any(o => o.OverlapNote != "");
         public string Status { get; set; } = "";
         public List<OccupantInfo> Occupants { get; set; } = new();
     }
@@ -99,7 +102,7 @@ public partial class RoomsPage : Page
 
         var openStays = db.Occupancies
             .Include(o => o.Tenant)
-            .Where(o => o.MoveOutDate == null)
+            .CurrentOrUpcoming(today)
             .ToList();
 
         var moveIns = openStays
@@ -144,16 +147,39 @@ public partial class RoomsPage : Page
     private static DateOnly? MoveInOf(Dictionary<int, DateOnly> map, int bedId) =>
         map.TryGetValue(bedId, out var date) ? date : null;
 
-    private static List<OccupantInfo> OccupantsOf(Dictionary<int, List<Occupancy>> map, Bed bed, DateOnly today) =>
-    map.TryGetValue(bed.Id, out var stays)
-        ? stays.Select(o => new OccupantInfo
+    private static string SpanText(DateSpan s) =>
+        s.End is DateOnly e
+            ? (e == s.Start ? Fmt.Date(s.Start) : $"{Fmt.Date(s.Start)} to {Fmt.Date(e)}")
+            : $"{Fmt.Date(s.Start)} onward";
+
+    private static List<OccupantInfo> OccupantsOf(Dictionary<int, List<Occupancy>> map, Bed bed, DateOnly today)
+    {
+        if (!map.TryGetValue(bed.Id, out var stays)) return new List<OccupantInfo>();
+
+        return stays.Select(o =>
         {
-            Name = o.Tenant.FullName,
-            BedLabel = bed.BedLabel,
-            MoveIn = o.MoveInDate,
-            IsReserved = o.MoveInDate > today
-        }).ToList()
-        : new List<OccupantInfo>();
+            var range = new StayRange(o.Id, o.MoveInDate, o.MoveOutDate);
+
+            // Other stays on this bed that share days with this one.
+            var clashes = stays
+                .Where(other => other.Id != o.Id)
+                .Select(other => (Other: other,
+                                  Span: StayRules.Overlap(range, new StayRange(other.Id, other.MoveInDate, other.MoveOutDate))))
+                .Where(x => x.Span != null)
+                .Select(x => $"{x.Other.Tenant.FullName} ({SpanText(x.Span!.Value)})")
+                .ToList();
+
+            return new OccupantInfo
+            {
+                Name = o.Tenant.FullName,
+                BedLabel = bed.BedLabel,
+                MoveIn = o.MoveInDate,
+                MoveOut = o.MoveOutDate,
+                IsReserved = o.MoveInDate > today,
+                OverlapNote = clashes.Count == 0 ? "" : "Overlaps with " + string.Join(", ", clashes)
+            };
+        }).ToList();
+    }
 
     private void Render()
     {
@@ -313,10 +339,10 @@ public partial class RoomsPage : Page
             Margin = new Thickness(0, 0, 8, 8),
             CornerRadius = new CornerRadius(8),
             Background = Res(tone + "SoftBrush"),
-            ToolTip = $"{bed.Label}: {bed.Status}",
+            ToolTip = bed.HasOverlap ? $"{bed.Label}: {bed.Status} - overlapping stays, check the occupants" : $"{bed.Label}: {bed.Status}",
             Child = new TextBlock
             {
-                Text = bed.Label,
+                Text = bed.HasOverlap ? "⚠ " + bed.Label : bed.Label,
                 FontSize = 12.5,
                 FontWeight = FontWeights.SemiBold,
                 MaxWidth = 110,
@@ -392,11 +418,12 @@ public partial class RoomsPage : Page
 
         foreach (var occupant in shown)
         {
-            // With a bed selected the bed is already known, so only the date is shown.
+            // With a bed selected the bed is already known, so only the dates are shown.
             var detail = bed != null ? "" : occupant.BedLabel + "  -  ";
             detail += occupant.IsReserved
                 ? $"Reserved, moves in {Fmt.Date(occupant.MoveIn)}"
                 : $"Since {Fmt.Date(occupant.MoveIn)}";
+            if (occupant.MoveOut is DateOnly leaving) detail += $", until {Fmt.Date(leaving)}";
 
             var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
             stack.Children.Add(new TextBlock
@@ -411,6 +438,14 @@ public partial class RoomsPage : Page
                 Style = (Style)FindResource("MutedText"),
                 FontSize = 12.5
             });
+            if (occupant.OverlapNote != "")
+                stack.Children.Add(new TextBlock
+                {
+                    Text = occupant.OverlapNote,
+                    FontSize = 12.5,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = Res("DangerBrush")
+                });
             OccupantPanel.Children.Add(stack);
         }
     }
@@ -496,7 +531,7 @@ public partial class RoomsPage : Page
 
         using var db = new AppDbContext();
 
-        if (room.IsActive && db.Occupancies.Any(o => o.MoveOutDate == null && o.Bed.RoomId == room.Id))
+        if (room.IsActive && db.Occupancies.CurrentOrUpcoming().Any(o => o.Bed.RoomId == room.Id))
         {
             Tell("This room still has tenants (or upcoming move-ins). Move them out first.");
             return;
@@ -582,7 +617,7 @@ public partial class RoomsPage : Page
         if (bed == null) return;
 
         using var db = new AppDbContext();
-        if (db.Occupancies.Any(o => o.BedId == bed.Id && o.MoveOutDate == null))
+        if (db.Occupancies.CurrentOrUpcoming().Any(o => o.BedId == bed.Id))
         {
             Tell("This bed has a tenant (or an upcoming move-in). Move the tenant out first.");
             return;
@@ -612,7 +647,7 @@ public partial class RoomsPage : Page
         if (bed == null) return;
 
         using var db = new AppDbContext();
-        if (db.Occupancies.Any(o => o.BedId == bed.Id && o.MoveOutDate == null))
+        if (db.Occupancies.CurrentOrUpcoming().Any(o => o.BedId == bed.Id))
         {
             Tell("This bed has a tenant. Move the tenant out before starting maintenance.");
             return;

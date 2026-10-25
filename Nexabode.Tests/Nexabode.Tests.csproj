@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+  
+  <ItemGroup>
+  <Compile Include="..\Nexabode\Services\StayRules.cs" Link="StayRules.cs" />
+  <Compile Include="..\Nexabode\Services\RentAdjustmentRules.cs" Link="RentAdjustmentRules.cs" />
+  <Compile Include="..\Nexabode\Services\UtilityRules.cs" Link="UtilityRules.cs" />
+  <Compile Include="..\Nexabode\Services\PaymentRules.cs" Link="PaymentRules.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

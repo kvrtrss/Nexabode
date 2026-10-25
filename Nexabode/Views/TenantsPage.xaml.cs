@@ -14,6 +14,7 @@ public partial class TenantsPage : Page
 {
     public class StayInfo
     {
+        public int Id { get; set; }
         public string Bed { get; set; } = "";
         public DateOnly MoveIn { get; set; }
         public DateOnly? MoveOut { get; set; }
@@ -115,7 +116,11 @@ public partial class TenantsPage : Page
             charges.TryGetValue(t.Id, out var tenantCharges);
             tenantCharges ??= new();
 
-            var active = list.FirstOrDefault(o => o.MoveOutDate == null);
+            var currentStays = list
+                .Where(o => o.MoveOutDate == null || o.MoveOutDate >= today)
+                .OrderBy(o => o.MoveInDate)
+                .ToList();
+            var active = currentStays.FirstOrDefault();
             var status = active != null
                 ? (active.MoveInDate > today ? "Reserved" : "Staying")
                 : list.Count > 0 ? "Moved out" : "No stay yet";
@@ -138,12 +143,17 @@ public partial class TenantsPage : Page
                 Status = status,
                 Balance = balance,
                 Overdue = overdue,
-                CurrentBed = active != null ? BedName(active) : "-",
+                CurrentBed = active != null
+                    ? BedName(active)
+                      + (active.MoveOutDate is DateOnly until ? $" (until {Fmt.Date(until)})" : "")
+                      + (currentStays.Count > 1 ? $"  +{currentStays.Count - 1} more stay(s)" : "")
+                    : "-",
                 MoveInText = active != null ? Fmt.Date(active.MoveInDate) : "-",
                 OccupancyId = active?.Id,
                 ActiveMoveIn = active?.MoveInDate,
                 Stays = list.Select(o => new StayInfo
                 {
+                    Id = o.Id,
                     Bed = BedName(o),
                     MoveIn = o.MoveInDate,
                     MoveOut = o.MoveOutDate,
@@ -260,6 +270,10 @@ public partial class TenantsPage : Page
         AddLine("Current bed", t.CurrentBed);
         AddLine("Balance", Fmt.Peso(t.Balance), t.Overdue > 0 ? "Danger" : t.Balance > 0 ? "Warning" : "Success");
         if (t.Overdue > 0) AddLine("Overdue", Fmt.Peso(t.Overdue), "Danger");
+        // Two of this tenant's stays on the same days: point it out so it can be corrected.
+        var stayRanges = t.Stays.Select(s => new StayRange(s.Id, s.MoveIn, s.MoveOut)).ToList();
+        if (stayRanges.Any(a => stayRanges.Any(b => a.Id < b.Id && StayRules.Overlaps(a, b))))
+            AddLine("Check", "Two of this tenant's stays overlap. Use Edit this stay below to correct the dates.", "Danger");
         if (!string.IsNullOrWhiteSpace(t.Notes)) AddLine("Notes", t.Notes!);
 
         MoveInButton.IsEnabled = t.Status is "Moved out" or "No stay yet";
@@ -302,6 +316,16 @@ public partial class TenantsPage : Page
                 Text = details,
                 Style = (Style)FindResource("MutedText")
             });
+
+            var editLink = new Wpf.Ui.Controls.Button
+            {
+                Content = "Edit this stay",
+                Margin = new Thickness(0, 6, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            editLink.Click += (_, _) => EditStay(stay.Id);
+            box.Children.Add(editLink);
+
             HistoryPanel.Children.Add(box);
         }
     }
@@ -383,92 +407,93 @@ public partial class TenantsPage : Page
     private void EditStay_Click(object sender, RoutedEventArgs e)
     {
         var t = Current;
+        if (t == null || t.Stays.Count == 0) return;
+
+        // The stay the tenant is in now (the one Move out acts on), otherwise their most recent one.
+        var id = t.OccupancyId ?? t.Stays.OrderByDescending(s => s.MoveIn).First().Id;
+        EditStay(id);
+    }
+
+    private void EditStay(int occupancyId)
+    {
+        var t = Current;
         if (t == null) return;
 
         using var db = new AppDbContext();
-        var stay = db.Occupancies
-            .Include(o => o.Bed).ThenInclude(b => b.Room)
-            .Where(o => o.TenantId == t.Id)
-            .ToList()
-            .OrderByDescending(o => o.MoveInDate)
-            .FirstOrDefault();
-        if (stay == null) return;
+        var stay = db.Occupancies.Find(occupancyId);
+        if (stay == null || stay.TenantId != t.Id) return;
 
-        // Any charge at all (even a voided one) means billing has started for this stay.
-        var hasCharges = db.Charges.IgnoreQueryFilters().Any(c => c.OccupancyId == stay.Id);
+        var chargeCount = db.Charges.IgnoreQueryFilters().Count(c => c.OccupancyId == stay.Id);
 
         DepositSummary depositSummary;
         using (var sumDb = new AppDbContext())
             depositSummary = DepositService.Summary(sumDb, stay.TenantId);
+        var minDeposit = Math.Max(stay.DepositRefunded, stay.Deposit - depositSummary.Held);
 
-        string? Validate(string[] vals)
+        var beds = db.Beds
+            .Include(b => b.Room)
+            .ToList()
+            .Where(b => b.Id == stay.BedId || (b.IsActive && b.Room.IsActive && !b.IsMaintenance))
+            .OrderBy(b => b.Room.RoomName).ThenBy(b => b.BedLabel)
+            .Select(b => new BedChoice { Id = b.Id, Display = $"{b.Room.RoomName} - {b.BedLabel}", Rate = b.MonthlyRate })
+            .ToList();
+
+        var current = new StayEdit
         {
-            if (!TryMoney(vals[0], out _))
-                return "Enter the monthly rent as a number (e.g. 1500).";
-            decimal newDeposit = 0;
-            if (vals[1].Trim() != "" && !TryMoney(vals[1], out newDeposit))
-                return "Enter the deposit as a number, or leave it blank.";
-            var minDeposit = Math.Max(stay.DepositRefunded, stay.Deposit - depositSummary.Held);
-            if (newDeposit < minDeposit)
-                return $"The deposit can't be less than {Fmt.Peso(minDeposit)}, the part already refunded or used for unpaid charges.";
-            if (!DateOnly.TryParse(vals[2].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var date))
-                return "Enter the move-in date like 2026-10-14.";
+            BedId = stay.BedId,
+            MoveIn = stay.MoveInDate,
+            MoveOut = stay.MoveOutDate,
+            Rent = stay.AgreedRent,
+            Deposit = stay.Deposit
+        };
 
-            if (date == stay.MoveInDate) return null;   // date unchanged: nothing more to check
+        var note = chargeCount > 0
+            ? $"This stay has {chargeCount} billing record(s). Changing its dates does not change them yet. " +
+              "Review them in Rent Billing and Billing Charges afterwards."
+            : null;
 
-            if (hasCharges)
-                return "Billing already exists for this stay, so its move-in date can't be changed. " +
-                       "Rent and deposit can still be edited.";
+        var result = StayEditDialog.Ask(Owner, $"Edit stay - {t.FullName}", note, beds, current,
+            hardCheck: r => r.Deposit < minDeposit
+                ? $"The deposit can't be less than {Fmt.Peso(minDeposit)}, the part already refunded or used for unpaid charges."
+                : null,
+            conflictText: r =>
+            {
+                using var check = new AppDbContext();
+                return StayEditService.DescribeConflicts(check, stay, r.BedId, r.MoveIn, r.MoveOut);
+            });
+        if (result == null) return;
 
-            if (stay.MoveOutDate is DateOnly outDate && date > outDate)
-                return $"The move-in date can't be after the move-out date ({Fmt.Date(outDate)}).";
+        var report = StayImpact.Analyze(db, stay, result);
+        if (report.HasBillingImpact && !ImpactDialog.Confirm(Owner, t.FullName, report.ToText()))
+            return;
 
-            // The tenant's own earlier stays must be over before this one starts.
-            var tenantOuts = db.Occupancies
-                .Where(o => o.TenantId == stay.TenantId && o.Id != stay.Id
-                            && o.MoveInDate < stay.MoveInDate && o.MoveOutDate != null)
-                .Select(o => o.MoveOutDate)
-                .ToList();
-            if (tenantOuts.Count > 0 && date < tenantOuts.Max()!.Value)
-                return $"The move-in date can't be before this tenant's previous move-out ({Fmt.Date(tenantOuts.Max()!.Value)}).";
-
-            // So must the bed's earlier occupants.
-            var bedOuts = db.Occupancies
-                .Where(o => o.BedId == stay.BedId && o.Id != stay.Id
-                            && o.MoveInDate < stay.MoveInDate && o.MoveOutDate != null)
-                .Select(o => o.MoveOutDate)
-                .ToList();
-            if (bedOuts.Count > 0 && date < bedOuts.Max()!.Value)
-                return $"That bed was occupied until {Fmt.Date(bedOuts.Max()!.Value)}. The move-in date can't be before that.";
-
-            return null;
+        List<string> billingDone;
+        try
+        {
+            StayEditService.Apply(db, stay, result);
+            billingDone = RentRecalculation.Apply(db, report.RentPlan, stay, result.Reason);
+            foreach (var billPlan in report.UtilityPlans)
+                billingDone.AddRange(UtilityRecalculation.Apply(db, billPlan, result.Reason));
+            db.SaveChanges();   // the stay, its billing corrections and the audit entries are saved together
+        }
+        catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            Tell("The stay could not be saved because the data changed at the same moment. " +
+                 "Nothing was saved. Please try again.");
+            return;
         }
 
-        var note = $"{stay.Bed.Room.RoomName} / {stay.Bed.BedLabel}. Rent changes apply to rent generated from now on; " +
-                   "charges that already exist keep their amounts." +
-                   (hasCharges ? "\nThe move-in date is locked because billing already exists for this stay." : "");
-
-        var v = FormDialog.Ask(Owner, $"Edit stay - {t.FullName}", "Save changes",
-            new[]
-            {
-            ("Monthly rent", stay.AgreedRent.ToString("0.##", CultureInfo.CurrentCulture)),
-            ("Deposit (blank for none)", stay.Deposit == 0 ? "" : stay.Deposit.ToString("0.##", CultureInfo.CurrentCulture)),
-            ("Move-in date (e.g. 2026-10-14)", stay.MoveInDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
-            },
-            Validate, note);
-        if (v == null) return;
-
-        TryMoney(v[0], out var rent);
-        decimal deposit = 0;
-        if (v[1].Trim() != "") TryMoney(v[1], out deposit);
-        DateOnly.TryParse(v[2].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var newDate);
-
-        stay.AgreedRent = Math.Round(rent, 2);
-        stay.Deposit = Math.Round(deposit, 2);
-        stay.MoveInDate = newDate;
-        db.SaveChanges();
-
         Reload(t.Id);
+
+        if (billingDone.Count > 0)
+            Tell("The stay was saved. Billing changes:\n\n" + string.Join("\n\n", billingDone));
+    }
+
+    private void StayHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var t = Current;
+        if (t == null) return;
+        AuditHistoryWindow.ShowFor(Owner, t.Id, t.FullName);
     }
 
     private void RefundDeposit_Click(object sender, RoutedEventArgs e)
@@ -630,60 +655,77 @@ public partial class TenantsPage : Page
 
         using var db = new AppDbContext();
 
-        var taken = db.Occupancies.Where(o => o.MoveOutDate == null).Select(o => o.BedId).ToList();
+        var today = StayQueries.Today;
+
+        // Beds with an ongoing (or open-ended reserved) stay can't take a stay with no end date,
+        // but they stay in the list because a finished stay may still fit before it.
+        var ongoing = db.Occupancies.Where(o => o.MoveOutDate == null).Select(o => o.BedId).ToList();
+
+        var freeFrom = db.Occupancies
+            .CurrentOrUpcoming(today)
+            .Where(o => o.MoveOutDate != null)
+            .Select(o => new { o.BedId, o.MoveOutDate })
+            .ToList()
+            .GroupBy(x => x.BedId)
+            .ToDictionary(g => g.Key, g => g.Max(x => x.MoveOutDate!.Value).AddDays(1));
+
+        string Note(int bedId) =>
+            ongoing.Contains(bedId) ? "  - occupied (no move-out date)"
+            : freeFrom.TryGetValue(bedId, out var freeDay) ? $"  - free from {Fmt.Date(freeDay)}"
+            : "";
+
         var beds = db.Beds
             .Include(b => b.Room)
             .Where(b => b.IsActive && b.Room.IsActive && !b.IsMaintenance)
             .ToList()
-            .Where(b => !taken.Contains(b.Id))
-            .OrderBy(b => b.Room.RoomName).ThenBy(b => b.BedLabel)
+            .OrderBy(b => ongoing.Contains(b.Id) ? 2 : freeFrom.ContainsKey(b.Id) ? 1 : 0)
+            .ThenBy(b => b.Room.RoomName).ThenBy(b => b.BedLabel)
             .Select(b => new BedChoice
             {
                 Id = b.Id,
-                Display = $"{b.Room.RoomName} - {b.BedLabel}  ({Fmt.Peso(b.MonthlyRate)})",
+                Display = $"{b.Room.RoomName} - {b.BedLabel}  ({Fmt.Peso(b.MonthlyRate)}){Note(b.Id)}",
                 Rate = b.MonthlyRate
             })
             .ToList();
 
         if (beds.Count == 0)
         {
-            Tell("There are no available beds right now. Add a bed, or end maintenance on one, on the Rooms & Beds page.");
+            Tell("There are no beds to move into. Add a bed, or end maintenance on one, on the Rooms & Beds page.");
             return;
         }
-
-        var previousOuts = t.Stays.Where(s => s.MoveOut != null).Select(s => s.MoveOut!.Value).ToList();
-        DateOnly? lastOut = previousOuts.Count > 0 ? previousOuts.Max() : null;
 
         var result = StayDialog.AskMoveIn(Owner, t.FullName, beds, r =>
         {
             using var check = new AppDbContext();
-            if (check.Occupancies.Any(o => o.BedId == r.BedId && o.MoveOutDate == null))
-                return "That bed was just taken. Please choose another.";
-            if (lastOut != null && r.Date < lastOut)
-                return $"The move-in date can't be before this tenant's previous move-out ({Fmt.Date(lastOut.Value)}).";
-            // The bed's earlier occupants must be gone before the new stay starts.
-            var bedOuts = check.Occupancies
-                .Where(o => o.BedId == r.BedId && o.MoveOutDate != null)
-                .Select(o => o.MoveOutDate)
-                .ToList();
-            if (bedOuts.Count > 0)
-            {
-                var bedLastOut = bedOuts.Max()!.Value;
-                if (r.Date < bedLastOut)
-                    return $"That bed was occupied until {Fmt.Date(bedLastOut)}. The move-in date can't be before that.";
-            }
+            var proposed = new StayRange(0, r.Date, r.MoveOut);
+
+            var bedConflicts = StayConflicts.ForBed(check, r.BedId, proposed);
+            if (bedConflicts.Count > 0)
+                return "That bed is not free for those dates. A move-out date is the tenant's last day, " +
+                       "so the next tenant can move in the day after.\n" + StayConflicts.Describe(bedConflicts);
+
+            var tenantConflicts = StayConflicts.ForTenant(check, t.Id, proposed);
+            if (tenantConflicts.Count > 0)
+                return "This tenant already has a stay on those dates.\n" + StayConflicts.Describe(tenantConflicts);
+
             return null;
         });
         if (result == null) return;
 
-        db.Occupancies.Add(new Occupancy
+        var occupancy = new Occupancy
         {
             TenantId = t.Id,
             BedId = result.BedId,
             MoveInDate = result.Date,
+            MoveOutDate = result.MoveOut,
             AgreedRent = result.Rent,
             Deposit = result.Deposit
-        });
+        };
+        db.Occupancies.Add(occupancy);
+        db.SaveChanges();
+
+        AuditService.Record(db, "Stay", occupancy.Id, t.Id, "Created", null,
+                            StayEditService.Summary(db, occupancy), "New move-in");
         db.SaveChanges();
 
         Reload(t.Id);
@@ -694,32 +736,89 @@ public partial class TenantsPage : Page
         var t = Current;
         if (t?.OccupancyId == null || t.ActiveMoveIn == null) return;
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = StayQueries.Today;
         // A reservation has not started yet, so cancelling it removes it instead of ending a stay.
         if (t.ActiveMoveIn.Value > today)
         {
             CancelReservation(t);
             return;
         }
-        var min = t.ActiveMoveIn.Value;
-        var max = today > min ? today : min;   // a reserved stay can only be cancelled on its move-in date
 
-        var note = t.Balance > 0
-            ? $"Heads up: this tenant still has an unpaid balance of {Fmt.Peso(t.Balance)}."
-            : null;
+        // Every stay of this tenant that has started and has not ended before today.
+        // Usually one. More only when overlapping stays were recorded.
+        List<Occupancy> current;
+        using (var load = new AppDbContext())
+        {
+            current = load.Occupancies.AsNoTracking()
+                .Where(o => o.TenantId == t.Id && o.MoveInDate <= today
+                            && (o.MoveOutDate == null || o.MoveOutDate >= today))
+                .OrderBy(o => o.MoveInDate)
+                .ToList();
+        }
+        if (current.Count == 0) return;
 
-        var date = StayDialog.AskMoveOut(Owner, t.FullName, min, max, note);
+        var note = "The move-out date is the tenant's last day in the bed. You can pick today or a future date.";
+        if (current.Count > 1)
+            note += $"\nThis tenant has {current.Count} current stays. All of them end on the date you choose.";
+        if (t.Balance > 0)
+            note += $"\nHeads up: this tenant still has an unpaid balance of {Fmt.Peso(t.Balance)}.";
+
+        var date = StayDialog.AskMoveOut(Owner, t.FullName, current.Max(o => o.MoveInDate), DateOnly.MaxValue, note);
         if (date == null) return;
 
-        using var db = new AppDbContext();
-        var occupancy = db.Occupancies.Find(t.OccupancyId.Value)!;
-        occupancy.MoveOutDate = date;
-        db.SaveChanges();
+        foreach (var stay in current)
+            if (!EndStay(stay.Id, date.Value, t.FullName)) break;
 
         Reload(t.Id);
     }
 
-        private void CancelReservation(TenantRow t)
+    // Ends one stay on the given date. Returns false if the administrator should stop (cancelled or blocked).
+    private bool EndStay(int occupancyId, DateOnly date, string tenantName)
+    {
+        using var db = new AppDbContext();
+        var occupancy = db.Occupancies.Find(occupancyId);
+        if (occupancy == null) return true;
+        if (occupancy.MoveOutDate == date) return true;   // already ends on that day
+
+        // Only a date that creates or lengthens an overlap is stopped. Ending a stay sooner, or ending one
+        // that already overlaps another stay, is always allowed: it can only make an overlap smaller.
+        var worse = StayConflicts.NewOnBed(db, occupancy, occupancy.BedId,
+                                           new StayRange(occupancy.Id, occupancy.MoveInDate, date));
+        if (worse.Count > 0)
+        {
+            var open = MessageBox.Show(
+                "That move-out date would overlap another stay on this bed:\n" +
+                StayConflicts.Describe(worse) +
+                "\n\nOpen Edit stay for this stay, to record it as an exception?",
+                "Move out", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (open == MessageBoxResult.Yes) EditStay(occupancy.Id);
+            return false;
+        }
+
+        var proposedEdit = StayEditService.Snapshot(occupancy);
+        proposedEdit.MoveOut = date;
+        var report = StayImpact.Analyze(db, occupancy, proposedEdit);
+        if (report.HasBillingImpact && !ImpactDialog.Confirm(Owner, tenantName, report.ToText()))
+            return false;
+
+        var before = occupancy.MoveOutDate;
+        var moveOutReason = before == null ? "Move-out recorded" : "Move-out date changed";
+        occupancy.MoveOutDate = date;
+        AuditService.Record(db, "Stay", occupancy.Id, occupancy.TenantId, "MoveOutDate",
+                            StayEditService.DateText(before), StayEditService.DateText(date),
+                            moveOutReason);
+
+        var billingDone = RentRecalculation.Apply(db, report.RentPlan, occupancy, moveOutReason);
+        foreach (var billPlan in report.UtilityPlans)
+            billingDone.AddRange(UtilityRecalculation.Apply(db, billPlan, moveOutReason));
+        db.SaveChanges();
+
+        if (billingDone.Count > 0)
+            Tell("The move-out was saved. Billing changes:\n\n" + string.Join("\n\n", billingDone));
+        return true;
+    }
+
+    private void CancelReservation(TenantRow t)
     {
         using var db = new AppDbContext();
         var occupancy = db.Occupancies.Find(t.OccupancyId!.Value)!;
@@ -741,6 +840,10 @@ public partial class TenantsPage : Page
 
         if (hasBilling)
         {
+            AuditService.Record(db, "Stay", occupancy.Id, occupancy.TenantId, "MoveOutDate",
+                                StayEditService.DateText(occupancy.MoveOutDate),
+                                StayEditService.DateText(occupancy.MoveInDate),
+                                "Reservation cancelled (billing records exist)");
             occupancy.MoveOutDate = occupancy.MoveInDate;
             db.SaveChanges();
             Tell("This reservation already has billing records, so it was kept and ended on its move-in date. " +
@@ -748,10 +851,12 @@ public partial class TenantsPage : Page
         }
         else
         {
+            AuditService.Record(db, "Stay", occupancy.Id, occupancy.TenantId, "Removed",
+                                StayEditService.Summary(db, occupancy), null, "Reservation cancelled");
             db.Occupancies.Remove(occupancy);
             db.SaveChanges();
         }
 
         Reload(t.Id);
     }
-}   
+}
