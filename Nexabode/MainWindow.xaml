@@ -58,12 +58,13 @@
                     <StackPanel Orientation="Horizontal">
                         <Border Width="32" Height="32" CornerRadius="16"
                                 Background="{DynamicResource AppPrimaryBrush}">
-                            <TextBlock Text="A" Foreground="White" FontWeight="SemiBold"
+                            <TextBlock x:Name="AccountInitial" Text="A" Foreground="White" FontWeight="SemiBold"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="Admin User" FontWeight="SemiBold" FontSize="13"
-                                       Foreground="{DynamicResource AppTextBrush}" />
+                            <TextBlock x:Name="AccountName" Text="Admin" FontWeight="SemiBold" FontSize="13"
+                                       Foreground="{DynamicResource AppTextBrush}"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="150" />
                             <TextBlock Text="Administrator" Style="{StaticResource MutedText}" FontSize="12" />
                         </StackPanel>
                     </StackPanel>

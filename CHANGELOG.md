@@ -78,6 +78,7 @@ All notable changes to this project are listed here.
 - Payments can be more than the balance: the charges are paid in full and the extra is shown as change to return, live while typing, on the confirmation, and in the payment history (Received, Applied, Change)
 - Settings has a read-only "Check stay records" button that lists overlapping or invalid stays
 - A test project with unit and scenario tests for the stay, rent, utility and payment rules
+- At first sign-in you can choose your own username along with your new password. Settings has a "Change username" button (it asks for your password), the menu card at the bottom left shows the signed-in username, and sign-in no longer cares about capitals in the username. Username changes are recorded in the change history
 
 ### Changed
 - Bed availability and tenant status are decided by dates. A tenant whose move-out is today still shows as Staying until tomorrow

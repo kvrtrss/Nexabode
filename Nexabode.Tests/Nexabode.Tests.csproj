@@ -19,6 +19,7 @@
   <Compile Include="..\Nexabode\Services\RentAdjustmentRules.cs" Link="RentAdjustmentRules.cs" />
   <Compile Include="..\Nexabode\Services\UtilityRules.cs" Link="UtilityRules.cs" />
   <Compile Include="..\Nexabode\Services\PaymentRules.cs" Link="PaymentRules.cs" />
+  <Compile Include="..\Nexabode\Services\UsernameRules.cs" Link="UsernameRules.cs" />
   </ItemGroup>
 
   <ItemGroup>

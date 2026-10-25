@@ -13,8 +13,10 @@
                 <StackPanel>
                     <TextBlock Text="Security" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
                     <TextBlock x:Name="AccountText" Style="{StaticResource MutedText}" Margin="0,0,0,12" />
-                    <ui:Button Content="Change password" HorizontalAlignment="Left"
-                               Click="ChangePassword_Click" />
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button Content="Change password" Click="ChangePassword_Click" Margin="0,0,8,0" />
+                        <ui:Button Content="Change username" Click="ChangeUsername_Click" />
+                    </StackPanel>
                 </StackPanel>
             </ui:Card>
 
