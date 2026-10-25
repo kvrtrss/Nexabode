@@ -89,7 +89,8 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 
 - Search and manage tenant records, occupancy status, and balances.
 - Record move-ins and move-outs and review tenant stay history.
-- Manage tenant deposits and edit stay details.
+- Manage tenant deposits, and correct any stay (bed, dates, rent, deposit) with a recorded reason.
+- Overlapping stays are blocked on new move-ins and flagged as warnings when correcting history.
 - Archive settled, moved-out tenants and flag potentially duplicate names.
 
 **Billing and Payments**
@@ -97,7 +98,9 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 - Generate monthly rent charges with optional day-based proration.
 - Record electricity, water, and other utility bills and split eligible expenses among tenants.
 - Review, edit, void, archive, and restore billing records.
-- Record payments and allocate them to outstanding charges using different methods.
+- Record payments and allocate them to outstanding charges using different methods. A payment larger than the balance is accepted, and the extra is shown as change to return.
+- Bill utilities for periods that span months, and keep rent and utility charges in step when stay dates are corrected. Paid charges are never altered; differences become adjustment charges.
+- Review exactly which records a change affects before you apply it.
 - Apply deposits to unpaid balances and record full or partial deposit refunds.
 - Search payment history and manage archived or voided transactions.
 
@@ -114,6 +117,8 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 - Password-protected database backup and restore, with automatic backup reminders.
 - Database safeguards against duplicate rent charges and utility splits.
 - Protection intended to prevent multiple application instances from running simultaneously.
+- Change history recording the original value, new value, administrator, time and reason of corrections.
+- An automatic safety copy of the database before an upgrade.
 
 **Customization**
 - Light and dark themes.
@@ -183,7 +188,9 @@ The application requires the default password to be changed on first sign-in. Ch
 Nexabode keeps everything on your computer, in `%LocalAppData%\Nexabode`.
 
 <p>
-  <img src="docs/data-files.svg" width="60%" alt="Nexabode data files: nexabode.db encrypted database, db.key key protected by Windows DPAPI, settings.json settings, SafetyCopies folder with safety copies created before a restore">
+  <img src="docs/data-files.svg" width="60%" alt="Nexabode data files: nexabode.db encrypted database, db.key key protected by Windows DPAPI, settings.json settings, SafetyCopies folder with safety copies created before a restore or an upgrade">
+  
+Before the first start after an upgrade that changes the database, Nexabode also saves a safety copy of it in the `SafetyCopies` folder. A normal backup from **Settings** is still the copy to rely on.
 </p>
 
 > [!IMPORTANT]
@@ -243,6 +250,12 @@ cd Nexabode/Nexabode
 dotnet run
 ```
 
+Run the tests from the repository root:
+
+```powershell
+dotnet test Nexabode.Tests/Nexabode.Tests.csproj
+```
+
 Alternatively, open `Nexabode/Nexabode.slnx` in Visual Studio and run the application using **F5**.
 
 <details>
@@ -279,6 +292,7 @@ Nexabode/
 │   ├── Models/          Database entities
 │   ├── Services/        Business rules, settings, and utilities
 │   └── Views/           Application pages and dialogs
+├── Nexabode.Tests/      Unit and scenario tests for the billing, stay and payment rules
 ├── ACCESSIBILITY.md     Accessibility goals and reporting
 ├── CHANGELOG.md         Release history
 ├── CODE_OF_CONDUCT.md   Community behavior guidelines
