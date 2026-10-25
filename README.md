@@ -181,7 +181,7 @@ Compare the resulting hash with the SHA-256 value published for that exact relea
   <img src="docs/first-signin.svg" width="50%" alt="First sign-in for v1.0.0: username admin, password admin123, password change required on first login">
 </p>
 
-The application requires the default password to be changed on first sign-in. Change it immediately and do not reuse the default credentials elsewhere.
+The application requires the default password to be changed on first sign-in. At the same step you can choose your own username instead of `admin`, and you can change it later in **Settings**. Change the password immediately and do not reuse the default credentials elsewhere.
 
 ## Data Storage and Backups
 

@@ -26,6 +26,7 @@ public partial class MainWindow : FluentWindow
     public MainWindow(Type startPage)
     {
         InitializeComponent();
+        RefreshAccount();
         _startPage = startPage;
         Closing += MainWindow_Closing;
 
@@ -34,6 +35,13 @@ public partial class MainWindow : FluentWindow
             : SymbolRegular.WeatherMoon24);
 
         Loaded += (_, _) => RootNavigation.Navigate(_startPage);
+    }
+
+    // Shows the signed-in username in the card at the bottom of the menu.
+    public void RefreshAccount()
+    {
+        AccountName.Text = Session.Administrator;
+        AccountInitial.Text = UsernameRules.Initial(Session.Administrator);
     }
 
     private void ThemeButton_Click(object sender, RoutedEventArgs e)

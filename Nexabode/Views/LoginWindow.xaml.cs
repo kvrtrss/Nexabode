@@ -27,9 +27,11 @@ public partial class LoginWindow : FluentWindow
         var username = UsernameBox.Text.Trim();
         var password = PasswordInput.Password;
 
+        var lower = username.ToLower();
+
         AdminUser? user;
         using (var db = new AppDbContext())
-            user = db.AdminUsers.FirstOrDefault(u => u.Username == username);
+            user = db.AdminUsers.FirstOrDefault(u => u.Username.ToLower() == lower);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
         {
@@ -39,9 +41,10 @@ public partial class LoginWindow : FluentWindow
         }
 
         // Signed in with the default password: a new one must be chosen before continuing.
+        var signedInName = user.Username;
         if (password == DefaultPassword)
         {
-            if (!ChangePasswordDialog.Ask(this, user.Username, forced: true))
+            if (!ChangePasswordDialog.Ask(this, user.Username, forced: true, out signedInName))
             {
                 ShowError("You need to choose a new password before you can sign in.");
                 PasswordInput.Password = string.Empty;
@@ -49,7 +52,7 @@ public partial class LoginWindow : FluentWindow
             }
         }
 
-        Session.Administrator = user.Username;
+        Session.Administrator = signedInName;
         new MainWindow().Show();   // show the main window first, then close login
         Close();
     }

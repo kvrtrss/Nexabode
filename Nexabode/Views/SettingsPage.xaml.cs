@@ -67,6 +67,18 @@ public partial class SettingsPage : Page
                 MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
+    private void ChangeUsername_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ChangeUsernameDialog.Ask(Owner, _username, out var newName)) return;
+
+        _username = newName;
+        AccountText.Text = $"Signed in as {_username}. Use a password only you know.";
+        (Window.GetWindow(this) as MainWindow)?.RefreshAccount();
+
+        MessageBox.Show($"Your username is now {newName}. Use it the next time you sign in.", "Nexabode",
+            MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
     // ---------- Backup ----------
 
     private void CreateBackup_Click(object sender, RoutedEventArgs e)
