@@ -441,5 +441,9 @@ FodyWeavers.xsd
 secrets.json
 appsettings.Development.json
 
+# Never commit encryption keys or backups
+db.key
+*.nexabak
+
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
