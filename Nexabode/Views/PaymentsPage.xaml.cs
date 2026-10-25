@@ -45,6 +45,8 @@ public partial class PaymentsPage : Page
         public bool IsArchived { get; set; }
         public string Status => IsVoided ? "Voided" : IsArchived ? "Archived" : "Recorded";
         public string PaidFor { get; set; } = "";
+        public decimal Received { get; set; }
+        public decimal Change { get; set; }
     }
 
     public class BalanceRow
@@ -122,7 +124,9 @@ public partial class PaymentsPage : Page
 
     private void TenantCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_ready) LoadTenantData();
+        if (!_ready) return;
+        LoadTenantData();
+        UpdateChangeHint();
     }
 
     private void SelectedRadio_Checked(object sender, RoutedEventArgs e)
@@ -230,6 +234,8 @@ public partial class PaymentsPage : Page
                 Date = p.PaymentDate,
                 Tenant = p.Tenant.FullName,
                 Amount = p.Amount,
+                Received = p.AmountReceived ?? p.Amount,
+                Change = (p.AmountReceived ?? p.Amount) - p.Amount,
                 Method = p.Method ?? "",
                 Reference = p.ReferenceNo ?? "",
                 Remarks = p.Remarks,
@@ -313,7 +319,8 @@ public partial class PaymentsPage : Page
             new[] { ("Reason for voiding", "") },
             vals => vals[0].Trim() == "" ? "Please enter a reason." : null,
             note: $"This cancels the payment of {Fmt.Peso(row.Amount)} from {row.DateText}. The charges it paid become unpaid again, " +
-                  "and the payment stays in the history marked Voided (tick Show voided to see it). This can't be undone.");
+                  "and the payment stays in the history marked Voided (tick Show voided to see it). This can't be undone." +
+                  (row.Change > 0 ? $"\n\nThe tenant handed over {Fmt.Peso(row.Received)} and {Fmt.Peso(row.Change)} was returned as change." : ""));
         if (v == null) return;
 
         using var db = new AppDbContext();
@@ -378,7 +385,7 @@ public partial class PaymentsPage : Page
         var options = new List<PayForOption>
     {
         new() { Key = "oldest", Display = "Oldest charges first (any item)",
-                Hint = "Pays the oldest unpaid charge first, then the next one." }
+                Hint = "Pays the oldest unpaid charge first, then the next one. Any extra is shown as change to return." }
     };
 
         foreach (var group in open.GroupBy(r => r.Item)
@@ -390,7 +397,7 @@ public partial class PaymentsPage : Page
                 Key = "item:" + group.Key,
                 Item = group.Key,
                 Display = $"{group.Key}  -  {Fmt.Peso(due)} unpaid",
-                Hint = $"Pays only {group.Key} charges, oldest first. Up to {Fmt.Peso(due)}."
+                Hint = $"Pays only {group.Key} charges, oldest first. Up to {Fmt.Peso(due)}; any extra is change to return."
             });
         }
 
@@ -422,6 +429,7 @@ public partial class PaymentsPage : Page
 
         PayForHint.Text = option.Hint;
         if (option.Specific) Tabs.SelectedIndex = 1;   // jump to Unpaid charges so a charge can be picked
+        UpdateChangeHint();
     }
 
     private void LoadAllBalances()
@@ -485,48 +493,73 @@ public partial class PaymentsPage : Page
     }
 
     // Works out how a payment would be applied, using the balances in the database right now.
-    private static (List<PaymentAllocation>? Allocations, string? Error) PlanAllocations(
+    // Paying more than is owed is not an error: the extra is returned as change.
+    private static (List<PaymentAllocation>? Allocations, decimal Applied, decimal Change, string? Error) PlanAllocations(
         AppDbContext db, int tenantId, decimal amount, int? chosenChargeId, string? item)
     {
         var open = GetOpenCharges(db, tenantId);
         if (open.Count == 0)
-            return (null, "This tenant has no unpaid charges, so there is nothing to apply this payment to.\n\n" +
-               "Nexabode does not hold advance payments, so nothing was recorded.");
+            return (null, 0, 0, "This tenant has no unpaid charges, so there is nothing to apply this payment to.\n\n" +
+                                "Nexabode does not hold advance payments, so nothing was recorded.");
 
+        List<OpenChargeRow> scope;
         if (chosenChargeId is int chargeId)
         {
             var fresh = open.FirstOrDefault(r => r.Id == chargeId);
-            if (fresh == null)
-                return (null, "That charge is already fully paid.");
-            if (amount > fresh.Balance)
-                return (null, $"That charge only has {Fmt.Peso(fresh.Balance)} left. Lower the amount, or choose another option.");
-
-            return (new List<PaymentAllocation> { new() { ChargeId = fresh.Id, AmountApplied = amount } }, null);
+            if (fresh == null) return (null, 0, 0, "That charge is already fully paid.");
+            scope = new List<OpenChargeRow> { fresh };
         }
-
-        var scope = item == null ? open : open.Where(r => r.Item == item).ToList();
-        if (scope.Count == 0)
-            return (null, $"This tenant has no unpaid {item} charges.");
-
-        var scopeBalance = scope.Sum(r => r.Balance);
-        if (amount > scopeBalance)
+        else
         {
-            if (item != null)
-                return (null, $"The amount ({Fmt.Peso(amount)}) is more than the unpaid {item} ({Fmt.Peso(scopeBalance)}).\n" +
-                              "Lower the amount, or choose a different option.");
-
-            var excess = amount - scopeBalance;
-            return (null, $"The amount ({Fmt.Peso(amount)}) is {Fmt.Peso(excess)} more than the tenant's balance ({Fmt.Peso(scopeBalance)}).\n\n" +
-                          "Nexabode does not hold advance payments, so nothing was recorded.\n" +
-                          $"Record {Fmt.Peso(scopeBalance)} here and return the extra {Fmt.Peso(excess)} to the tenant. " +
-                          "If it is a payment for next month's rent, generate that rent in Rent Billing first, then record the payment again.");
+            scope = item == null ? open : open.Where(r => r.Item == item).ToList();
+            if (scope.Count == 0) return (null, 0, 0, $"This tenant has no unpaid {item} charges.");
         }
 
-        var allocations = PaymentRules.AllocateOldestFirst(amount, scope.Select(c => (c.Id, c.Balance)))
+        var settlement = PaymentRules.Settle(amount, scope.Select(c => (c.Id, c.Balance)));
+        var allocations = settlement.Allocations
             .Select(a => new PaymentAllocation { ChargeId = a.ChargeId, AmountApplied = a.Applied })
             .ToList();
 
-        return (allocations, null);
+        return (allocations, settlement.Applied, settlement.Change, null);
+    }
+
+    private void AmountBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateChangeHint();
+
+    private void ChargeGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateChangeHint();
+
+    // Shows, while typing, how much of the amount will be applied and how much is change to return.
+    private void UpdateChangeHint()
+    {
+        if (!_ready) return;
+        ChangeHint.Visibility = Visibility.Collapsed;
+
+        if (SelectedTenantId is not int tenantId) return;
+        if (PayForCombo.SelectedItem is not PayForOption option) return;
+        if (!decimal.TryParse(AmountBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var typed) || typed <= 0)
+            return;
+
+        int? chosenChargeId = null;
+        string? item = null;
+        if (option.Specific)
+        {
+            if (ChargeGrid.SelectedItem is not OpenChargeRow chosen) return;
+            chosenChargeId = chosen.Id;
+        }
+        else
+        {
+            item = option.Item;
+        }
+
+        using var db = new AppDbContext();
+        var plan = PlanAllocations(db, tenantId, Math.Round(typed, 2), chosenChargeId, item);
+        if (plan.Allocations == null) return;
+
+        ChangeHint.Text = plan.Change > 0
+            ? $"Applies {Fmt.Peso(plan.Applied)}.  Change to return: {Fmt.Peso(plan.Change)}."
+            : $"Applies {Fmt.Peso(plan.Applied)}.";
+        ChangeHint.Foreground = (System.Windows.Media.Brush)Application.Current.FindResource(
+            plan.Change > 0 ? "WarningBrush" : "AppSecondaryBrush");
+        ChangeHint.Visibility = Visibility.Visible;
     }
 
     private void RecordPayment_Click(object sender, RoutedEventArgs e)
@@ -579,36 +612,46 @@ public partial class PaymentsPage : Page
 
         // A first look, only to describe the payment in the confirmation.
         int chargeCount;
+        decimal plannedApplied;
+        decimal plannedChange;
         using (var preview = new AppDbContext())
         {
-            var (planned, previewError) = PlanAllocations(preview, tenant.Id, amount, chosenChargeId, item);
-            if (planned == null)
+            var plan = PlanAllocations(preview, tenant.Id, amount, chosenChargeId, item);
+            if (plan.Allocations == null)
             {
-                Tell(previewError!);
+                Tell(plan.Error!);
                 LoadTenantData();
                 return;
             }
-            chargeCount = planned.Count;
+            chargeCount = plan.Allocations.Count;
+            plannedApplied = plan.Applied;
+            plannedChange = plan.Change;
         }
 
         var purpose = option.Specific ? "one specific charge" : item ?? "oldest charges first";
         var confirm = MessageBox.Show(
-            $"Record a payment of {Fmt.Peso(amount)} from {tenant.Name}?\n\n" +
-            $"Paying for: {purpose}\nIt will be applied to {chargeCount} charge(s).",
+            $"Record a payment from {tenant.Name}?\n\n" +
+            $"Amount received:   {Fmt.Peso(amount)}\n" +
+            $"Applied to {chargeCount} charge(s):   {Fmt.Peso(plannedApplied)}\n" +
+            (plannedChange > 0 ? $"Change to return:   {Fmt.Peso(plannedChange)}\n" : "") +
+            $"\nPaying for: {purpose}",
             "Confirm payment", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes) return;
 
+        decimal savedApplied = 0;
+        decimal savedChange = 0;
         try
         {
             using var db = new AppDbContext();
             using var transaction = db.Database.BeginTransaction();
 
             // Check again inside the transaction, in case the balances changed while the confirmation was open.
-            var (allocations, finalError) = PlanAllocations(db, tenant.Id, amount, chosenChargeId, item);
-            if (allocations == null)
+            var plan = PlanAllocations(db, tenant.Id, amount, chosenChargeId, item);
+            if (plan.Allocations == null || plan.Applied != plannedApplied)
             {
                 transaction.Rollback();
-                Tell(finalError! + "\n\nThe balances changed while you were confirming. Nothing was saved.");
+                Tell((plan.Error ?? $"The change would now be {Fmt.Peso(plan.Change)} instead of {Fmt.Peso(plannedChange)}.") +
+                     "\n\nThe balances changed while you were confirming. Nothing was saved.");
                 RefreshAll();
                 return;
             }
@@ -617,14 +660,18 @@ public partial class PaymentsPage : Page
             {
                 TenantId = tenant.Id,
                 PaymentDate = DateOnly.FromDateTime(payDate),
-                Amount = amount,
+                Amount = plan.Applied,        // what counts toward the charges
+                AmountReceived = amount,      // what the tenant handed over
                 Method = Blank(MethodCombo.Text),
                 ReferenceNo = Blank(ReferenceBox.Text),
                 Remarks = Blank(RemarksBox.Text),
-                Allocations = allocations
+                Allocations = plan.Allocations
             });
             db.SaveChanges();
             transaction.Commit();   // the payment and its allocations are saved together or not at all
+
+            savedApplied = plan.Applied;
+            savedChange = plan.Change;
         }
         catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
         {
@@ -638,5 +685,9 @@ public partial class PaymentsPage : Page
         PayForCombo.SelectedIndex = 0;   // back to "oldest charges first"
         Tabs.SelectedIndex = 0;
         RefreshAll();
+
+        if (savedChange > 0)
+            Tell($"Payment recorded.\n\nChange to return to {tenant.Name}: {Fmt.Peso(savedChange)}\n" +
+                 $"(received {Fmt.Peso(amount)}, applied {Fmt.Peso(savedApplied)})");
     }
 }

@@ -2,6 +2,7 @@
 using Nexabode.Data;
 using Nexabode.Models;
 using Wpf.Ui.Controls;
+using Nexabode.Services;
 
 namespace Nexabode.Views;
 
@@ -48,6 +49,7 @@ public partial class LoginWindow : FluentWindow
             }
         }
 
+        Session.Administrator = user.Username;
         new MainWindow().Show();   // show the main window first, then close login
         Close();
     }

@@ -34,22 +34,28 @@
             <CheckBox x:Name="ShowArchivedCheck" Content="Show archived" Margin="20,0,0,0"
           Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
         </StackPanel>
-
         <ui:Card Grid.Row="3" Margin="0,0,0,12">
             <StackPanel>
                 <TextBlock Text="New utility bill" Style="{StaticResource SectionTitle}" Margin="0,0,0,10" />
-                <StackPanel Orientation="Horizontal">
-                    <ComboBox x:Name="UtilityTypeBox" IsEditable="True" Width="150" Margin="0,0,8,0">
+                <WrapPanel Orientation="Horizontal">
+                    <ComboBox x:Name="UtilityTypeBox" IsEditable="True" Width="150" Margin="0,0,8,8">
                         <ComboBoxItem Content="Electricity" />
                         <ComboBoxItem Content="Water" />
                         <ComboBoxItem Content="Internet" />
                         <ComboBoxItem Content="Other" />
                     </ComboBox>
                     <ui:TextBox x:Name="BillAmountBox" PlaceholderText="Total bill amount"
-                                Width="160" Margin="0,0,8,0" />
-                    <ComboBox x:Name="ScopeCombo" Width="170" DisplayMemberPath="Display" Margin="0,0,8,0" />
-                    <DatePicker x:Name="BillDuePicker" Width="160" />
-                </StackPanel>
+                                Width="160" Margin="0,0,8,8" />
+                    <ComboBox x:Name="ScopeCombo" Width="170" DisplayMemberPath="Display" Margin="0,0,8,8" />
+                    <DatePicker x:Name="BillDuePicker" Width="160" Margin="0,0,8,8"
+                                ToolTip="Due date of each tenant's share" />
+                    <DatePicker x:Name="PeriodFromPicker" Width="150" Margin="0,0,8,8"
+                                ToolTip="Optional: the first day this bill covers" />
+                    <DatePicker x:Name="PeriodToPicker" Width="150" Margin="0,0,0,8"
+                                ToolTip="Optional: the last day this bill covers" />
+                </WrapPanel>
+                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                           Text="Billing period (optional): the last two dates. Leave both blank if the bill covers the whole month. Pick both for a bill that spans months, for example Sep 15 to Oct 14. It is listed under the month selected above." />
             </StackPanel>
         </ui:Card>
 
@@ -57,6 +63,8 @@
             <ui:Button x:Name="SplitButton" Content="Split selected bill" Appearance="Primary"
                Click="SplitBill_Click" IsEnabled="False" Margin="0,0,8,6" />
             <ui:Button x:Name="UndoButton" Content="Undo split" Click="UndoSplit_Click"
+               IsEnabled="False" Margin="0,0,8,6" />
+            <ui:Button x:Name="RecalcButton" Content="Recalculate shares" Click="Recalculate_Click"
                IsEnabled="False" Margin="0,0,8,6" />
             <ui:Button x:Name="EditButton" Content="Edit bill" Click="EditBill_Click"
                IsEnabled="False" Margin="0,0,8,6" />
@@ -76,6 +84,7 @@
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Utility" Binding="{Binding UtilityType}" Width="*" />
                 <DataGridTextColumn Header="Applies to" Binding="{Binding Scope}" Width="170" />
+                <DataGridTextColumn Header="Period" Binding="{Binding PeriodText}" Width="210" />
                 <DataGridTextColumn Header="Total bill" Binding="{Binding Total, StringFormat='₱{0:N2}'}"
                                     ElementStyle="{StaticResource RightCell}" Width="130" />
                 <DataGridTextColumn Header="Due" Binding="{Binding DueText}" Width="130" />

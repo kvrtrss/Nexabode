@@ -20,6 +20,9 @@
             <DatePicker x:Name="MoveInDate" Margin="0,0,0,12" />
             <TextBlock Text="Agreed monthly rent" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
             <ui:TextBox x:Name="RentBox" Margin="0,0,0,12" />
+            <TextBlock Text="Move-out date (optional, leave blank if still staying)"
+                       Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <DatePicker x:Name="NewMoveOutDate" Margin="0,0,0,12" />
             <TextBlock Text="Deposit (optional)" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
             <ui:TextBox x:Name="DepositBox" Margin="0,0,0,12" />
         </StackPanel>

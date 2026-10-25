@@ -71,6 +71,8 @@ public class UtilityBill
     public DateOnly? DueDate { get; set; }
     public List<Charge> Charges { get; set; } = new();
     public bool IsArchived { get; set; }
+    public DateOnly? PeriodStart { get; set; }   // blank = the whole month in BillingMonth
+    public DateOnly? PeriodEnd { get; set; }
 }
 
 public class Charge
@@ -90,6 +92,7 @@ public class Charge
     public string? VoidReason { get; set; }
     public DateOnly? VoidedOn { get; set; }
     public bool IsArchived { get; set; }
+    public int? AdjustsChargeId { get; set; } 
 }
 
 public class Payment
@@ -106,6 +109,7 @@ public class Payment
     public string? VoidReason { get; set; }
     public DateOnly? VoidedOn { get; set; }
     public List<PaymentAllocation> Allocations { get; set; } = new();
+    public decimal? AmountReceived { get; set; }   // what the tenant handed over; blank on older payments (= Amount)
     public string? Source { get; set; }   // "Deposit" for a payment made from a tenant's deposit
     public bool IsArchived { get; set; }
 }
@@ -118,4 +122,20 @@ public class PaymentAllocation
     public int ChargeId { get; set; }
     public Charge Charge { get; set; } = null!;
     public decimal AmountApplied { get; set; }
+
+    public class AuditLogEntry
+    {
+        public int Id { get; set; }
+        public DateTime ChangedAt { get; set; }
+        public string Administrator { get; set; } = string.Empty;
+        public string EntityType { get; set; } = string.Empty;   // "Stay" now; "Charge" / "UtilityBill" in later phases
+        public int EntityId { get; set; }
+        public int? TenantId { get; set; }
+        public string Field { get; set; } = string.Empty;        // e.g. "MoveInDate"
+        public string? OldValue { get; set; }
+        public string? NewValue { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public bool IsConflictException { get; set; }            // saved despite a bed conflict
+    }
+
 }

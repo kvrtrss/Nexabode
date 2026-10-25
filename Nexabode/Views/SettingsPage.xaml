@@ -32,6 +32,18 @@
                 </StackPanel>
             </ui:Card>
 
+            <ui:Card Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="Stay records check" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12"
+                   Text="Looks for stays that overlap on the same bed or for the same tenant, counting the move-out date as the last day. It only reads your data and changes nothing." />
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button Content="Check stay records" Click="CheckStays_Click" Margin="0,0,8,0" />
+                        <ui:Button Content="View change history" Click="ViewHistory_Click" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
             <ui:Card>
                 <StackPanel>
                     <TextBlock Text="About" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />

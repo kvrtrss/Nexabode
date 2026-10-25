@@ -11,6 +11,7 @@ public class AppSettings
     public string HouseAddress { get; set; } = "";
     public string LastBackup { get; set; } = "";
     public DateTime? LastBackupAt { get; set; }
+    public bool FullRentForPartialMonths { get; set; }   // false = bill partial months by days
 
     private static string FilePath => Path.Combine(DatabaseKeyProvider.AppFolder, "settings.json");
 

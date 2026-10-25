@@ -25,6 +25,7 @@ public partial class UtilityBillsPage : Page
         public DateOnly? Due { get; set; }
         public string DueText => Due?.ToString("MMM d, yyyy") ?? "-";
         public bool IsSplit { get; set; }
+        public string PeriodText { get; set; } = "";
         public bool IsArchived { get; set; }
         public bool Settled { get; set; }   // split, and every share is fully paid
         public string StatusText => IsArchived && Settled ? "Archived" : IsSplit ? "Split" : "Draft";
@@ -156,6 +157,7 @@ public partial class UtilityBillsPage : Page
         var rows = SelectedBills;
         ArchiveButton.IsEnabled = rows.Any(r => !r.IsArchived && r.Settled);
         UnarchiveButton.IsEnabled = rows.Any(r => r.IsArchived);
+        RecalcButton.IsEnabled = row is { IsSplit: true };
     }
 
     // ---------- Loading ----------
@@ -198,6 +200,9 @@ public partial class UtilityBillsPage : Page
                     Id = b.Id,
                     UtilityType = b.UtilityType,
                     Scope = b.Room?.RoomName ?? "Whole house",
+                    PeriodText = b.PeriodStart is DateOnly ps && b.PeriodEnd is DateOnly pe
+                        ? $"{Fmt.Date(ps)} to {Fmt.Date(pe)}"
+                        : "Whole month",
                     Total = b.TotalAmount,
                     Due = b.DueDate,
                     IsSplit = split,
@@ -264,6 +269,45 @@ public partial class UtilityBillsPage : Page
             return;
         }
 
+        // Optional billing period: both dates, or neither (then the bill covers the whole month).
+        var fromSet = PeriodFromPicker.SelectedDate != null;
+        var toSet = PeriodToPicker.SelectedDate != null;
+        if (fromSet != toSet)
+        {
+            Tell("Pick both period dates, or leave both blank if the bill covers the whole month.");
+            return;
+        }
+
+        DateOnly? periodStart = null;
+        DateOnly? periodEnd = null;
+        if (fromSet)
+        {
+            var from = DateOnly.FromDateTime(PeriodFromPicker.SelectedDate!.Value);
+            var to = DateOnly.FromDateTime(PeriodToPicker.SelectedDate!.Value);
+            if (to < from)
+            {
+                Tell("The billing period can't end before it starts.");
+                return;
+            }
+            if (to.DayNumber - from.DayNumber > 366)
+            {
+                Tell("A billing period can be at most one year long.");
+                return;
+            }
+
+            var monthEnd = start.AddMonths(1).AddDays(-1);
+            if (to < start || from > monthEnd)
+            {
+                var ask = MessageBox.Show(
+                    "This period does not touch the selected month, but the bill will be listed under it. Continue?",
+                    "Billing period", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (ask != MessageBoxResult.Yes) return;
+            }
+
+            periodStart = from;
+            periodEnd = to;
+        }
+
         var key = BillingHelpers.MonthKey(start);
 
         using var db = new AppDbContext();
@@ -276,13 +320,35 @@ public partial class UtilityBillsPage : Page
             return;
         }
 
+        // The same utility and room must not be billed twice for the same days.
+        var newPeriod = UtilityRules.EffectivePeriod(key, periodStart, periodEnd)!.Value;
+        var overlapping = db.UtilityBills
+            .Where(b => b.RoomId == scope.RoomId && b.UtilityType.ToLower() == lower)
+            .ToList()
+            .Where(b => UtilityRecalculation.PeriodOf(b) is BillPeriod p && UtilityRules.PeriodsOverlap(p, newPeriod))
+            .ToList();
+        if (overlapping.Count > 0)
+        {
+            var list = string.Join("\n", overlapping.Select(b =>
+                UtilityRecalculation.PeriodOf(b) is BillPeriod p
+                    ? $"- {b.BillingMonth}: {Fmt.Date(p.Start)} to {Fmt.Date(p.End)}"
+                    : $"- {b.BillingMonth}"));
+            var ask = MessageBox.Show(
+                $"There is already a {type} bill for {scope.Display} covering some of the same days:\n\n{list}\n\n" +
+                "Adding this one may bill those days twice. Add it anyway?",
+                "Overlapping bills", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (ask != MessageBoxResult.Yes) return;
+        }
+
         db.UtilityBills.Add(new UtilityBill
         {
             UtilityType = type,
             BillingMonth = key,
             TotalAmount = Math.Round(total, 2),
             RoomId = scope.RoomId,
-            DueDate = DateOnly.FromDateTime(dueDt)
+            DueDate = DateOnly.FromDateTime(dueDt),
+            PeriodStart = periodStart,
+            PeriodEnd = periodEnd
         });
 
         try
@@ -297,6 +363,8 @@ public partial class UtilityBillsPage : Page
         }
 
         BillAmountBox.Text = "";
+        PeriodFromPicker.SelectedDate = null;
+        PeriodToPicker.SelectedDate = null;
         LoadBills();
     }
 
@@ -305,18 +373,39 @@ public partial class UtilityBillsPage : Page
         var row = Selected;
         if (row == null || row.IsSplit) return;
 
+        string fromText, toText;
+        using (var load = new AppDbContext())
+        {
+            var current = load.UtilityBills.Find(row.Id)!;
+            fromText = current.PeriodStart?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "";
+            toText = current.PeriodEnd?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "";
+        }
+
         var v = FormDialog.Ask(Owner, $"Edit bill - {row.UtilityType}", "Save changes",
             new[]
             {
                 ("Utility type", row.UtilityType),
                 ("Total bill amount", row.Total.ToString("0.##", CultureInfo.CurrentCulture)),
-                ("Due date (e.g. 2026-10-20)", (row.Due ?? DateOnly.FromDateTime(DateTime.Today)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+                ("Due date (e.g. 2026-10-20)", (row.Due ?? DateOnly.FromDateTime(DateTime.Today)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                ("Period from (e.g. 2026-09-15, blank for the whole month)", fromText),
+                ("Period to (e.g. 2026-10-14, blank for the whole month)", toText)
             },
             vals =>
             {
                 if (vals[0].Trim() == "") return "Please enter the utility type.";
                 if (!TryMoney(vals[1], out var amount) || amount <= 0) return "Enter the total as a number greater than zero.";
                 if (!TryDate(vals[2], out _)) return "Enter the due date like 2026-10-20.";
+
+                var hasFrom = vals[3].Trim() != "";
+                var hasTo = vals[4].Trim() != "";
+                if (hasFrom != hasTo) return "Fill in both period dates, or leave both blank for the whole month.";
+                if (hasFrom)
+                {
+                    if (!TryDate(vals[3], out var pf) || !TryDate(vals[4], out var pt))
+                        return "Enter the period dates like 2026-09-15.";
+                    if (pt < pf) return "The period can't end before it starts.";
+                    if (pt.DayNumber - pf.DayNumber > 366) return "A billing period can be at most one year long.";
+                }
 
                 var lower = vals[0].Trim().ToLower();
                 using var check = new AppDbContext();
@@ -332,11 +421,21 @@ public partial class UtilityBillsPage : Page
         TryMoney(v[1], out var newTotal);
         TryDate(v[2], out var newDue);
 
+        DateOnly? newFrom = null;
+        DateOnly? newTo = null;
+        if (v[3].Trim() != "" && TryDate(v[3], out var pf2) && TryDate(v[4], out var pt2))
+        {
+            newFrom = pf2;
+            newTo = pt2;
+        }
+
         using var db = new AppDbContext();
         var entity = db.UtilityBills.Find(row.Id)!;
         entity.UtilityType = v[0].Trim();
         entity.TotalAmount = Math.Round(newTotal, 2);
         entity.DueDate = newDue;
+        entity.PeriodStart = newFrom;
+        entity.PeriodEnd = newTo;
         db.SaveChanges();
 
         LoadBills();
@@ -376,26 +475,20 @@ public partial class UtilityBillsPage : Page
             Tell("This bill has already been split.");
             return;
         }
-        if (SelectedMonth is not DateOnly start) return;
-
-        var end = start.AddMonths(1).AddDays(-1);
 
         using var db = new AppDbContext();
         var bill = db.UtilityBills.Find(row.Id)!;
 
-        var staysInScope = db.Occupancies
-            .Include(o => o.Bed)
-            .Where(o => o.MoveInDate <= end && (o.MoveOutDate == null || o.MoveOutDate >= start))
-            .ToList()
-            .Where(o => bill.RoomId == null || o.Bed.RoomId == bill.RoomId)
-            .ToList();
+        if (UtilityRecalculation.PeriodOf(bill) is not BillPeriod period)
+        {
+            Tell("This bill's month could not be read, so it can't be split.");
+            return;
+        }
 
-        // One share per tenant: a tenant with two stays in scope (a bed change) is not charged twice.
-        var stays = BillingRules.OneStayPerTenant(staysInScope);
-
+        var stays = UtilityRecalculation.SharingStays(db, bill, period, null);
         if (stays.Count == 0)
         {
-            Tell("No tenants were staying there during this month, so the bill can't be split.");
+            Tell("No tenants were staying there during this bill's period, so the bill can't be split.");
             return;
         }
 
@@ -403,7 +496,9 @@ public partial class UtilityBillsPage : Page
 
         var confirm = MessageBox.Show(
             $"Split {Fmt.Peso(bill.TotalAmount)} ({bill.UtilityType}) among {stays.Count} tenant(s)?\n\n" +
-            $"Each pays about {Fmt.Peso(shares[^1])}.\nYou can undo the split later if nothing has been paid on it.",
+            $"Everyone with at least one day between {Fmt.Date(period.Start)} and {Fmt.Date(period.End)} " +
+            $"pays an equal share, about {Fmt.Peso(shares[^1])} each.\n" +
+            "You can undo the split later if nothing has been paid on it.",
             "Confirm split", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes) return;
 
@@ -411,15 +506,18 @@ public partial class UtilityBillsPage : Page
         {
             db.Charges.Add(new Charge
             {
-                OccupancyId = stays[i].Id,
+                OccupancyId = stays[i].StayId,
                 BillingMonth = bill.BillingMonth,
                 ChargeType = ChargeType.Utility,
                 Description = $"{bill.UtilityType} share",
                 Amount = shares[i],   // leftover centavos are already in the first share
-                DueDate = bill.DueDate ?? end,
+                DueDate = bill.DueDate ?? period.End,
                 UtilityBillId = bill.Id
             });
         }
+
+        AuditService.Record(db, "UtilityBill", bill.Id, null, "Split", null,
+            $"{stays.Count} equal shares of {StayEditService.MoneyText(bill.TotalAmount)}", "Bill split");
 
         try
         {
@@ -478,8 +576,53 @@ public partial class UtilityBillsPage : Page
             charge.VoidReason = "Split undone: " + v[0].Trim();
             charge.VoidedOn = today;
         }
+
+        AuditService.Record(db, "UtilityBill", row.Id, null, "Split undone", null,
+         $"{charges.Count} share(s) voided", v[0].Trim());
+
         db.SaveChanges();   // all shares are voided together or not at all
 
         LoadBills();
     }
+
+    private void Recalculate_Click(object sender, RoutedEventArgs e)
+    {
+        var row = Selected;
+        if (row == null || !row.IsSplit) return;
+
+        using var db = new AppDbContext();
+        var bill = db.UtilityBills.Include(b => b.Room).First(b => b.Id == row.Id);
+        var plan = UtilityRecalculation.Plan(db, bill, null);
+
+        if (plan == null || plan.Items.Count == 0)
+        {
+            Tell("Every tenant's share already matches who stayed during this bill's period. Nothing needs to change.");
+            return;
+        }
+
+        if (!ImpactDialog.Confirm(Owner, plan.Label, plan.ToText())) return;
+
+        var v = FormDialog.Ask(Owner, "Recalculate shares", "Apply",
+            new[] { ("Reason", "") },
+            vals => vals[0].Trim() == "" ? "Please enter a reason." : null,
+            note: "The reason is saved in the change history.");
+        if (v == null) return;
+
+        List<string> done;
+        try
+        {
+            done = UtilityRecalculation.Apply(db, plan, v[0].Trim());
+            db.SaveChanges();   // all changes are saved together or not at all
+        }
+        catch (DbUpdateException)
+        {
+            Tell("The shares could not be updated, so nothing was saved. Please try again.");
+            LoadBills();
+            return;
+        }
+
+        LoadBills();
+        Tell("Shares updated:\n\n" + string.Join("\n\n", done));
+    }
+
 }

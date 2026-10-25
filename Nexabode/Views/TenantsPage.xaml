@@ -93,6 +93,7 @@
                             <ui:Button x:Name="MoveInButton" Content="Move in" Appearance="Primary"
                                        Click="MoveIn_Click" Margin="0,0,8,8" />
                             <ui:Button x:Name="MoveOutButton" Content="Move out" Click="MoveOut_Click" Margin="0,0,0,8" />
+                            <ui:Button x:Name="HistoryButton" Content="Change history" Click="StayHistory_Click" Margin="8,0,0,8" />
                         </WrapPanel>
 
                         <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="0,12,0,0">

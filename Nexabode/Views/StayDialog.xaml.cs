@@ -17,6 +17,7 @@ public class MoveInResult
     public int BedId { get; set; }
     public DateOnly Date { get; set; }
     public decimal Rent { get; set; }
+    public DateOnly? MoveOut { get; set; }
     public decimal Deposit { get; set; }
 }
 
@@ -97,6 +98,13 @@ public partial class StayDialog : Window
             if (BedCombo.SelectedItem is not BedChoice bed) { Fail("Choose a bed."); return; }
             if (MoveInDate.SelectedDate is not DateTime date) { Fail("Choose the move-in date."); return; }
             if (!TryMoney(RentBox.Text, out var rent)) { Fail("Enter the monthly rent as a number (e.g. 1500)."); return; }
+            DateOnly? moveOut = null;
+            if (NewMoveOutDate.SelectedDate is DateTime outDate) moveOut = DateOnly.FromDateTime(outDate);
+            if (!StayRules.IsValidRange(DateOnly.FromDateTime(date), moveOut))
+            {
+                Fail("The move-out date can't be before the move-in date.");
+                return;
+            }
 
             decimal deposit = 0;
             if (DepositBox.Text.Trim() != "" && !TryMoney(DepositBox.Text, out deposit))
@@ -109,6 +117,7 @@ public partial class StayDialog : Window
             {
                 BedId = bed.Id,
                 Date = DateOnly.FromDateTime(date),
+                MoveOut = moveOut,
                 Rent = Math.Round(rent, 2),
                 Deposit = Math.Round(deposit, 2)
             };

@@ -49,6 +49,7 @@ public partial class RentBillingPage : Page
     {
         var months = BillingHelpers.BuildMonths();
         MonthCombo.ItemsSource = months;
+        FullRentCheck.IsChecked = AppSettings.Load().FullRentForPartialMonths;
         _ready = true;
         MonthCombo.SelectedItem = months.First(m => m.Start == BillingHelpers.CurrentMonthStart());
     }
@@ -62,7 +63,10 @@ public partial class RentBillingPage : Page
 
     private void FullRent_Changed(object sender, RoutedEventArgs e)
     {
-        if (_ready) LoadList();
+        if (!_ready) return;
+        var full = FullRentCheck.IsChecked == true;
+        AppSettings.Update(s => s.FullRentForPartialMonths = full);   // remembered for the whole property
+        LoadList();
     }
 
     private void ShowArchived_Changed(object sender, RoutedEventArgs e)

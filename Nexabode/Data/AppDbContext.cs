@@ -1,6 +1,7 @@
 ﻿using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Nexabode.Models;
+using static Nexabode.Models.PaymentAllocation;
 
 namespace Nexabode.Data;
 
@@ -15,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<Charge> Charges => Set<Charge>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
+    public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
