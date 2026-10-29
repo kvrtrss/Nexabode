@@ -89,7 +89,9 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 
 - Search and manage tenant records, occupancy status, and balances.
 - Record move-ins and move-outs and review tenant stay history.
-- Manage tenant deposits, and correct any stay (bed, dates, rent, deposit) with a recorded reason.
+- See each tenant's credit balance (the deposit still held), apply it to unpaid charges, refund what is left, correct it with a recorded reason, and undo a refund recorded by mistake.
+- Correct any stay (bed, dates, rent, deposit) with a recorded reason.
+- Tenants show as Staying, Moving out (on their last day) or Moved out.
 - Overlapping stays are blocked on new move-ins and flagged as warnings when correcting history.
 - Archive settled, moved-out tenants and flag potentially duplicate names.
 
@@ -101,7 +103,9 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 - Record payments and allocate them to outstanding charges using different methods. A payment larger than the balance is accepted, and the extra is shown as change to return.
 - Bill utilities for periods that span months, and keep rent and utility charges in step when stay dates are corrected. Paid charges are never altered; differences become adjustment charges.
 - Review exactly which records a change affects before you apply it.
-- Apply deposits to unpaid balances and record full or partial deposit refunds.
+- Apply a tenant's credit to unpaid balances, and refund the credit that is left in full or in part.
+- Edit a generated rent charge, with a recorded reason.
+- Record money given back when a payment is voided. Charges that were refunded are marked Refunded.
 - Search payment history and manage archived or voided transactions.
 
 **Reports and Printing**
@@ -110,10 +114,17 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 - Print reports or save them as PDFs using the Windows print dialog.
 - Include the boarding house name and address in report headers.
 
+**Notifications**
+
+- A bell in the title bar with an unread count and a drop-down panel, and a Notifications page.
+- Overdue and upcoming payments, move-ins and move-outs, rent not yet generated, utility bills not yet split, credit left with moved-out tenants, and backup reminders.
+- Your own reminders, with a warning window you can set.
+
 **Security and Data Protection**
 
 - Locally stored, encrypted SQLite database using the SQLCipher 4 file format.
 - Password hashing using BCrypt and a required password change on first sign-in.
+- Separate sign-in accounts with two roles: Owner (everything) and Staff (records only, with no account management or backup restore). New and reset accounts must choose their own password.
 - Password-protected database backup and restore, with automatic backup reminders.
 - Database safeguards against duplicate rent charges and utility splits.
 - Protection intended to prevent multiple application instances from running simultaneously.
@@ -183,6 +194,8 @@ Compare the resulting hash with the SHA-256 value published for that exact relea
 
 The application requires the default password to be changed on first sign-in. At the same step you can choose your own username instead of `admin`, and you can change it later in **Settings**. Change the password immediately and do not reuse the default credentials elsewhere.
 
+An Owner can add more accounts in **Settings**. A new account signs in with a temporary password and must choose its own the first time.
+
 ## Data Storage and Backups
 
 Nexabode keeps everything on your computer, in `%LocalAppData%\Nexabode`.
@@ -224,7 +237,7 @@ Test the restored database and verify important records before relying on it. Ke
 
 - The database is encrypted, but encryption does not protect against every threat, including all forms of access through a compromised Windows account.
 - Anyone with sufficient access to your Windows account may be able to access application data. Keep Windows secured and up to date.
-- Nexabode currently uses a single administrator account rather than a multi-user role system.
+- Nexabode supports separate accounts with two roles, Owner and Staff. This is not a full permission system: Staff can still change or void any record, and every account uses the same database on the same computer. Nexabode does not sync between computers.
 - There is no guaranteed password-recovery mechanism. Forgotten passwords or unavailable encryption keys may result in inaccessible data.
 - Keep backups separate from the computer and protect them with a strong backup password.
 - Do not commit databases, encryption keys, backups, real tenant information, or credentials to the repository.
