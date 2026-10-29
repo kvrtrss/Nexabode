@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
     public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
+    public DbSet<Reminder> Reminders => Set<Reminder>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {

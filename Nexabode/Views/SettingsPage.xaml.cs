@@ -13,6 +13,16 @@ public partial class SettingsPage : Page
 {
     private string _username = "admin";
 
+    public class AccountRow
+    {
+        public int Id { get; set; }
+        public string Username { get; set; } = "";
+        public string Role { get; set; } = "";
+        public string Status { get; set; } = "";
+    }
+
+    private AccountRow? SelectedAccount => AccountGrid.SelectedItem as AccountRow;
+
     public SettingsPage()
     {
         InitializeComponent();
@@ -24,9 +34,14 @@ public partial class SettingsPage : Page
     private void Load()
     {
         using var db = new AppDbContext();
-        _username = db.AdminUsers.OrderBy(u => u.Id).Select(u => u.Username).FirstOrDefault() ?? "admin";
+        _username = Session.Administrator;   // the account that is signed in now, not simply the first one
 
-        AccountText.Text = $"Signed in as {_username}. Use a password only you know.";
+        AccountText.Text = $"Signed in as {_username} ({(Session.IsOwner ? "Owner" : "Staff")}). Use a password only you know.";
+
+        // Restoring replaces every account and all data, so it is for Owners only.
+        RestoreButton.IsEnabled = Session.IsOwner;
+        RestoreButton.ToolTip = Session.IsOwner ? null : "Only an Owner can restore a backup.";
+        LoadAccounts();
         DataPathText.Text = DatabaseKeyProvider.AppFolder;
         VersionText.Text = $"Version {typeof(SettingsPage).Assembly.GetName().Version?.ToString(3)}";
         ShowLastBackup();
@@ -72,11 +87,169 @@ public partial class SettingsPage : Page
         if (!ChangeUsernameDialog.Ask(Owner, _username, out var newName)) return;
 
         _username = newName;
-        AccountText.Text = $"Signed in as {_username}. Use a password only you know.";
+        AccountText.Text = $"Signed in as {_username} ({(Session.IsOwner ? "Owner" : "Staff")}). Use a password only you know.";
+        LoadAccounts();
         (Window.GetWindow(this) as MainWindow)?.RefreshAccount();
 
         MessageBox.Show($"Your username is now {newName}. Use it the next time you sign in.", "Nexabode",
             MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    // ---------- Accounts (Owners only) ----------
+
+    private static void Tell(string message) =>
+        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
+
+    private void LoadAccounts()
+    {
+        AccountsCard.Visibility = Session.IsOwner ? Visibility.Visible : Visibility.Collapsed;
+        if (!Session.IsOwner) return;
+
+        var keep = SelectedAccount?.Id;
+
+        using var db = new AppDbContext();
+        var rows = db.AdminUsers.ToList()
+            .OrderBy(u => u.Username, StringComparer.OrdinalIgnoreCase)
+            .Select(u => new AccountRow
+            {
+                Id = u.Id,
+                Username = u.Username,
+                Role = u.Role,
+                Status = u.Username.Equals(Session.Administrator, StringComparison.OrdinalIgnoreCase) ? "You (signed in)"
+                       : u.MustChangePassword ? "Must choose a password at next sign-in"
+                       : ""
+            })
+            .ToList();
+
+        AccountGrid.ItemsSource = rows;
+        AccountGrid.SelectedItem = rows.FirstOrDefault(r => r.Id == keep);
+        UpdateAccountButtons();
+    }
+
+    private void UpdateAccountButtons()
+    {
+        var row = SelectedAccount;
+        var isSelf = row != null && row.Username.Equals(Session.Administrator, StringComparison.OrdinalIgnoreCase);
+
+        ResetPasswordButton.IsEnabled = row != null && !isSelf;   // your own password: use Change password above
+        ChangeRoleButton.IsEnabled = row != null && !isSelf;
+        RemoveAccountButton.IsEnabled = row != null && !isSelf;
+    }
+
+    private void AccountGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateAccountButtons();
+
+    private void AddAccount_Click(object sender, RoutedEventArgs e)
+    {
+        var v = FormDialog.Ask(Owner, "Add account", "Continue",
+            new[]
+            {
+                ("Username", ""),
+                ("Role (Staff or Owner)", AccountRoles.Staff)
+            },
+            vals =>
+            {
+                using var db = new AppDbContext();
+                var nameError = AccountService.NameError(db, vals[0]);
+                if (nameError != null) return nameError;
+                return AccountRoles.Normalize(vals[1]) == null ? "Type Staff or Owner for the role." : null;
+            },
+            "Staff can work with tenants, rooms, billing, payments and reports. " +
+            "An Owner can also manage accounts and restore backups.");
+        if (v == null) return;
+
+        var username = v[0].Trim();
+        var role = AccountRoles.Normalize(v[1])!;
+
+        var password = BackupPasswordDialog.Ask(Owner, $"Temporary password for {username}", "Create account",
+            "Choose a temporary password and tell it to them. They will be asked to choose their own " +
+            "password and username the first time they sign in.",
+            confirm: true, noun: "temporary password");
+        if (password == null) return;
+
+        string? error;
+        using (var db = new AppDbContext())
+            error = AccountService.Add(db, username, role, password);
+        if (error != null)
+        {
+            Tell(error);
+            return;
+        }
+
+        LoadAccounts();
+        Tell($"The {role} account \"{username}\" was added.\n\n" +
+             "They can sign in with the temporary password, and will be asked to choose their own.");
+    }
+
+    private void ResetPassword_Click(object sender, RoutedEventArgs e)
+    {
+        var row = SelectedAccount;
+        if (row == null) return;
+
+        var password = BackupPasswordDialog.Ask(Owner, $"Reset password for {row.Username}", "Reset password",
+            "Choose a temporary password and tell it to them. They will be asked to choose their own the next time they sign in.",
+            confirm: true, noun: "temporary password");
+        if (password == null) return;
+
+        string? error;
+        using (var db = new AppDbContext())
+            error = AccountService.ResetPassword(db, row.Id, password);
+        if (error != null)
+        {
+            Tell(error);
+            return;
+        }
+
+        LoadAccounts();
+        Tell($"The password for \"{row.Username}\" was reset.");
+    }
+
+    private void ChangeRole_Click(object sender, RoutedEventArgs e)
+    {
+        var row = SelectedAccount;
+        if (row == null) return;
+
+        var newRole = row.Role == AccountRoles.Owner ? AccountRoles.Staff : AccountRoles.Owner;
+        var confirm = MessageBox.Show(
+            $"Change \"{row.Username}\" from {row.Role} to {newRole}?\n\n" +
+            (newRole == AccountRoles.Owner
+                ? "They will be able to manage accounts and restore backups."
+                : "They will no longer be able to manage accounts or restore backups."),
+            "Change role", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        string? error;
+        using (var db = new AppDbContext())
+            error = AccountService.SetRole(db, row.Id, newRole);
+        if (error != null)
+        {
+            Tell(error);
+            return;
+        }
+
+        LoadAccounts();
+    }
+
+    private void RemoveAccount_Click(object sender, RoutedEventArgs e)
+    {
+        var row = SelectedAccount;
+        if (row == null) return;
+
+        var confirm = MessageBox.Show(
+            $"Remove the account \"{row.Username}\"?\n\n" +
+            "They will no longer be able to sign in. Changes they made stay in the change history under their name.",
+            "Remove account", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        string? error;
+        using (var db = new AppDbContext())
+            error = AccountService.Remove(db, row.Id);
+        if (error != null)
+        {
+            Tell(error);
+            return;
+        }
+
+        LoadAccounts();
     }
 
     // ---------- Backup ----------
@@ -132,6 +305,13 @@ public partial class SettingsPage : Page
 
     private void Restore_Click(object sender, RoutedEventArgs e)
     {
+        if (!Session.IsOwner)
+        {
+            MessageBox.Show("Only an Owner can restore a backup.", "Nexabode",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
         var open = new OpenFileDialog
         {
             Title = "Choose a backup to restore",

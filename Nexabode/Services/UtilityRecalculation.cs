@@ -193,7 +193,7 @@ public static class UtilityRecalculation
                     $"NEEDS YOUR DECISION - {name}: {Fmt.Peso(paidTotal)} has been paid but only " +
                     $"{Fmt.Peso(decision.NewAmount)} would be due, {Fmt.Peso(paidTotal - decision.NewAmount)} too much. " +
                     "The share is left as it is. To correct it, return the extra to the tenant, void the payment " +
-                    "on the Payments page, then use Recalculate shares on the Utility Bills page.",
+                    "on the Payments page (enter the amount you gave back), then use Recalculate shares on the Utility Bills page.",
 
                 _ =>
                     $"NEEDS YOUR DECISION - {name}: only {Fmt.Peso(decision.NewAmount)} would be due instead of " +

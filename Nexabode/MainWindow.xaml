@@ -18,19 +18,73 @@
         <!--Title bar-->
         <ui:TitleBar Grid.Row="0" Title="Nexabode">
             <ui:TitleBar.TrailingContent>
-                <ui:Button x:Name="ThemeButton" Appearance="Transparent"
-                           ToolTip="Switch between light and dark mode"
-                           Click="ThemeButton_Click" />
+                <StackPanel Orientation="Horizontal">
+                    <ui:Button x:Name="BellButton" Appearance="Transparent"
+                               ToolTip="Notifications"
+                               Click="BellButton_Click" />
+                    <Popup x:Name="NoticePopup" Placement="Bottom" StaysOpen="False"
+                           AllowsTransparency="True" PopupAnimation="Fade"
+                           Closed="NoticePopup_Closed">
+                        <Border Width="444" Margin="12" CornerRadius="12" BorderThickness="1"
+                                Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.25" />
+                            </Border.Effect>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Grid Grid.Row="0" Margin="16,14,10,10">
+                                    <StackPanel>
+                                        <TextBlock Text="Notifications" FontSize="16" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AppTextBrush}" />
+                                        <TextBlock x:Name="PopupSubtitle" Style="{StaticResource MutedText}" />
+                                    </StackPanel>
+                                    <ui:Button x:Name="MarkAllButton" Content="Mark all as read"
+                                               Appearance="Transparent" HorizontalAlignment="Right"
+                                               VerticalAlignment="Top" Click="MarkAllRead_Click" />
+                                </Grid>
+
+                                <Border Grid.Row="1" BorderThickness="0,1,0,0"
+                                        BorderBrush="{DynamicResource AppBorderBrush}">
+                                    <ScrollViewer MaxHeight="380" VerticalScrollBarVisibility="Auto">
+                                        <StackPanel x:Name="PopupList" />
+                                    </ScrollViewer>
+                                </Border>
+
+                                <ui:Button Grid.Row="2" x:Name="ViewAllButton" Content="View all"
+                                           HorizontalAlignment="Center" Margin="0,10,0,14"
+                                           Click="ViewAll_Click" />
+                            </Grid>
+                        </Border>
+                    </Popup>
+                    <Border x:Name="NoticeBadge" Visibility="Collapsed" IsHitTestVisible="False"
+                            Background="{DynamicResource DangerBrush}" CornerRadius="9"
+                            MinWidth="18" Height="18" Padding="5,0" Margin="-8,0,8,0"
+                            VerticalAlignment="Center">
+                        <TextBlock x:Name="NoticeBadgeText" Foreground="White" FontSize="11" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ui:Button x:Name="ThemeButton" Appearance="Transparent"
+                               ToolTip="Switch between light and dark mode"
+                               Click="ThemeButton_Click" />
+                </StackPanel>
             </ui:TitleBar.TrailingContent>
         </ui:TitleBar>
 
         <!--Side nav bar icons = 24 for px size-->
-            <ui:NavigationView x:Name="RootNavigation" Grid.Row="1"
+        <ui:NavigationView x:Name="RootNavigation" Grid.Row="1"
                            PaneDisplayMode="Left" OpenPaneLength="240"
                            IsBackButtonVisible="Collapsed">
             <ui:NavigationView.MenuItems>
                 <ui:NavigationViewItem Content="Dashboard" Icon="{ui:SymbolIcon Home24}"
                                        TargetPageType="{x:Type views:DashboardPage}" />
+                <ui:NavigationViewItem Content="Notifications" Icon="{ui:SymbolIcon Alert24}"
+                                       TargetPageType="{x:Type views:NotificationsPage}" />
                 <ui:NavigationViewItem Content="Rooms &amp; Beds" Icon="{ui:SymbolIcon Building24}"
                                        TargetPageType="{x:Type views:RoomsPage}" />
                 <ui:NavigationViewItem Content="Tenants" Icon="{ui:SymbolIcon People24}"
@@ -50,25 +104,37 @@
                 <ui:NavigationViewItem Content="Settings" Icon="{ui:SymbolIcon Settings24}"
                            TargetPageType="{x:Type views:SettingsPage}" />
             </ui:NavigationView.FooterMenuItems>
-            
+
             <ui:NavigationView.PaneFooter>
-                <Border Margin="12,8" Padding="10" CornerRadius="10" BorderThickness="1"
-                        BorderBrush="{DynamicResource AppBorderBrush}"
-                        Background="{DynamicResource AppSurfaceBrush}">
-                    <StackPanel Orientation="Horizontal">
-                        <Border Width="32" Height="32" CornerRadius="16"
-                                Background="{DynamicResource AppPrimaryBrush}">
-                            <TextBlock x:Name="AccountInitial" Text="A" Foreground="White" FontWeight="SemiBold"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                            <TextBlock x:Name="AccountName" Text="Admin" FontWeight="SemiBold" FontSize="13"
-                                       Foreground="{DynamicResource AppTextBrush}"
-                                       TextTrimming="CharacterEllipsis" MaxWidth="150" />
-                            <TextBlock Text="Administrator" Style="{StaticResource MutedText}" FontSize="12" />
+                <StackPanel>
+                    <Border Margin="12,8,12,8" Padding="10" CornerRadius="10" BorderThickness="1"
+                            BorderBrush="{DynamicResource AppBorderBrush}"
+                            Background="{DynamicResource AppSurfaceBrush}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="32" Height="32" CornerRadius="16"
+                                    Background="{DynamicResource AppPrimaryBrush}">
+                                <TextBlock x:Name="AccountInitial" Text="A" Foreground="White" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="AccountName" Text="Admin" FontWeight="SemiBold" FontSize="13"
+                                           Foreground="{DynamicResource AppTextBrush}"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="150" />
+                                <TextBlock x:Name="AccountRole" Text="Administrator" Style="{StaticResource MutedText}" FontSize="12" />
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                </Border>
+                    </Border>
+
+                    <!-- A full-width button of its own: easy to find, but red text keeps it from looking like a main action. -->
+                    <ui:Button x:Name="LogoutButton" Content="Log out"
+                               Margin="12,0,12,14" Padding="0,9"
+                               HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                               Appearance="Secondary" FontWeight="SemiBold"
+                               Foreground="{DynamicResource DangerBrush}"
+                               ToolTip="Sign out and return to the login screen"
+                               AutomationProperties.Name="Log out"
+                               Click="LogoutButton_Click" />
+                </StackPanel>
             </ui:NavigationView.PaneFooter>
         </ui:NavigationView>
     </Grid>

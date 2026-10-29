@@ -20,6 +20,33 @@
                 </StackPanel>
             </ui:Card>
 
+            <ui:Card x:Name="AccountsCard" Margin="0,0,0,16" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="Accounts" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12"
+                               Text="Give each person their own account, so the change history shows who did what. An Owner can do everything. Staff can work with tenants, rooms, billing, payments and reports, but can't manage accounts or restore a backup." />
+                    <DataGrid x:Name="AccountGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                              CanUserAddRows="False" SelectionMode="Single" Height="160" Margin="0,0,0,12"
+                              SelectionChanged="AccountGrid_SelectionChanged">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="*" />
+                            <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="90" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="240" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <WrapPanel>
+                        <ui:Button Content="Add account" Appearance="Primary" Click="AddAccount_Click"
+                                   Margin="0,0,8,8" />
+                        <ui:Button x:Name="ResetPasswordButton" Content="Reset password" Click="ResetPassword_Click"
+                                   Margin="0,0,8,8" IsEnabled="False" />
+                        <ui:Button x:Name="ChangeRoleButton" Content="Change role" Click="ChangeRole_Click"
+                                   Margin="0,0,8,8" IsEnabled="False" />
+                        <ui:Button x:Name="RemoveAccountButton" Content="Remove account" Click="RemoveAccount_Click"
+                                   Margin="0,0,8,8" IsEnabled="False" />
+                    </WrapPanel>
+                </StackPanel>
+            </ui:Card>
+
             <ui:Card Margin="0,0,0,16">
                 <StackPanel>
                     <TextBlock Text="Backup and restore" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
@@ -29,7 +56,7 @@
                     <StackPanel Orientation="Horizontal">
                         <ui:Button Content="Create backup" Appearance="Primary" Click="CreateBackup_Click"
                                    Margin="0,0,8,0" />
-                        <ui:Button Content="Restore from backup" Click="Restore_Click" />
+                        <ui:Button x:Name="RestoreButton" Content="Restore from backup" Click="Restore_Click" />
                     </StackPanel>
                 </StackPanel>
             </ui:Card>

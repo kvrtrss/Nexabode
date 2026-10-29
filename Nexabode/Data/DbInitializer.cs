@@ -58,14 +58,19 @@ public static class DbInitializer
         AddColumnIfMissing(db, "Occupancies", "DepositRefunded", "TEXT NOT NULL DEFAULT '0'");
         AddColumnIfMissing(db, "Occupancies", "DepositRefundedOn", "TEXT NULL");
         AddColumnIfMissing(db, "Occupancies", "DepositRefundNote", "TEXT NULL");
+        AddColumnIfMissing(db, "Occupancies", "MovedOutOn", "TEXT NULL");
         AddColumnIfMissing(db, "Payments", "Source", "TEXT NULL");
         AddColumnIfMissing(db, "Payments", "AmountReceived", "TEXT NULL");
         AddColumnIfMissing(db, "Charges", "IsArchived", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "Charges", "AdjustsChargeId", "INTEGER NULL");
+        AddColumnIfMissing(db, "Charges", "RefundedAmount", "TEXT NOT NULL DEFAULT '0'");
+        AddColumnIfMissing(db, "Charges", "RefundedOn", "TEXT NULL");
         AddColumnIfMissing(db, "Payments", "IsArchived", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "UtilityBills", "IsArchived", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "UtilityBills", "PeriodStart", "TEXT NULL");
         AddColumnIfMissing(db, "UtilityBills", "PeriodEnd", "TEXT NULL");
+        AddColumnIfMissing(db, "AdminUsers", "Role", "TEXT NOT NULL DEFAULT 'Owner'");
+        AddColumnIfMissing(db, "AdminUsers", "MustChangePassword", "INTEGER NOT NULL DEFAULT 0");
         db.Database.ExecuteSqlRaw(
         "CREATE TABLE IF NOT EXISTS AuditLog (" +
         "Id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -81,6 +86,13 @@ public static class DbInitializer
         "IsConflictException INTEGER NOT NULL DEFAULT 0)");
             db.Database.ExecuteSqlRaw(
                 "CREATE INDEX IF NOT EXISTS IX_AuditLog_Entity ON AuditLog (EntityType, EntityId)");
+        db.Database.ExecuteSqlRaw(
+        "CREATE TABLE IF NOT EXISTS Reminders (" +
+        "Id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+        "Title TEXT NOT NULL, " +
+        "Note TEXT NULL, " +
+        "DueDate TEXT NOT NULL, " +
+        "IsDone INTEGER NOT NULL DEFAULT 0)");
     }
 
     // Rules the database itself enforces, so even two writers at once can't create duplicates.
@@ -132,9 +144,13 @@ public static class DbInitializer
     private static void BackupBeforeUpgrade(AppDbContext db)
     {
         if (TableExists(db, "AuditLog") &&
+            TableExists(db, "Reminders") &&
             ColumnExists(db, "Charges", "AdjustsChargeId") &&
             ColumnExists(db, "UtilityBills", "PeriodStart") &&
-            ColumnExists(db, "Payments", "AmountReceived")) return;
+            ColumnExists(db, "Payments", "AmountReceived") &&
+            ColumnExists(db, "Charges", "RefundedAmount") &&
+            ColumnExists(db, "Occupancies", "MovedOutOn") &&
+            ColumnExists(db, "AdminUsers", "Role")) return;
 
         try
         {

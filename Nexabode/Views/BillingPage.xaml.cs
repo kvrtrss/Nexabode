@@ -43,6 +43,11 @@ public partial class BillingPage : Page
         public bool IsArchived { get; set; }
         public string ArchivedText => IsArchived ? "Archived" : "";
         public bool Settled => IsVoided || Balance <= 0;
+        public decimal Refunded { get; set; }
+        public DateOnly? RefundedOn { get; set; }
+        public string RefundDetail => Refunded <= 0 ? ""
+            : Fmt.Peso(Refunded) + (RefundedOn is DateOnly d ? " on " + Fmt.Date(d) : "");
+        public string NoteText => IsVoided ? Note : Refunded > 0 ? "Refunded " + RefundDetail : "";
     }
 
     private const string AllItems = "All items";
@@ -209,7 +214,9 @@ public partial class BillingPage : Page
             .Include(c => c.Allocations).ThenInclude(a => a.Payment)
             .Include(c => c.Occupancy).ThenInclude(o => o.Tenant)
             .Include(c => c.Occupancy).ThenInclude(o => o.Bed).ThenInclude(b => b.Room)
-            .Where(c => c.BillingMonth == key && (showVoided || !c.IsVoided))
+            .Where(c => c.BillingMonth == key)
+            .ToList()
+            .Where(c => showVoided || !c.IsVoided || c.RefundedAmount > 0)
             .ToList();
 
         _all = charges
@@ -233,7 +240,9 @@ public partial class BillingPage : Page
                     IsVoided = c.IsVoided,
                     IsArchived = c.IsArchived,
                     Note = c.IsVoided ? $"Voided: {c.VoidReason}" : "",
-                    Status = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today, c.IsVoided),
+                    Status = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today, c.IsVoided, c.RefundedAmount),
+                    Refunded = c.RefundedAmount,
+                    RefundedOn = c.RefundedOn,
                     LastPaid = c.Allocations.Count == 0
                         ? (DateOnly?)null
                         : c.Allocations.Max(a => a.Payment.PaymentDate),
@@ -318,6 +327,7 @@ public partial class BillingPage : Page
                 "Not fully paid" => !r.IsVoided && r.Balance > 0,
                 "Fully paid" => r.Status == "Paid",
                 "Overdue" => r.Status == "Overdue",
+                "Refunded" => r.Refunded > 0,
                 _ => true
             })
             .Where(r => query == "" || r.Tenant.Contains(query, StringComparison.OrdinalIgnoreCase))
@@ -364,6 +374,7 @@ public partial class BillingPage : Page
             row.IsVoided ? null : row.Balance <= 0 ? "Success" : row.Status == "Overdue" ? "Danger" : "Warning");
         AddLine(InfoPanel, "Due", row.DueText);
         if (row.IsVoided) AddLine(InfoPanel, "Voided", row.Note.Replace("Voided: ", ""));
+        if (row.Refunded > 0) AddLine(InfoPanel, "Refunded", row.RefundDetail, "Warning");
 
         PaymentList.Children.Clear();
         if (row.Payments.Count == 0)

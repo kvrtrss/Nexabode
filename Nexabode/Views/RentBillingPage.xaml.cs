@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Globalization;
+using System.Windows;
 using System.Windows.Controls;
 using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
@@ -42,6 +43,14 @@ public partial class RentBillingPage : Page
 
     private static void Tell(string message) =>
         MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
+
+    private Window? Owner => Window.GetWindow(this);
+
+    private static bool TryDate(string text, out DateOnly date) =>
+        DateOnly.TryParse(text.Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out date);
+
+    private static bool TryMoney(string text, out decimal value) =>
+        decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value);
 
     private DateOnly? SelectedMonth => (MonthCombo.SelectedItem as MonthOption)?.Start;
 
@@ -147,6 +156,7 @@ public partial class RentBillingPage : Page
     private void UpdateButtons()
     {
         GenerateSelectedButton.IsEnabled = SelectedRow is { Generated: false, IsVoided: false };
+        EditRentButton.IsEnabled = SelectedRow is { Generated: true, IsVoided: false, ChargeId: not null };
 
         var rows = SelectedRows;
         ArchiveButton.IsEnabled = rows.Any(r => r.ChargeId != null && !r.IsArchived && r.Settled);
@@ -272,6 +282,104 @@ public partial class RentBillingPage : Page
         OverdueCard.Tone = overdue > 0 ? "Danger" : "Success";
 
         UpdateButtons();
+    }
+
+    // ---------- Edit a generated rent charge ----------
+
+    private void EditRent_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedRow is not RentRow { Generated: true, IsVoided: false, ChargeId: int chargeId } row) return;
+
+        // The amount is locked once money has been paid on the charge, the same rule as Billing Charges.
+        var canEditAmount = row.Paid == 0;
+
+        var fields = new List<(string Label, string Value)>
+        {
+            ("Details", row.Details),
+            ("Due date (e.g. 2026-10-05)",
+                (row.DueDate ?? DateOnly.FromDateTime(DateTime.Today)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+        };
+        if (canEditAmount)
+            fields.Add(("Amount", row.Amount.ToString("0.##", CultureInfo.CurrentCulture)));
+        fields.Add(("Reason for the change", ""));
+        var reasonIndex = fields.Count - 1;
+
+        var note = canEditAmount
+            ? $"Rent: {Fmt.Peso(row.Amount)}. Only this charge is changed. If you later edit the tenant's stay, " +
+              "Nexabode compares the charge with the rent it works out and may suggest adjusting it."
+            : $"Rent: {Fmt.Peso(row.Amount)}. The amount is locked because payments have been applied. " +
+              "Void the payment first if the amount is wrong.";
+
+        var v = FormDialog.Ask(Owner, $"Edit rent - {row.Tenant}", "Save changes", fields.ToArray(),
+            vals =>
+            {
+                if (vals[0].Trim() == "") return "Please enter the details.";
+                if (!TryDate(vals[1], out _)) return "Enter the due date like 2026-10-05.";
+                if (canEditAmount && (!TryMoney(vals[2], out var amount) || Math.Round(amount, 2) <= 0))
+                    return "Enter the amount as a number greater than zero.";
+                if (vals[reasonIndex].Trim() == "") return "Please enter a reason for the change.";
+                return null;
+            }, note);
+        if (v == null) return;
+
+        using var db = new AppDbContext();
+        var charge = db.Charges
+            .Include(c => c.Allocations)
+            .Include(c => c.Occupancy)
+            .FirstOrDefault(c => c.Id == chargeId);
+
+        if (charge == null)
+        {
+            Tell("This rent charge was voided, so it can't be edited.");
+            LoadList();
+            return;
+        }
+        if (canEditAmount && charge.Allocations.Count > 0)
+        {
+            Tell("A payment was just applied to this charge, so the amount can't be changed. Nothing was saved.");
+            LoadList();
+            return;
+        }
+
+        var reason = v[reasonIndex].Trim();
+        var key = charge.BillingMonth;
+        var tenantId = charge.Occupancy.TenantId;
+        var changes = 0;
+
+        void Change(string field, string? oldValue, string? newValue)
+        {
+            if (oldValue == newValue) return;
+            AuditService.Record(db, "Charge", charge.Id, tenantId, $"Rent {key}: {field}", oldValue, newValue, reason);
+            changes++;
+        }
+
+        var newDetails = v[0].Trim();
+        if (newDetails != (charge.Description ?? "Monthly rent"))
+        {
+            Change("description", charge.Description, newDetails);
+            charge.Description = newDetails;
+        }
+
+        TryDate(v[1], out var newDue);
+        Change("due date", StayEditService.DateText(charge.DueDate), StayEditService.DateText(newDue));
+        charge.DueDate = newDue;
+
+        if (canEditAmount)
+        {
+            TryMoney(v[2], out var typed);
+            var newAmount = Math.Round(typed, 2);
+            Change("amount", StayEditService.MoneyText(charge.Amount), StayEditService.MoneyText(newAmount));
+            charge.Amount = newAmount;
+        }
+
+        if (changes == 0)
+        {
+            Tell("Nothing was changed.");
+            return;
+        }
+
+        db.SaveChanges();   // the edit and its history entries are saved together or not at all
+        LoadList();
     }
 
     // ---------- Generate ----------

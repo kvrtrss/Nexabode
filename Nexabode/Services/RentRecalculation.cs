@@ -115,7 +115,7 @@ public static class RentRecalculation
                     $"NEEDS YOUR DECISION - {label}: {Fmt.Peso(paidTotal)} has been paid but only " +
                     $"{Fmt.Peso(decision.NewAmount)} would be due, {Fmt.Peso(paidTotal - decision.NewAmount)} too much. " +
                     "The charge is left as it is. To correct it, return the extra to the tenant, void the payment " +
-                    "on the Payments page, then edit the charge on Billing Charges.",
+                    "on the Payments page (enter the amount you gave back), then edit the charge on Billing Charges.",
 
                 _ =>
                     $"NEEDS YOUR DECISION - {label}: only {Fmt.Peso(decision.NewAmount)} would be due instead of " +

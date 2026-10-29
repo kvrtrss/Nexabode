@@ -58,10 +58,13 @@ public static class BillingRules
             true);
     }
 
+    // refunded: money that was paid on the charge and given back to the tenant.
+    // A cancelled (voided) charge that was refunded shows as "Refunded". A charge that is still due always
+    // shows how much is owed (Unpaid, Partial, Overdue), so a refund can never hide money that is still owed.
     public static string ChargeStatus(decimal amount, decimal paid, DateOnly dueDate, DateOnly today,
-                                      bool isVoided = false)
+                                      bool isVoided = false, decimal refunded = 0)
     {
-        if (isVoided) return "Voided";
+        if (isVoided) return refunded > 0 ? "Refunded" : "Voided";
         if (amount - paid <= 0) return "Paid";
         if (dueDate < today) return "Overdue";
         return paid > 0 ? "Partial" : "Unpaid";

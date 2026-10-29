@@ -7,6 +7,8 @@ public class AdminUser
     public int Id { get; set; }
     public string Username { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
+    public string Role { get; set; } = "Owner";          // "Owner" can do everything, "Staff" works with records only
+    public bool MustChangePassword { get; set; }          // true after an account is added or its password is reset
 }
 
 public class Room
@@ -57,7 +59,17 @@ public class Occupancy
     public decimal DepositRefunded { get; set; }
     public DateOnly? DepositRefundedOn { get; set; }
     public string? DepositRefundNote { get; set; }
+    public DateOnly? MovedOutOn { get; set; }   // the day the administrator confirmed the tenant had left (set by Move out)
     public List<Charge> Charges { get; set; } = new();
+}
+
+public class Reminder
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Note { get; set; }
+    public DateOnly DueDate { get; set; }
+    public bool IsDone { get; set; }
 }
 
 public class UtilityBill
@@ -92,7 +104,9 @@ public class Charge
     public string? VoidReason { get; set; }
     public DateOnly? VoidedOn { get; set; }
     public bool IsArchived { get; set; }
-    public int? AdjustsChargeId { get; set; } 
+    public int? AdjustsChargeId { get; set; }
+    public decimal RefundedAmount { get; set; }   // paid money that was given back to the tenant (entered when a payment is voided)
+    public DateOnly? RefundedOn { get; set; }
 }
 
 public class Payment
