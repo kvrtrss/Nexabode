@@ -97,3 +97,34 @@ All notable changes to this project are listed here.
 - Months with no rent charge yet are listed in the review window, not generated automatically
 - Utility shares remain equal among tenants
 - Nexabode still does not hold advance payments: a payment needs at least one unpaid charge to be applied to
+
+## [1.3.0] - Credit, notifications and accounts
+
+### Added
+- Credit: the Tenants page shows each tenant's Credit balance (the deposit still held), with Credit used and Credit refunded when they apply
+- Edit credit corrects a credit that was entered wrongly, and Undo refund puts refunded money back into the credit. Both need a reason and are saved in the change history
+- Billing Charges has a Refunded status for a cancelled charge whose money was given back, a Refunded filter, and a note on any charge that had money given back
+- Void payment can record the amount given back to the tenant
+- Edit rent on the Rent Billing page changes a generated rent charge's details, due date and (while nothing is paid) amount, with a required reason
+- Notifications: a bell in the title bar with an unread count and a drop-down panel, and a Notifications page. They cover overdue and upcoming payments, move-ins and move-outs, rent not generated, utility bills not split, credit left with moved-out tenants, backup reminders, and your own reminders. Notifications can be marked as read, and the warning window (1 to 30 days) can be chosen
+- Accounts: Owners can add Owner and Staff accounts in Settings, reset passwords, change roles and remove accounts. A new or reset account chooses its own password at the next sign-in
+- A Log out button under the account card
+- A Moving out status for a tenant on their last day
+
+### Changed
+- "Apply deposit" is now "Apply credit", and "Deposit refund" is now "Refund credit". New payments made from credit use the method "Credit"
+- Refund credit asks for the amount to give back now, and only the credit that is left can be refunded. It asks for confirmation
+- A tenant with a move-out date is Staying until that day, Moving out on that day, and Moved out the day after. Pressing Move out with today's date, or an earlier one, marks the tenant as moved out at once. A later date only schedules the move-out
+- A moved-out tenant who still has credit left stays in the default Tenants list
+- The billing statement shows "Credit" and "CREDIT BALANCE" in place of "Deposit" and "DEPOSIT HELD"
+- Staff accounts cannot manage accounts or restore a backup
+- The database gets five new columns and one new table on first start (automatic). A safety copy is saved first. Existing accounts become Owners
+
+### Fixed
+- Settings acted on the first account in the database. It now acts on the account that is signed in
+- Pressing Move out on a tenant whose move-out date was already set left them as Staying
+
+### Notes
+- Payments made from credit before this version keep the method "Deposit" in the history
+- Nexabode still keeps its data on one computer. Accounts share that computer's database, so people take turns signing in. They do not sync between computers
+- Restoring a backup replaces all accounts with the ones in the backup
