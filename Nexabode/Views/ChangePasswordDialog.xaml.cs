@@ -110,6 +110,7 @@ public partial class ChangePasswordDialog : Window
         }
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        user.MustChangePassword = false;   // the person has now chosen their own password
 
         if (_forced && requested != user.Username)
         {

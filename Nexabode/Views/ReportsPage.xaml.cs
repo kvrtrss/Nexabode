@@ -406,12 +406,12 @@ public partial class ReportsPage : Page
         var deposit = DepositService.Summary(db, tenantId);
         if (deposit.Paid > 0)
         {
-            doc.Blocks.Add(P("Deposit", 14, bold: true, bottom: 2));
+            doc.Blocks.Add(P("Credit", 14, bold: true, bottom: 2));
             doc.Blocks.Add(P($"Deposit paid:   {Money(deposit.Paid)}", bottom: 0));
             if (deposit.Applied > 0)
                 doc.Blocks.Add(P($"Used for unpaid charges:   {Money(deposit.Applied)}", bottom: 0));
             doc.Blocks.Add(P($"Refunded:   {Money(deposit.Refunded)}", bottom: 0));
-            doc.Blocks.Add(P($"DEPOSIT HELD:   {Money(deposit.Held)}", 12, bold: true, bottom: 10));
+            doc.Blocks.Add(P($"CREDIT BALANCE:   {Money(deposit.Held)}", 12, bold: true, bottom: 10));
         }
 
         return doc;

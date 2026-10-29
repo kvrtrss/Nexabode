@@ -47,6 +47,7 @@ public partial class PaymentsPage : Page
         public string PaidFor { get; set; } = "";
         public decimal Received { get; set; }
         public decimal Change { get; set; }
+        public bool FromCredit { get; set; }   // paid from the tenant's credit, so voiding it puts the money back in the credit
     }
 
     public class BalanceRow
@@ -241,6 +242,7 @@ public partial class PaymentsPage : Page
                 Remarks = p.Remarks,
                 IsVoided = p.IsVoided,
                 IsArchived = p.IsArchived,
+                FromCredit = p.Source == DepositService.PaymentSource,
                 PaidFor = string.Join(", ", p.Allocations
                     .Select(a => BillingHelpers.ItemOf(a.Charge))
                     .Distinct()
@@ -315,13 +317,40 @@ public partial class PaymentsPage : Page
         var row = SelectedPayment;
         if (row == null || row.IsVoided) return;
 
+        var note = $"This cancels the payment of {Fmt.Peso(row.Amount)} from {row.DateText}. The charges it paid become unpaid again, " +
+                   "and the payment stays in the history marked Voided (tick Show voided to see it). This can't be undone." +
+                   (row.Change > 0 ? $"\n\nThe tenant handed over {Fmt.Peso(row.Received)} and {Fmt.Peso(row.Change)} was returned as change." : "");
+
+        // A payment made from the tenant's credit gives its money back to the credit, so there is nothing to hand back.
+        var fields = new List<(string Label, string Value)> { ("Reason for voiding", "") };
+        if (row.FromCredit)
+            note += "\n\nThis payment was made from the tenant's credit. Voiding it puts the money back into their credit balance.";
+        else
+        {
+            fields.Add(("Amount given back to the tenant (0 if none)", "0"));
+            note += "\n\nIf you gave money back to the tenant, enter how much. The charges it paid will then show as refunded in Billing Charges.";
+        }
+
         var v = FormDialog.Ask(Owner, $"Void payment - {row.Tenant}", "Void payment",
-            new[] { ("Reason for voiding", "") },
-            vals => vals[0].Trim() == "" ? "Please enter a reason." : null,
-            note: $"This cancels the payment of {Fmt.Peso(row.Amount)} from {row.DateText}. The charges it paid become unpaid again, " +
-                  "and the payment stays in the history marked Voided (tick Show voided to see it). This can't be undone." +
-                  (row.Change > 0 ? $"\n\nThe tenant handed over {Fmt.Peso(row.Received)} and {Fmt.Peso(row.Change)} was returned as change." : ""));
+            fields.ToArray(),
+            vals =>
+            {
+                if (vals[0].Trim() == "") return "Please enter a reason.";
+                if (vals.Length > 1)
+                {
+                    if (!decimal.TryParse(vals[1], NumberStyles.Number, CultureInfo.CurrentCulture, out var given) || given < 0)
+                        return "Enter the amount given back as a number (use 0 if no money was given back).";
+                    if (Math.Round(given, 2) > row.Amount)
+                        return $"The amount given back can't be more than the payment ({Fmt.Peso(row.Amount)}).";
+                }
+                return null;
+            },
+            note: note);
         if (v == null) return;
+
+        decimal givenBack = 0;
+        if (v.Length > 1 && decimal.TryParse(v[1], NumberStyles.Number, CultureInfo.CurrentCulture, out var typedBack))
+            givenBack = Math.Round(typedBack, 2);
 
         using var db = new AppDbContext();
         var payment = db.Payments
@@ -330,14 +359,29 @@ public partial class PaymentsPage : Page
 
         if (payment.IsVoided) { RefreshAll(); return; }
 
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
         // Remember what the payment had paid, then free those charges.
         var applied = string.Join("; ", payment.Allocations.Select(a =>
             $"{a.Charge.Description ?? a.Charge.ChargeType.ToString()} ({a.Charge.BillingMonth}) {Fmt.Peso(a.AmountApplied)}"));
 
+        // Note the money given back on the charges this payment had paid, oldest due date first.
+        var left = givenBack;
+        foreach (var allocation in payment.Allocations.OrderBy(a => a.Charge.DueDate).ThenBy(a => a.ChargeId))
+        {
+            if (left <= 0) break;
+            var give = Math.Min(left, allocation.AmountApplied);
+            allocation.Charge.RefundedAmount += give;
+            allocation.Charge.RefundedOn = today;
+            left -= give;
+        }
+
         db.PaymentAllocations.RemoveRange(payment.Allocations);
         payment.IsVoided = true;
-        payment.VoidReason = v[0].Trim() + (applied == "" ? "" : $" (was applied to: {applied})");
-        payment.VoidedOn = DateOnly.FromDateTime(DateTime.Today);
+        payment.VoidReason = v[0].Trim()
+            + (applied == "" ? "" : $" (was applied to: {applied})")
+            + (givenBack > 0 ? $" (refunded to tenant: {Fmt.Peso(givenBack)})" : "");
+        payment.VoidedOn = today;
         db.SaveChanges();   // everything is saved together or not at all
 
         RefreshAll();

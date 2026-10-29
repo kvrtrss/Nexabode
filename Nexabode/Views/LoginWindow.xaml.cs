@@ -42,7 +42,7 @@ public partial class LoginWindow : FluentWindow
 
         // Signed in with the default password: a new one must be chosen before continuing.
         var signedInName = user.Username;
-        if (password == DefaultPassword)
+        if (password == DefaultPassword || user.MustChangePassword)
         {
             if (!ChangePasswordDialog.Ask(this, user.Username, forced: true, out signedInName))
             {
@@ -53,6 +53,7 @@ public partial class LoginWindow : FluentWindow
         }
 
         Session.Administrator = signedInName;
+        Session.IsOwner = user.Role == AccountRoles.Owner;
         new MainWindow().Show();   // show the main window first, then close login
         Close();
     }

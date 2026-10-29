@@ -76,7 +76,8 @@ public static class StayEditService
         Change("Deposit", MoneyText(stay.Deposit), MoneyText(edit.Deposit));
 
         if (changes == 0) return 0;
-
+        // A new move-out date replaces an earlier "moved out" confirmation, so the status follows the dates again.
+        if (stay.MoveOutDate != edit.MoveOut) stay.MovedOutOn = null;
         stay.BedId = edit.BedId;
         stay.MoveInDate = edit.MoveIn;
         stay.MoveOutDate = edit.MoveOut;

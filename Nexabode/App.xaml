@@ -184,6 +184,10 @@
                         <Setter TargetName="Pill" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
                         <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                     </DataTrigger>
+                    <DataTrigger Binding="{Binding}" Value="Moving out">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                    </DataTrigger>
                     <DataTrigger Binding="{Binding}" Value="Reserved">
                         <Setter TargetName="Pill" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
                         <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource WarningBrush}" />
@@ -217,6 +221,11 @@
                     <DataTrigger Binding="{Binding}" Value="Not generated">
                         <Setter TargetName="Pill" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
                         <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                    </DataTrigger>
+                    <!-- Blue: refunded -->
+                    <DataTrigger Binding="{Binding}" Value="Refunded">
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource InfoSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource InfoBrush}" />
                     </DataTrigger>
                     <!-- Anything else (Inactive, Draft, Moved out) stays gray -->
                 </DataTemplate.Triggers>

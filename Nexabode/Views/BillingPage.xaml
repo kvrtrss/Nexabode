@@ -44,6 +44,7 @@
                 <ComboBoxItem Content="Not fully paid" />
                 <ComboBoxItem Content="Fully paid" />
                 <ComboBoxItem Content="Overdue" />
+                <ComboBoxItem Content="Refunded" />
             </ComboBox>
             <ui:TextBox x:Name="SearchBox" Width="220" Margin="0,0,20,6"
                 PlaceholderText="Search by tenant" TextChanged="SearchBox_TextChanged" />
@@ -83,7 +84,7 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Archived" Binding="{Binding ArchivedText}" Width="80" />
-                <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="140" />
+                <DataGridTextColumn Header="Note" Binding="{Binding NoteText}" Width="140" />
             </DataGrid.Columns>
         </DataGrid>
 
