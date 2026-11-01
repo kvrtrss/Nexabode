@@ -20,7 +20,7 @@
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" Version="10.0.13" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" Version="10.0.14" />
     <PackageReference Include="SQLite3MC.PCLRaw.bundle" Version="2.6.1" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
   </ItemGroup>
