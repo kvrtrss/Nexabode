@@ -87,4 +87,3 @@ SELECT count(*) FROM sqlite_master;
   or break the app's change history.
 - A restored `.nexabak` backup replaces the key, so any key you saved earlier
   stops working.
-- The sign-in password and backup password cannot be reset or recovered.
