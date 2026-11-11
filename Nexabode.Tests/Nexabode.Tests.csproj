@@ -38,6 +38,7 @@
   <Compile Include="..\Nexabode\Services\AuditWording.cs" Link="AuditWording.cs" />
   <Compile Include="..\Nexabode\Services\Fmt.cs" Link="Fmt.cs" />
   <Compile Include="..\Nexabode\Services\FloorRules.cs" Link="FloorRules.cs" />
+  <Compile Include="..\Nexabode\Services\ReceiptNumberRules.cs" Link="ReceiptNumberRules.cs" />
   </ItemGroup>
 
   <ItemGroup>
