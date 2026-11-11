@@ -36,7 +36,7 @@ public partial class SettingsPage : Page
         using var db = new AppDbContext();
         _username = Session.Administrator;   // the account that is signed in now, not simply the first one
 
-        AccountText.Text = $"Signed in as {_username} ({(Session.IsOwner ? "Owner" : "Staff")}). Use a password only you know.";
+        AccountText.Text = $"Signed in as {_username} ({(Session.IsOwner ? "Owner" : "Staff")}). Keep your password private.";
 
         // Restoring replaces every account and all data, so it is for Owners only.
         RestoreButton.IsEnabled = Session.IsOwner;
@@ -55,12 +55,12 @@ public partial class SettingsPage : Page
 
         if (last == null && string.IsNullOrWhiteSpace(settings.LastBackup))
         {
-            LastBackupText.Text = "No backup yet. Create one before you enter real data.";
+            LastBackupText.Text = "No backup has been created yet. Create one before you start entering real data.";
             LastBackupText.Foreground = (System.Windows.Media.Brush)FindResource("WarningBrush");
         }
         else if (last == null)
         {
-            LastBackupText.Text = $"Last backup: {settings.LastBackup}. Create a new one to start the backup reminder.";
+            LastBackupText.Text = $"Last backup: {settings.LastBackup}. Create a new backup to turn on the backup reminder.";
             LastBackupText.Foreground = (System.Windows.Media.Brush)FindResource("WarningBrush");
         }
         else
@@ -82,12 +82,54 @@ public partial class SettingsPage : Page
                 MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
+    // Makes a fresh emergency access key (Owners only: this whole card is hidden from Staff).
+    private void EmergencyKey_Click(object sender, RoutedEventArgs e)
+    {
+        if (!Session.IsOwner) return;
+        if (!ConfirmPasswordDialog.Ask(Owner, _username,
+                "Enter your password to create a new emergency access key. The current key will stop working."))
+            return;
+
+        RecoveryCodeDialog.IssueEmergencyKey(Owner, "New emergency access key created in Settings");
+        ShowRecoveryStatus();
+    }
+
+    // Sets, changes or removes the reset phrase (Owners only: this whole card is hidden from Staff).
+    private void ResetPhrase_Click(object sender, RoutedEventArgs e)
+    {
+        if (!Session.IsOwner) return;
+        if (!ConfirmPasswordDialog.Ask(Owner, _username,
+                "Enter your password to set the reset phrase. The phrase can be used to regain access when nobody can sign in."))
+            return;
+
+        if (ResetPhraseDialog.Ask(Owner, _username)) ShowRecoveryStatus();
+    }
+
+    // Makes a fresh recovery code. The old one stops working once the new one is saved.
+    private void RecoveryCode_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ConfirmPasswordDialog.Ask(Owner, _username,
+                "Enter your password to create a new recovery code. The current code will stop working."))
+            return;
+
+        int userId;
+        using (var db = new AppDbContext())
+        {
+            var lower = _username.ToLower();
+            var user = db.AdminUsers.FirstOrDefault(u => u.Username.ToLower() == lower);
+            if (user == null) { Tell("The account could not be found."); return; }
+            userId = user.Id;
+        }
+
+        RecoveryCodeDialog.Issue(Owner, userId, "New recovery code created in Settings");
+    }
+
     private void ChangeUsername_Click(object sender, RoutedEventArgs e)
     {
         if (!ChangeUsernameDialog.Ask(Owner, _username, out var newName)) return;
 
         _username = newName;
-        AccountText.Text = $"Signed in as {_username} ({(Session.IsOwner ? "Owner" : "Staff")}). Use a password only you know.";
+        AccountText.Text = $"Signed in as {_username} ({(Session.IsOwner ? "Owner" : "Staff")}). Keep your password private.";
         LoadAccounts();
         (Window.GetWindow(this) as MainWindow)?.RefreshAccount();
 
@@ -124,6 +166,18 @@ public partial class SettingsPage : Page
         AccountGrid.ItemsSource = rows;
         AccountGrid.SelectedItem = rows.FirstOrDefault(r => r.Id == keep);
         UpdateAccountButtons();
+
+        OwnerWarning.Visibility = AccountService.OwnerCount(db) < 2 ? Visibility.Visible : Visibility.Collapsed;
+        ShowRecoveryStatus();
+    }
+
+    // Says which ways back in are ready, so nobody finds out on the day they are needed.
+    private void ShowRecoveryStatus()
+    {
+        var key = AuthService.HasEmergencyKey() ? "created" : "not created yet";
+        var hasPhrase = AuthService.HasResetPhrase();
+        RecoveryStatusText.Text = $"Emergency access key: {key}. Reset phrase: {(hasPhrase ? "set" : "not set")}." +
+            (hasPhrase ? "" : " Setting one gives you an easier-to-remember way back in if nobody can sign in.");
     }
 
     private void UpdateAccountButtons()
@@ -144,24 +198,25 @@ public partial class SettingsPage : Page
             new[]
             {
                 ("Username", ""),
-                ("Role (Staff or Owner)", AccountRoles.Staff)
+                ("Role", AccountRoles.Staff)
             },
             vals =>
             {
                 using var db = new AppDbContext();
                 var nameError = AccountService.NameError(db, vals[0]);
                 if (nameError != null) return nameError;
-                return AccountRoles.Normalize(vals[1]) == null ? "Type Staff or Owner for the role." : null;
+                return AccountRoles.Normalize(vals[1]) == null ? "Choose a role." : null;
             },
             "Staff can work with tenants, rooms, billing, payments and reports. " +
-            "An Owner can also manage accounts and restore backups.");
+            "An Owner can also manage accounts and restore backups.",
+            choices: new string[]?[] { null, new[] { AccountRoles.Staff, AccountRoles.Owner } });
         if (v == null) return;
 
         var username = v[0].Trim();
         var role = AccountRoles.Normalize(v[1])!;
 
         var password = BackupPasswordDialog.Ask(Owner, $"Temporary password for {username}", "Create account",
-            "Choose a temporary password and tell it to them. They will be asked to choose their own " +
+            "Choose a temporary password and give it to the new user. They will be asked to choose their own " +
             "password and username the first time they sign in.",
             confirm: true, noun: "temporary password");
         if (password == null) return;
@@ -177,7 +232,7 @@ public partial class SettingsPage : Page
 
         LoadAccounts();
         Tell($"The {role} account \"{username}\" was added.\n\n" +
-             "They can sign in with the temporary password, and will be asked to choose their own.");
+             "They can sign in with the temporary password and will then be asked to choose their own password.");
     }
 
     private void ResetPassword_Click(object sender, RoutedEventArgs e)
@@ -186,7 +241,7 @@ public partial class SettingsPage : Page
         if (row == null) return;
 
         var password = BackupPasswordDialog.Ask(Owner, $"Reset password for {row.Username}", "Reset password",
-            "Choose a temporary password and tell it to them. They will be asked to choose their own the next time they sign in.",
+            "Choose a temporary password and give it to them. They will be asked to choose their own password the next time they sign in.",
             confirm: true, noun: "temporary password");
         if (password == null) return;
 
@@ -200,7 +255,7 @@ public partial class SettingsPage : Page
         }
 
         LoadAccounts();
-        Tell($"The password for \"{row.Username}\" was reset.");
+        Tell($"The password for \"{row.Username}\" was reset. They will be asked to choose a new one the next time they sign in.");
     }
 
     private void ChangeRole_Click(object sender, RoutedEventArgs e)
@@ -208,13 +263,24 @@ public partial class SettingsPage : Page
         var row = SelectedAccount;
         if (row == null) return;
 
-        var newRole = row.Role == AccountRoles.Owner ? AccountRoles.Staff : AccountRoles.Owner;
-        var confirm = MessageBox.Show(
+        // A choice box first, like Add account, so the person sees and picks the role they are changing to.
+        // It starts on the other role, since that is what "Change role" almost always means.
+        var otherRole = row.Role == AccountRoles.Owner ? AccountRoles.Staff : AccountRoles.Owner;
+        var picked = FormDialog.Ask(Owner, $"Change role: {row.Username}", "Continue",
+            new[] { ("Role", otherRole) },
+            vals => ConfirmWording.RoleChoiceError(row.Username, row.Role, AccountRoles.Normalize(vals[0])),
+            ConfirmWording.RoleChoiceNote(row.Username, row.Role),
+            choices: new string[]?[] { new[] { AccountRoles.Staff, AccountRoles.Owner } });
+        if (picked == null) return;
+        var newRole = AccountRoles.Normalize(picked[0])!;
+
+        // The message that was always shown stays: it says what the new role can and cannot do.
+        var confirm = ConfirmActionDialog.YesNo(
             $"Change \"{row.Username}\" from {row.Role} to {newRole}?\n\n" +
             (newRole == AccountRoles.Owner
-                ? "They will be able to manage accounts and restore backups."
-                : "They will no longer be able to manage accounts or restore backups."),
-            "Change role", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                ? "They will be able to manage accounts and restore backups. You can change this back at any time."
+                : "They will no longer be able to manage accounts or restore backups. You can change this back at any time."),
+            "Change role", confirmText: "Change role");
         if (confirm != MessageBoxResult.Yes) return;
 
         string? error;
@@ -234,10 +300,10 @@ public partial class SettingsPage : Page
         var row = SelectedAccount;
         if (row == null) return;
 
-        var confirm = MessageBox.Show(
+        var confirm = ConfirmActionDialog.YesNo(
             $"Remove the account \"{row.Username}\"?\n\n" +
-            "They will no longer be able to sign in. Changes they made stay in the change history under their name.",
-            "Remove account", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            "They will no longer be able to sign in. Changes they made stay in the change history under their name. This cannot be undone.",
+            "Remove account", confirmText: "Remove account");
         if (confirm != MessageBoxResult.Yes) return;
 
         string? error;
@@ -269,7 +335,7 @@ public partial class SettingsPage : Page
 
         var password = BackupPasswordDialog.Ask(Owner, "Create backup", "Create backup",
             "Choose a password for this backup file. It is separate from your sign-in password. " +
-            "If you forget it, the backup cannot be opened and there is no way to recover it.",
+            "If the password is forgotten, the backup cannot be opened and the password cannot be recovered.",
             confirm: true);
         if (password == null) return;
 
@@ -281,7 +347,7 @@ public partial class SettingsPage : Page
         catch (Exception ex)
         {
             Mouse.OverrideCursor = null;
-            MessageBox.Show("The backup could not be created.\n\n" + ex.Message, "Nexabode",
+            MessageBox.Show("The backup could not be created.\n\nDetails: " + ex.Message, "Nexabode",
                 MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
@@ -296,8 +362,8 @@ public partial class SettingsPage : Page
         settings.Save();
         ShowLastBackup();
 
-        MessageBox.Show($"Backup created and verified:\n{save.FileName}\n\n" +
-                        "Keep a copy on a USB drive or cloud storage, and remember the backup password.",
+        MessageBox.Show($"The backup was created and verified:\n{save.FileName}\n\n" +
+                        "Keep a copy on a USB drive or cloud storage, and keep the backup password in a safe place.",
                         "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
@@ -324,12 +390,12 @@ public partial class SettingsPage : Page
             $"Enter the backup password for:\n{Path.GetFileName(open.FileName)}", confirm: false);
         if (password == null) return;
 
-        var confirm = MessageBox.Show(
-            "Restoring replaces ALL current data (rooms, tenants, billing, payments, and the sign-in password) " +
+        var confirm = ConfirmActionDialog.YesNo(
+            "Restoring replaces all current data (rooms, tenants, billing, payments and sign-in accounts) " +
             "with the contents of the backup.\n\n" +
-            "A safety copy of your current data is saved first, locked with the same password.\n\n" +
-            "Nexabode will close when the restore finishes, and you open it again.\n\nContinue?",
-            "Confirm restore", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            "A safety copy of your current data is saved first, protected with the same password.\n\n" +
+            "Nexabode will close when the restore is complete. You will need to open it again.",
+            "Confirm restore", confirmText: "Restore");
         if (confirm != MessageBoxResult.Yes) return;
 
         string safety;
@@ -352,7 +418,7 @@ public partial class SettingsPage : Page
 
         MessageBox.Show(
             "The backup was restored.\n\n" +
-            "Nexabode will now close. Open it again and sign in with the password that was in use when the backup was made.\n\n" +
+            "Nexabode will now close. Open it again and sign in with the password that was in use when the backup was created.\n\n" +
             $"Your previous data was saved here:\n{safety}",
             "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
@@ -373,8 +439,8 @@ public partial class SettingsPage : Page
         var more = problems.Count > 15 ? $"\n\n...and {problems.Count - 15} more." : "";
         MessageBox.Show($"{problems.Count} problem(s) found. Nothing was changed.\n\n" +
                         string.Join("\n\n", problems.Take(15)) + more +
-                        "\n\nTo fix one: open the tenant, click Edit this stay on one of the stays, and correct its dates. " +
-                        "A correction that makes an overlap smaller never needs an exception.",
+                        "\n\nTo correct a problem, open the tenant, select Edit this stay on one of the stays concerned, and correct its dates. " +
+                        "A correction that reduces an overlap never needs an exception.",
             "Nexabode", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
     private void ViewHistory_Click(object sender, RoutedEventArgs e) =>

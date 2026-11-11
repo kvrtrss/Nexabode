@@ -22,12 +22,26 @@ public partial class TenantsPage : Page
         public decimal Deposit { get; set; }
         public decimal DepositRefunded { get; set; }
         public DateOnly? DepositRefundedOn { get; set; }
+        public List<string> SharedWith { get; set; } = new();   // other tenants booked on this bed on some of the same days
+    }
+
+    // A stay that was removed after it had been billed. Shown greyed in Stay history, nothing more.
+    public class CancelledStayInfo
+    {
+        public string Bed { get; set; } = "";
+        public DateOnly MoveIn { get; set; }
+        public DateOnly? MoveOut { get; set; }
+        public string Line { get; set; } = "";
     }
 
     public class TenantRow
     {
         public int Id { get; set; }
         public string FullName { get; set; } = "";
+        public bool HasClash { get; set; }   // a stay of this tenant clashes with another stay
+        public string NameText => HasClash ? "\u26A0 " + FullName : FullName;
+        public string? Gender { get; set; }
+        public string GenderText => Gender ?? "-";
         public string? Contact { get; set; }
         public string? EmergencyContact { get; set; }
         public string? SchoolOrWork { get; set; }
@@ -42,6 +56,7 @@ public partial class TenantsPage : Page
         public DateOnly? ActiveMoveIn { get; set; }
         public DateOnly? LeavingOn { get; set; }   // the last day, when a move-out date is already set
         public List<StayInfo> Stays { get; set; } = new();
+        public List<CancelledStayInfo> Cancelled { get; set; } = new();
     }
 
     private List<TenantRow> _all = new();
@@ -77,7 +92,7 @@ public partial class TenantsPage : Page
     private static string? NameError(string name, int exceptId)
     {
         var clean = name.Trim();
-        if (clean == "") return "Please enter the tenant's full name.";
+        if (clean == "") return "Enter the tenant's full name.";
 
         var lower = clean.ToLower();
         using var db = new AppDbContext();
@@ -104,6 +119,14 @@ public partial class TenantsPage : Page
             .GroupBy(o => o.TenantId)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(o => o.MoveInDate).ToList());
 
+        // Cancelled stays are hidden from every query on purpose. They are read here only to be listed in Stay history.
+        var cancelledStays = db.Occupancies.IgnoreQueryFilters()
+            .Where(o => o.IsCancelled)
+            .Include(o => o.Bed).ThenInclude(b => b.Room)
+            .ToList()
+            .GroupBy(o => o.TenantId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(o => o.MoveInDate).ToList());
+
         var charges = db.Charges
             .Include(c => c.Allocations)
             .Include(c => c.Occupancy)
@@ -117,6 +140,14 @@ public partial class TenantsPage : Page
             .ToList()
             .GroupBy(p => p.TenantId)
             .ToDictionary(g => g.Key, g => g.Sum(p => p.Amount));
+
+        // Stays that still hold their bed (not ended, not moved out), for spotting two tenants on one bed.
+        // This is the same set the Rooms & Beds page checks.
+        var tenantNames = tenants.ToDictionary(t => t.Id, t => t.FullName);
+        var holding = stays.Values
+            .SelectMany(s => s)
+            .Where(o => (o.MoveOutDate == null || o.MoveOutDate >= today) && o.MovedOutOn == null)
+            .ToList();
 
         _all = tenants.Select(t =>
         {
@@ -145,10 +176,37 @@ public partial class TenantsPage : Page
 
             static string BedName(Occupancy o) => $"{o.Bed.Room.RoomName} / {o.Bed.BedLabel}";
 
+            // Other tenants booked on the same bed on some of the same days as this stay.
+            List<string> SharedWith(Occupancy o) => (o.MoveOutDate == null || o.MoveOutDate >= today) && o.MovedOutOn == null
+                ? holding
+                    .Where(x => x.TenantId != o.TenantId && x.BedId == o.BedId &&
+                                StayRules.Overlap(o.BedRange(), x.BedRange()) != null)
+                    .Select(x => tenantNames[x.TenantId])
+                    .Distinct().OrderBy(n => n).ToList()
+                : new List<string>();
+
+            var ownOverlap = list.Any(a => list.Any(b => a.Id < b.Id &&
+                StayRules.Overlaps(new StayRange(a.Id, a.MoveInDate, a.MoveOutDate), new StayRange(b.Id, b.MoveInDate, b.MoveOutDate))));
+
+            var stayInfos = list.Select(o => new StayInfo
+            {
+                Id = o.Id,
+                Bed = BedName(o),
+                MoveIn = o.MoveInDate,
+                MoveOut = o.MoveOutDate,
+                Rent = o.AgreedRent,
+                Deposit = o.Deposit,
+                DepositRefunded = o.DepositRefunded,
+                DepositRefundedOn = o.DepositRefundedOn,
+                SharedWith = SharedWith(o)
+            }).ToList();
+
             return new TenantRow
             {
                 Id = t.Id,
                 FullName = t.FullName,
+                HasClash = ownOverlap || stayInfos.Any(s => s.SharedWith.Count > 0),
+                Gender = GenderRules.Normalize(t.Gender),
                 Contact = t.Contact,
                 EmergencyContact = t.EmergencyContact,
                 SchoolOrWork = t.SchoolOrWork,
@@ -166,17 +224,16 @@ public partial class TenantsPage : Page
                 OccupancyId = active?.Id,
                 ActiveMoveIn = active?.MoveInDate,
                 LeavingOn = status == "Moving out" ? active!.MoveOutDate : null,
-                Stays = list.Select(o => new StayInfo
-                {
-                    Id = o.Id,
-                    Bed = BedName(o),
-                    MoveIn = o.MoveInDate,
-                    MoveOut = o.MoveOutDate,
-                    Rent = o.AgreedRent,
-                    Deposit = o.Deposit,
-                    DepositRefunded = o.DepositRefunded,
-                    DepositRefundedOn = o.DepositRefundedOn
-                }).ToList()
+                Stays = stayInfos,
+                Cancelled = cancelledStays.TryGetValue(t.Id, out var cancelledList)
+                    ? cancelledList.Select(o => new CancelledStayInfo
+                    {
+                        Bed = BedName(o),
+                        MoveIn = o.MoveInDate,
+                        MoveOut = o.MoveOutDate,
+                        Line = StayCancelRules.HistoryLine(o.CancelledOn, o.CancelReason)
+                    }).ToList()
+                    : new List<CancelledStayInfo>()
             };
         }).ToList();
 
@@ -280,6 +337,7 @@ public partial class TenantsPage : Page
         DetailBadge.Content = t.Status;
 
         InfoPanel.Children.Clear();
+        AddLine("Gender", GenderRules.Display(t.Gender));
         AddLine("Contact", t.Contact ?? "-");
         AddLine("Emergency", t.EmergencyContact ?? "-");
         AddLine("School / work", t.SchoolOrWork ?? "-");
@@ -290,10 +348,26 @@ public partial class TenantsPage : Page
         AddLine("Credit balance", Fmt.Peso(t.Credit.Held), t.Credit.Held > 0 ? "Success" : null);
         if (t.Credit.Applied > 0) AddLine("Credit used", Fmt.Peso(t.Credit.Applied));
         if (t.Credit.Refunded > 0) AddLine("Credit refunded", Fmt.Peso(t.Credit.Refunded));
-        // Two of this tenant's stays on the same days: point it out so it can be corrected.
-        var stayRanges = t.Stays.Select(s => new StayRange(s.Id, s.MoveIn, s.MoveOut)).ToList();
-        if (stayRanges.Any(a => stayRanges.Any(b => a.Id < b.Id && StayRules.Overlaps(a, b))))
-            AddLine("Check", "Two of this tenant's stays overlap. Use Edit this stay below to correct the dates.", "Danger");
+        // Two of this tenant's stays on the same days: point it out so it can be corrected or removed.
+        var overlapping = t.Stays
+            .SelectMany(a => t.Stays
+                .Where(b => a.Id < b.Id &&
+                            StayRules.Overlaps(new StayRange(a.Id, a.MoveIn, a.MoveOut), new StayRange(b.Id, b.MoveIn, b.MoveOut)))
+                .Select(b => (A: a, B: b)))
+            .ToList();
+        if (overlapping.Count > 0)
+        {
+            var duplicate = overlapping.Any(p => StayRemovalRules.IsDuplicate(
+                p.A.Bed, p.A.MoveIn, p.A.MoveOut, p.B.Bed, p.B.MoveIn, p.B.MoveOut));
+            AddLine("Check", StayRemovalRules.OverlapWarning(duplicate, Session.IsOwner), "Danger");
+        }
+
+        // Someone else is booked on the same bed on some of the same days.
+        foreach (var bed in t.Stays.Where(s => s.SharedWith.Count > 0).GroupBy(s => s.Bed))
+        {
+            var others = bed.SelectMany(s => s.SharedWith).Distinct().OrderBy(n => n).ToList();
+            AddLine("Check", ClashWarnings.TenantBedWarning(bed.Key, others, Session.IsOwner), "Danger");
+        }
         if (!string.IsNullOrWhiteSpace(t.Notes)) AddLine("Notes", t.Notes!);
 
         MoveInButton.IsEnabled = t.Status is "Moved out" or "No stay yet";
@@ -306,7 +380,7 @@ public partial class TenantsPage : Page
         UndoRefundButton.IsEnabled = t.Credit.Refunded > 0;
 
         HistoryPanel.Children.Clear();
-        if (t.Stays.Count == 0)
+        if (t.Stays.Count == 0 && t.Cancelled.Count == 0)
         {
             HistoryPanel.Children.Add(new TextBlock
             {
@@ -339,15 +413,53 @@ public partial class TenantsPage : Page
                 Style = (Style)FindResource("MutedText")
             });
 
-            var editLink = new Wpf.Ui.Controls.Button
-            {
-                Content = "Edit this stay",
-                Margin = new Thickness(0, 6, 0, 0),
-                HorizontalAlignment = HorizontalAlignment.Left
-            };
-            editLink.Click += (_, _) => EditStay(stay.Id);
-            box.Children.Add(editLink);
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
 
+            var editLink = new Wpf.Ui.Controls.Button { Content = "Edit this stay" };
+            editLink.Click += (_, _) => EditStay(stay.Id);
+            actions.Children.Add(editLink);
+
+            // Only an Owner can remove a stay, and only one that was never billed.
+            if (Session.IsOwner)
+            {
+                var removeLink = new Wpf.Ui.Controls.Button
+                {
+                    Content = "Remove this stay",
+                    Style = (Style)Application.Current.FindResource("DangerButton"),
+                    Margin = new Thickness(8, 0, 0, 0),
+                    ToolTip = "For a stay entered by mistake. Deleted if it was never billed, otherwise kept as Cancelled."
+                };
+                removeLink.Click += (_, _) => RemoveStay(stay.Id);
+                actions.Children.Add(removeLink);
+            }
+
+            box.Children.Add(actions);
+
+            HistoryPanel.Children.Add(box);
+        }
+
+        // Stays that were removed after being billed: kept for the records, greyed, with no buttons.
+        foreach (var cancelled in t.Cancelled)
+        {
+            var box = new StackPanel { Margin = new Thickness(0, 0, 0, 8), Opacity = 0.7 };
+            box.Children.Add(new TextBlock
+            {
+                Text = cancelled.Bed,
+                FontWeight = FontWeights.SemiBold,
+                TextDecorations = TextDecorations.Strikethrough,
+                Foreground = Res("AppSecondaryBrush")
+            });
+            box.Children.Add(new TextBlock
+            {
+                Text = $"{Fmt.Date(cancelled.MoveIn)} to {(cancelled.MoveOut is DateOnly mo ? Fmt.Date(mo) : "present")}",
+                Style = (Style)FindResource("MutedText")
+            });
+            box.Children.Add(new TextBlock
+            {
+                Text = cancelled.Line,
+                TextWrapping = TextWrapping.Wrap,
+                Style = (Style)FindResource("MutedText")
+            });
             HistoryPanel.Children.Add(box);
         }
     }
@@ -372,22 +484,25 @@ public partial class TenantsPage : Page
             new[]
             {
                 ("Full name", ""),
+                ("Gender (optional)", GenderRules.NotSet),
                 ("Contact number (optional)", ""),
                 ("Emergency contact (optional)", ""),
                 ("School or work (optional)", ""),
                 ("Notes (optional)", "")
             },
-            vals => NameError(vals[0], 0));
+            vals => NameError(vals[0], 0) ?? GenderRules.Error(vals[1]),
+            choices: new string[]?[] { null, GenderRules.Choices, null, null, null, null });
         if (v == null) return;
 
         using var db = new AppDbContext();
         var tenant = new Tenant
         {
             FullName = v[0].Trim(),
-            Contact = Blank(v[1]),
-            EmergencyContact = Blank(v[2]),
-            SchoolOrWork = Blank(v[3]),
-            Notes = Blank(v[4])
+            Gender = GenderRules.Normalize(v[1]),
+            Contact = Blank(v[2]),
+            EmergencyContact = Blank(v[3]),
+            SchoolOrWork = Blank(v[4]),
+            Notes = Blank(v[5])
         };
         db.Tenants.Add(tenant);
         db.SaveChanges();
@@ -406,21 +521,35 @@ public partial class TenantsPage : Page
             new[]
             {
                 ("Full name", t.FullName),
+                ("Gender (optional)", GenderRules.Display(t.Gender)),
                 ("Contact number (optional)", t.Contact ?? ""),
                 ("Emergency contact (optional)", t.EmergencyContact ?? ""),
                 ("School or work (optional)", t.SchoolOrWork ?? ""),
                 ("Notes (optional)", t.Notes ?? "")
             },
-            vals => NameError(vals[0], t.Id));
+            vals => NameError(vals[0], t.Id) ?? GenderRules.Error(vals[1]),
+            choices: new string[]?[] { null, GenderRules.Choices, null, null, null, null });
         if (v == null) return;
+
+        // Show what is about to change. If nothing did, there is nothing to save.
+        var changes = ConfirmWording.Changes(
+            ("Full name", t.FullName, v[0]),
+            ("Gender", GenderRules.Display(t.Gender), GenderRules.Display(v[1])),
+            ("Contact number", t.Contact, v[2]),
+            ("Emergency contact", t.EmergencyContact, v[3]),
+            ("School or work", t.SchoolOrWork, v[4]),
+            ("Notes", t.Notes, v[5]));
+        if (changes.Count == 0) return;
+        if (!ConfirmActionDialog.Ask(Owner, "Edit tenant", ConfirmWording.EditTenant(t.FullName, changes))) return;
 
         using var db = new AppDbContext();
         var entity = db.Tenants.Find(t.Id)!;
         entity.FullName = v[0].Trim();
-        entity.Contact = Blank(v[1]);
-        entity.EmergencyContact = Blank(v[2]);
-        entity.SchoolOrWork = Blank(v[3]);
-        entity.Notes = Blank(v[4]);
+        entity.Gender = GenderRules.Normalize(v[1]);
+        entity.Contact = Blank(v[2]);
+        entity.EmergencyContact = Blank(v[3]);
+        entity.SchoolOrWork = Blank(v[4]);
+        entity.Notes = Blank(v[5]);
         db.SaveChanges();
 
         Reload(t.Id);
@@ -439,76 +568,9 @@ public partial class TenantsPage : Page
     private void EditStay(int occupancyId)
     {
         var t = Current;
-        if (t == null) return;
+        if (t == null || t.Stays.All(s => s.Id != occupancyId)) return;
 
-        using var db = new AppDbContext();
-        var stay = db.Occupancies.Find(occupancyId);
-        if (stay == null || stay.TenantId != t.Id) return;
-
-        var chargeCount = db.Charges.IgnoreQueryFilters().Count(c => c.OccupancyId == stay.Id);
-
-        DepositSummary depositSummary;
-        using (var sumDb = new AppDbContext())
-            depositSummary = DepositService.Summary(sumDb, stay.TenantId);
-        var minDeposit = Math.Max(stay.DepositRefunded, stay.Deposit - depositSummary.Held);
-
-        var beds = db.Beds
-            .Include(b => b.Room)
-            .ToList()
-            .Where(b => b.Id == stay.BedId || (b.IsActive && b.Room.IsActive && !b.IsMaintenance))
-            .OrderBy(b => b.Room.RoomName).ThenBy(b => b.BedLabel)
-            .Select(b => new BedChoice { Id = b.Id, Display = $"{b.Room.RoomName} - {b.BedLabel}", Rate = b.MonthlyRate })
-            .ToList();
-
-        var current = new StayEdit
-        {
-            BedId = stay.BedId,
-            MoveIn = stay.MoveInDate,
-            MoveOut = stay.MoveOutDate,
-            Rent = stay.AgreedRent,
-            Deposit = stay.Deposit
-        };
-
-        var note = chargeCount > 0
-            ? $"This stay has {chargeCount} billing record(s). Changing its dates does not change them yet. " +
-              "Review them in Rent Billing and Billing Charges afterwards."
-            : null;
-
-        var result = StayEditDialog.Ask(Owner, $"Edit stay - {t.FullName}", note, beds, current,
-            hardCheck: r => r.Deposit < minDeposit
-                ? $"The deposit can't be less than {Fmt.Peso(minDeposit)}, the part already refunded or used for unpaid charges."
-                : null,
-            conflictText: r =>
-            {
-                using var check = new AppDbContext();
-                return StayEditService.DescribeConflicts(check, stay, r.BedId, r.MoveIn, r.MoveOut);
-            });
-        if (result == null) return;
-
-        var report = StayImpact.Analyze(db, stay, result);
-        if (report.HasBillingImpact && !ImpactDialog.Confirm(Owner, t.FullName, report.ToText()))
-            return;
-
-        List<string> billingDone;
-        try
-        {
-            StayEditService.Apply(db, stay, result);
-            billingDone = RentRecalculation.Apply(db, report.RentPlan, stay, result.Reason);
-            foreach (var billPlan in report.UtilityPlans)
-                billingDone.AddRange(UtilityRecalculation.Apply(db, billPlan, result.Reason));
-            db.SaveChanges();   // the stay, its billing corrections and the audit entries are saved together
-        }
-        catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
-        {
-            Tell("The stay could not be saved because the data changed at the same moment. " +
-                 "Nothing was saved. Please try again.");
-            return;
-        }
-
-        Reload(t.Id);
-
-        if (billingDone.Count > 0)
-            Tell("The stay was saved. Billing changes:\n\n" + string.Join("\n\n", billingDone));
+        StayActions.Edit(Owner, occupancyId, () => Reload(t.Id));
     }
 
     private void StayHistory_Click(object sender, RoutedEventArgs e)
@@ -551,7 +613,7 @@ public partial class TenantsPage : Page
         var note = $"Credit still held: {Fmt.Peso(summary.Held)}. Only the credit that is left can be refunded.\n" +
                    "Credit that was already used for charges, or already refunded, can't be refunded again.";
 
-        var v = FormDialog.Ask(Owner, $"Refund credit - {t.FullName}", "Refund",
+        var v = FormDialog.Ask(Owner, $"Refund credit: {t.FullName}", "Refund",
             new[]
             {
             ("Amount to refund", summary.Held.ToString("0.##", CultureInfo.CurrentCulture)),
@@ -566,12 +628,8 @@ public partial class TenantsPage : Page
         DateOnly.TryParse(v[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var refundDate);
         var refundNote = string.IsNullOrWhiteSpace(v[2]) ? null : v[2].Trim();
 
-        var confirm = MessageBox.Show(
-            $"Refund {Fmt.Peso(refundAmount)} of credit to {t.FullName}?\n\n" +
-            $"Credit left afterwards: {Fmt.Peso(summary.Held - refundAmount)}.\n\n" +
-            "This records money handed back to the tenant. If it was a mistake, use Undo refund.",
-            "Refund credit", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (confirm != MessageBoxResult.Yes) return;
+        if (!ConfirmActionDialog.Ask(Owner, "Refund credit",
+                ConfirmWording.RefundCredit(t.FullName, refundAmount, summary.Held), "Refund")) return;
 
         try
         {
@@ -609,8 +667,8 @@ public partial class TenantsPage : Page
                 return "Enter the credit as a number, zero or more.";
             if (Math.Round(amount, 2) == summary.Held)
                 return "That is the same as the current credit. Enter a different amount.";
-            if (vals[1].Trim() == "")
-                return "Please enter a reason.";
+            if (!ReasonRules.IsReal(vals[1]))
+                return "Please enter a reason (at least 3 letters or digits).";
             return null;
         }
 
@@ -619,7 +677,7 @@ public partial class TenantsPage : Page
                    "Use this to correct a credit that was entered wrongly. The change is saved in Change history. " +
                    "To give money back to the tenant, use Refund credit instead.";
 
-        var v = FormDialog.Ask(Owner, $"Edit credit - {t.FullName}", "Save changes",
+        var v = FormDialog.Ask(Owner, $"Edit credit: {t.FullName}", "Save changes",
             new[]
             {
             ("New credit balance", summary.Held.ToString("0.##", CultureInfo.CurrentCulture)),
@@ -629,6 +687,9 @@ public partial class TenantsPage : Page
         if (v == null) return;
 
         TryMoney(v[0], out var newCredit);
+
+        if (!ConfirmActionDialog.Ask(Owner, "Edit credit",
+                ConfirmWording.EditCredit(t.FullName, summary.Held, Math.Round(newCredit, 2), v[1]), "Save credit")) return;
 
         try
         {
@@ -672,8 +733,8 @@ public partial class TenantsPage : Page
                 return "Enter the amount to put back as a number greater than zero.";
             if (Math.Round(amount, 2) > summary.Refunded)
                 return $"That is more than what was refunded ({Fmt.Peso(summary.Refunded)}).";
-            if (vals[1].Trim() == "")
-                return "Please enter a reason.";
+            if (!ReasonRules.IsReal(vals[1]))
+                return "Please enter a reason (at least 3 letters or digits).";
             return null;
         }
 
@@ -681,7 +742,7 @@ public partial class TenantsPage : Page
                    "or the money was not really handed back. The amount goes back into the tenant's credit, " +
                    "and the change is saved in Change history.";
 
-        var v = FormDialog.Ask(Owner, $"Undo refund - {t.FullName}", "Undo refund",
+        var v = FormDialog.Ask(Owner, $"Undo refund: {t.FullName}", "Undo refund",
             new[]
             {
             ("Amount to put back into credit", summary.Refunded.ToString("0.##", CultureInfo.CurrentCulture)),
@@ -693,11 +754,8 @@ public partial class TenantsPage : Page
         TryMoney(v[0], out var putBack);
         putBack = Math.Round(putBack, 2);
 
-        var confirm = MessageBox.Show(
-            $"Put {Fmt.Peso(putBack)} back into {t.FullName}'s credit?\n\n" +
-            $"Credit afterwards: {Fmt.Peso(summary.Held + putBack)}.",
-            "Undo refund", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (confirm != MessageBoxResult.Yes) return;
+        if (!ConfirmActionDialog.Ask(Owner, "Undo refund",
+                ConfirmWording.UndoRefund(t.FullName, putBack, summary.Held), "Undo refund")) return;
 
         try
         {
@@ -761,7 +819,7 @@ public partial class TenantsPage : Page
         var note = $"Credit still held: {Fmt.Peso(summary.Held)}. Unpaid balance: {Fmt.Peso(t.Balance)}.\n" +
                    "It is paid against the oldest unpaid charges first, and recorded as a payment with the method \"Credit\".";
 
-        var v = FormDialog.Ask(Owner, $"Apply credit - {t.FullName}", "Apply",
+        var v = FormDialog.Ask(Owner, $"Apply credit: {t.FullName}", "Apply",
             new[]
             {
             ("Amount to apply", suggested.ToString("0.##", CultureInfo.CurrentCulture)),
@@ -774,6 +832,9 @@ public partial class TenantsPage : Page
         TryMoney(v[0], out var applyAmount);
         DateOnly.TryParse(v[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var applyDate);
         var remarks = string.IsNullOrWhiteSpace(v[2]) ? "Credit applied" : "Credit applied - " + v[2].Trim();
+
+        if (!ConfirmActionDialog.Ask(Owner, "Apply credit",
+                ConfirmWording.ApplyCredit(t.FullName, Math.Round(applyAmount, 2), summary.Held, t.Balance), "Apply credit")) return;
 
         try
         {
@@ -848,12 +909,12 @@ public partial class TenantsPage : Page
 
             var bedConflicts = StayConflicts.ForBed(check, r.BedId, proposed);
             if (bedConflicts.Count > 0)
-                return "That bed is not free for those dates. A move-out date is the tenant's last day, " +
-                       "so the next tenant can move in the day after.\n" + StayConflicts.Describe(bedConflicts);
+                return "This move-in cannot be saved because the bed is already taken for part of that period. Choose different dates or a different bed. " +
+                       "A move-out date is the tenant's last day, so the next tenant can move in the day after.\n\n" + StayConflicts.Describe(bedConflicts);
 
             var tenantConflicts = StayConflicts.ForTenant(check, t.Id, proposed);
             if (tenantConflicts.Count > 0)
-                return "This tenant already has a stay on those dates.\n" + StayConflicts.Describe(tenantConflicts);
+                return "This move-in cannot be saved because the tenant already has a stay during that period. Choose different dates.\n\n" + StayConflicts.Describe(tenantConflicts);
 
             return null;
         });
@@ -904,16 +965,16 @@ public partial class TenantsPage : Page
         }
         if (current.Count == 0) return;
 
-        var note = "Pick today to move the tenant out now, or a later date to schedule the move-out. " +
+        var note = "Choose today to move the tenant out now, or a later date to schedule the move-out. " +
                    "The move-out date is their last day in the bed, and it is still billed. " +
                    "A scheduled tenant stays listed as Staying until that day, is Moving out on that day, and is Moved out the day after.";
         var planned = current.Max(o => o.MoveOutDate);
         if (planned != null && planned.Value > today)
-            note += $"\nA move-out date is already set: {Fmt.Date(planned.Value)}. Picking today moves them out now instead.";
+            note += $"\nA move-out date is already set: {Fmt.Date(planned.Value)}. Choosing today moves them out now instead.";
         if (current.Count > 1)
-            note += $"\nThis tenant has {current.Count} current stays. All of them end on the date you choose.";
+            note += $"\nThis tenant has {current.Count} current stays. All of them will end on the date you choose.";
         if (t.Balance > 0)
-            note += $"\nHeads up: this tenant still has an unpaid balance of {Fmt.Peso(t.Balance)}.";
+            note += $"\nNote: this tenant still has an unpaid balance of {Fmt.Peso(t.Balance)}.";
 
         var date = StayDialog.AskMoveOut(Owner, t.FullName, current.Max(o => o.MoveInDate), DateOnly.MaxValue, note);
         if (date == null) return;
@@ -950,11 +1011,11 @@ public partial class TenantsPage : Page
                                            new StayRange(occupancy.Id, occupancy.MoveInDate, date));
         if (worse.Count > 0)
         {
-            var open = MessageBox.Show(
-                "That move-out date would overlap another stay on this bed:\n" +
+            var open = ConfirmActionDialog.YesNo(
+                "This move-out date cannot be applied because it would overlap another stay on the same bed.\n\n" +
                 StayConflicts.Describe(worse) +
-                "\n\nOpen Edit stay for this stay, to record it as an exception?",
-                "Move out", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                "\n\nOpen Edit stay, where the overlap can be recorded as an exception?",
+                "Move out", confirmText: "Open Edit stay");
             if (open == MessageBoxResult.Yes) EditStay(occupancy.Id);
             return false;
         }
@@ -962,7 +1023,7 @@ public partial class TenantsPage : Page
         var proposedEdit = StayEditService.Snapshot(occupancy);
         proposedEdit.MoveOut = date;
         var report = StayImpact.Analyze(db, occupancy, proposedEdit);
-        if (report.HasBillingImpact && !ImpactDialog.Confirm(Owner, tenantName, report.ToText()))
+        if (report.HasBillingImpact && !ImpactDialog.Confirm(Owner, tenantName, report.ToText(), "Save move-out"))
             return false;
 
         var before = occupancy.MoveOutDate;
@@ -980,13 +1041,23 @@ public partial class TenantsPage : Page
                                 null, StayEditService.DateText(today), "Move-out confirmed");
 
         var billingDone = RentRecalculation.Apply(db, report.RentPlan, occupancy, moveOutReason);
+        billingDone.AddRange(RentRestore.VoidedMonthNotes(db, occupancy, new StayRange(occupancy.Id, occupancy.MoveInDate, before)));
         foreach (var billPlan in report.UtilityPlans)
             billingDone.AddRange(UtilityRecalculation.Apply(db, billPlan, moveOutReason));
         db.SaveChanges();
 
         if (billingDone.Count > 0)
-            Tell("The move-out was saved. Billing changes:\n\n" + string.Join("\n\n", billingDone));
+            Tell("The move-out was saved. Billing changes and notes:\n\n" + string.Join("\n\n", billingDone));
         return true;
+    }
+
+    // Removes a stay that was entered by mistake. The rules live in StayActions, shared with Rooms & Beds.
+    private void RemoveStay(int stayId)
+    {
+        var t = Current;
+        if (t == null || t.Stays.All(s => s.Id != stayId)) return;
+
+        StayActions.Remove(Owner, stayId, () => Reload(t.Id));
     }
 
     private void CancelReservation(TenantRow t)
@@ -996,14 +1067,13 @@ public partial class TenantsPage : Page
 
         var message = $"Cancel the reservation of {t.FullName}?\n\n" +
                       $"They were due to move in on {Fmt.Date(occupancy.MoveInDate)}. " +
-                      "The reservation will be removed and will not be billed.";
+                      "The reservation will be removed and will not be billed. This cannot be undone.";
 
         if (occupancy.Deposit > 0)
             message += $"\n\nA deposit of {Fmt.Peso(occupancy.Deposit)} was recorded for this stay. " +
                        "Nexabode will not keep that record, so settle the deposit separately.";
 
-        var confirm = MessageBox.Show(message, "Cancel reservation",
-            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        var confirm = ConfirmActionDialog.YesNo(message, "Cancel reservation", confirmText: "Cancel reservation");
         if (confirm != MessageBoxResult.Yes) return;
 
         // Billing records (even voided ones) point at the stay, so it can't be removed.

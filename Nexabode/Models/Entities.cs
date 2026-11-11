@@ -9,6 +9,18 @@ public class AdminUser
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = "Owner";          // "Owner" can do everything, "Staff" works with records only
     public bool MustChangePassword { get; set; }          // true after an account is added or its password is reset
+    public string? RecoveryCodeHash { get; set; }          // BCrypt hash of the account's recovery code (the code itself is never stored)
+}
+
+// One row that remembers failed sign-in attempts, so closing and reopening the app can't reset the count.
+public class SignInGuard
+{
+    public int Id { get; set; }
+    public int FailedAttempts { get; set; }      // failed attempts in the current round
+    public int LockLevel { get; set; }           // how many times sign-in has been locked in a row (longer locks each time)
+    public DateTime? LockedUntilUtc { get; set; } // null = not locked
+    public string? EmergencyKeyHash { get; set; } // BCrypt hash of the emergency access key (never the key itself)
+    public string? ResetPhraseHash { get; set; }  // BCrypt hash of the Owner's reset phrase (never the phrase itself)
 }
 
 public class Room
@@ -41,6 +53,7 @@ public class Tenant
     public string? EmergencyContact { get; set; }
     public string? SchoolOrWork { get; set; }
     public string? Notes { get; set; }
+    public string? Gender { get; set; }   // Male, Female or Other; null = not set
     public List<Occupancy> Occupancies { get; set; } = new();
     public List<Payment> Payments { get; set; } = new();
 }
@@ -60,6 +73,9 @@ public class Occupancy
     public DateOnly? DepositRefundedOn { get; set; }
     public string? DepositRefundNote { get; set; }
     public DateOnly? MovedOutOn { get; set; }   // the day the administrator confirmed the tenant had left (set by Move out)
+    public bool IsCancelled { get; set; }       // entered by mistake but already billed: kept for the records, treated as never held
+    public string? CancelReason { get; set; }
+    public DateOnly? CancelledOn { get; set; }
     public List<Charge> Charges { get; set; } = new();
 }
 
@@ -117,7 +133,8 @@ public class Payment
     public DateOnly PaymentDate { get; set; }
     public decimal Amount { get; set; }
     public string? Method { get; set; }
-    public string? ReferenceNo { get; set; }
+    public string? ReferenceNo { get; set; }       // typed: the GCash, bank or check reference, if there is one
+    public string? ReceiptNo { get; set; }         // assigned automatically when the payment is saved, e.g. RCT-2026-00042
     public string? Remarks { get; set; }
     public bool IsVoided { get; set; }          
     public string? VoidReason { get; set; }

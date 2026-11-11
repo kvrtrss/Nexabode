@@ -4,7 +4,12 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Rooms and Beds">
-    <Grid Margin="32,24,32,24">
+    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto" Background="Transparent">
+    <Border Padding="32,24" MinWidth="900" MinHeight="560"
+            Width="{Binding ViewportWidth, ElementName=PageScroll}"
+            Height="{Binding ViewportHeight, ElementName=PageScroll}">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -33,31 +38,53 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="20" />
-                <ColumnDefinition Width="400" />
+                <ColumnDefinition Width="414" />
             </Grid.ColumnDefinitions>
 
             <!-- Room cards -->
-            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
-                <WrapPanel x:Name="RoomWrap" />
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Background="Transparent">
+                <StackPanel x:Name="RoomWrap" Margin="0,0,14,0" />
             </ScrollViewer>
 
             <!-- Details of the selected room -->
-            <ui:Card Grid.Column="2" VerticalAlignment="Top">
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" Background="Transparent">
+            <ui:Card VerticalAlignment="Top" Margin="0,0,14,0">
                 <Grid>
                     <TextBlock x:Name="DetailEmpty" Style="{StaticResource MutedText}"
                                TextWrapping="Wrap"
-                               Text="Click a room card to see its beds and manage them here." />
+                               Text="Select a room to view its beds and manage them here." />
 
                     <StackPanel x:Name="DetailBody" Visibility="Collapsed">
                         <TextBlock x:Name="DetailTitle" Style="{StaticResource SectionTitle}" FontSize="18" />
                         <TextBlock x:Name="DetailSub" Style="{StaticResource MutedText}" Margin="0,2,0,12" />
 
-                        <WrapPanel Margin="0,0,0,12">
-                            <ui:Button Content="Edit room" Click="EditRoom_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="RoomToggleButton" Click="ToggleRoom_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="AddBedButton" Content="Add bed" Appearance="Primary"
-                                       Click="AddBed_Click" Margin="0,0,0,8" />
-                        </WrapPanel>
+                        <!-- Shown only when two stays share a bed on the same days -->
+                        <Border x:Name="ClashBanner" Style="{StaticResource BannerDanger}" Margin="0,0,0,14"
+                                Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock x:Name="ClashTitle" FontWeight="SemiBold" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource DangerBrush}"
+                                           AutomationProperties.LiveSetting="Polite" />
+                                <TextBlock x:Name="ClashLines" TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Foreground="{DynamicResource AppTextBrush}" />
+                                <TextBlock x:Name="ClashAdvice" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                                           Margin="0,6,0,0" />
+                                <ui:Button Content="Open Tenants" Click="OpenTenants_Click"
+                                           HorizontalAlignment="Left" Margin="0,8,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Margin="0,0,0,14">
+                            <TextBlock Text="ROOM" Style="{StaticResource GroupLabel}" />
+                            <UniformGrid Columns="2" Margin="-3,0,-3,0">
+                                <UniformGrid.Resources>
+                                    <Style TargetType="ui:Button" BasedOn="{StaticResource ActionButton}" />
+                                </UniformGrid.Resources>
+                                <ui:Button x:Name="AddBedButton" Content="Add bed" Appearance="Primary" Click="AddBed_Click" />
+                                <ui:Button Content="Edit room" Click="EditRoom_Click" />
+                                <ui:Button x:Name="RoomToggleButton" Click="ToggleRoom_Click" />
+                            </UniformGrid>
+                        </StackPanel>
 
                         <DataGrid x:Name="BedGrid" AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" SelectionMode="Single" MaxHeight="300"
@@ -77,13 +104,19 @@
                             </DataGrid.Columns>
                         </DataGrid>
 
-                        <WrapPanel Margin="0,12,0,0">
-                            <ui:Button x:Name="EditBedButton" Content="Edit bed" Click="EditBed_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="DeactivateBedButton" Content="Deactivate bed" Click="DeactivateBed_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="ActivateBedButton" Content="Activate bed" Click="ActivateBed_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="StartMaintButton" Content="Start maintenance" Click="StartMaintenance_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="EndMaintButton" Content="End maintenance" Click="EndMaintenance_Click" Margin="0,0,0,8" />
-                        </WrapPanel>
+                        <StackPanel Margin="0,14,0,0">
+                            <TextBlock Text="SELECTED BED" Style="{StaticResource GroupLabel}" />
+                            <UniformGrid Columns="2" Margin="-3,0,-3,0">
+                                <UniformGrid.Resources>
+                                    <Style TargetType="ui:Button" BasedOn="{StaticResource ActionButton}" />
+                                </UniformGrid.Resources>
+                                <ui:Button x:Name="EditBedButton" Content="Edit bed" Click="EditBed_Click" />
+                                <ui:Button x:Name="DeactivateBedButton" Content="Deactivate bed" Click="DeactivateBed_Click" />
+                                <ui:Button x:Name="ActivateBedButton" Content="Activate bed" Click="ActivateBed_Click" />
+                                <ui:Button x:Name="StartMaintButton" Content="Start maintenance" Click="StartMaintenance_Click" />
+                                <ui:Button x:Name="EndMaintButton" Content="End maintenance" Click="EndMaintenance_Click" />
+                            </UniformGrid>
+                        </StackPanel>
 
                         <!-- Who is staying here right now -->
                         <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0"
@@ -98,6 +131,9 @@
                     </StackPanel>
                 </Grid>
             </ui:Card>
+            </ScrollViewer>
         </Grid>
     </Grid>
+    </Border>
+    </ScrollViewer>
 </Page>

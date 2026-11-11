@@ -113,16 +113,16 @@ public partial class RentBillingPage : Page
             .ToList();
         if (ids.Count == 0)
         {
-            Tell("There is no fully paid rent left to archive in this month.");
+            Tell("There are no fully paid rent charges to archive for this month.");
             return;
         }
 
         var month = (MonthCombo.SelectedItem as MonthOption)?.Display;
-        var answer = MessageBox.Show(
+        var answer = ConfirmActionDialog.YesNo(
             $"Archive {ids.Count} fully paid rent charge(s) for {month}?\n\n" +
             "They are only hidden from this list. Totals, reports and statements are not affected, " +
-            "and the rent is still counted as generated.",
-            "Archive settled rent", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            "and the rent still counts as generated. You can show the charges again with Show archived and Unarchive.",
+            "Archive settled rent", confirmText: "Archive");
         if (answer != MessageBoxResult.Yes) return;
 
         ArchiveCharges(ids, true);
@@ -157,6 +157,7 @@ public partial class RentBillingPage : Page
     {
         GenerateSelectedButton.IsEnabled = SelectedRow is { Generated: false, IsVoided: false };
         EditRentButton.IsEnabled = SelectedRow is { Generated: true, IsVoided: false, ChargeId: not null };
+        RestoreRentButton.IsEnabled = SelectedRow is { Generated: true, IsVoided: true, ChargeId: not null };
 
         var rows = SelectedRows;
         ArchiveButton.IsEnabled = rows.Any(r => r.ChargeId != null && !r.IsArchived && r.Settled);
@@ -268,7 +269,12 @@ public partial class RentBillingPage : Page
         TotalCard.Tone = "Neutral";
 
         GeneratedCard.Value = generated.Count.ToString();
-        GeneratedCard.Caption = live.Count == 0 ? "No stays this month"
+        // When every row is voided, say so: otherwise the page looks as if nobody stayed this month.
+        var voidedCount = _rows.Count(r => r.IsVoided);
+        GeneratedCard.Caption = live.Count == 0 && voidedCount > 0
+                                    ? (showVoided ? $"{voidedCount} voided: select one to restore it"
+                                                  : $"{voidedCount} voided: tick Show voided to see them")
+                              : live.Count == 0 ? "No stays this month"
                               : missing == 0 ? "All rent generated"
                               : $"{missing} not generated yet";
         GeneratedCard.Tone = live.Count == 0 ? "Neutral" : missing > 0 ? "Warning" : "Success";
@@ -282,6 +288,62 @@ public partial class RentBillingPage : Page
         OverdueCard.Tone = overdue > 0 ? "Danger" : "Success";
 
         UpdateButtons();
+    }
+
+    // ---------- Bring back a voided rent charge ----------
+
+    // Voiding rent is final on purpose (a free month, a charge made in error), so a voided charge is never
+    // created again by itself. When it was the wrong call, or the stay changed afterwards, this restores it:
+    // the same charge becomes active again, updated to what the stay would be billed now.
+    private void RestoreRent_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedRow is not RentRow { Generated: true, IsVoided: true, ChargeId: int chargeId }) return;
+
+        var fullRent = FullRentCheck.IsChecked == true;
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        RentRestorePlan plan;
+        using (var look = new AppDbContext())
+        {
+            var (found, problem) = RentRestore.Plan(look, chargeId, fullRent, today);
+            if (found == null) { Tell(problem ?? "That rent charge could not be restored."); return; }
+            plan = found;
+        }
+
+        var answers = FormDialog.Ask(Owner, $"Restore rent: {plan.Tenant}", "Restore charge",
+            new[] { ("Reason for restoring", "") },
+            vals => RentRestoreRules.ReasonError(vals[0]),
+            RentRestoreRules.ConfirmNote(plan.Tenant, plan.Month.ToString("MMMM yyyy", CultureInfo.InvariantCulture),
+                                         plan.OldAmount, plan.OldDescription, plan.NewAmount,
+                                         plan.NewDescription, plan.NewDueDate));
+        if (answers == null) return;
+
+        try
+        {
+            using var db = new AppDbContext();
+            using var transaction = db.Database.BeginTransaction();
+
+            // Work it out again at the last moment, in case something changed while the window was open.
+            var (fresh, problem) = RentRestore.Plan(db, chargeId, fullRent, today);
+            if (fresh == null)
+            {
+                transaction.Rollback();
+                Tell(problem ?? "That rent charge could not be restored.");
+                LoadList();
+                return;
+            }
+
+            RentRestore.Apply(db, fresh, answers[0].Trim());
+            db.SaveChanges();
+            transaction.Commit();
+        }
+        catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            Tell("The charge could not be restored because the data changed at the same moment. " +
+                 "Nothing was changed. Please try again.");
+        }
+
+        LoadList();
     }
 
     // ---------- Edit a generated rent charge ----------
@@ -306,21 +368,40 @@ public partial class RentBillingPage : Page
 
         var note = canEditAmount
             ? $"Rent: {Fmt.Peso(row.Amount)}. Only this charge is changed. If you later edit the tenant's stay, " +
-              "Nexabode compares the charge with the rent it works out and may suggest adjusting it."
-            : $"Rent: {Fmt.Peso(row.Amount)}. The amount is locked because payments have been applied. " +
-              "Void the payment first if the amount is wrong.";
+              "Nexabode compares this charge with the rent calculated for the new dates and may suggest an adjustment."
+            : $"Rent: {Fmt.Peso(row.Amount)}. The amount cannot be changed because a payment has been applied to this charge. " +
+              "If the amount is wrong, void the payment first.";
 
-        var v = FormDialog.Ask(Owner, $"Edit rent - {row.Tenant}", "Save changes", fields.ToArray(),
+        var v = FormDialog.Ask(Owner, $"Edit rent: {row.Tenant}", "Save changes", fields.ToArray(),
             vals =>
             {
-                if (vals[0].Trim() == "") return "Please enter the details.";
-                if (!TryDate(vals[1], out _)) return "Enter the due date like 2026-10-05.";
+                if (vals[0].Trim() == "") return "Enter the details of the charge.";
+                if (!TryDate(vals[1], out _)) return "Enter the due date in the format 2026-10-05.";
                 if (canEditAmount && (!TryMoney(vals[2], out var amount) || Math.Round(amount, 2) <= 0))
                     return "Enter the amount as a number greater than zero.";
-                if (vals[reasonIndex].Trim() == "") return "Please enter a reason for the change.";
+                if (!ReasonRules.IsReal(vals[reasonIndex])) return "Enter a reason for the change (at least 3 letters or digits).";
                 return null;
             }, note);
         if (v == null) return;
+
+        // A short review of what changes. If nothing did, there is nothing to save.
+        {
+            TryDate(v[1], out var reviewDue);
+            var reviewFields = new List<(string Field, string? Old, string? New)>
+            {
+                ("Details", row.Details, v[0]),
+                ("Due date", row.DueDate is DateOnly oldDue ? Fmt.Date(oldDue) : "(empty)", Fmt.Date(reviewDue))
+            };
+            if (canEditAmount)
+            {
+                TryMoney(v[2], out var reviewAmount);
+                reviewFields.Add(("Amount", Fmt.Peso(row.Amount), Fmt.Peso(Math.Round(reviewAmount, 2))));
+            }
+            var reviewList = ConfirmWording.Changes(reviewFields.ToArray());
+            if (reviewList.Count == 0) return;
+            if (!ConfirmActionDialog.Ask(Owner, "Edit rent",
+                    ConfirmWording.EditRecord($"{row.Tenant}'s rent", reviewList), "Save changes")) return;
+        }
 
         using var db = new AppDbContext();
         var charge = db.Charges
@@ -330,13 +411,13 @@ public partial class RentBillingPage : Page
 
         if (charge == null)
         {
-            Tell("This rent charge was voided, so it can't be edited.");
+            Tell("This rent charge has been voided, so it cannot be edited.");
             LoadList();
             return;
         }
         if (canEditAmount && charge.Allocations.Count > 0)
         {
-            Tell("A payment was just applied to this charge, so the amount can't be changed. Nothing was saved.");
+            Tell("A payment was just applied to this charge, so the amount cannot be changed. Nothing was saved.");
             LoadList();
             return;
         }
@@ -374,7 +455,7 @@ public partial class RentBillingPage : Page
 
         if (changes == 0)
         {
-            Tell("Nothing was changed.");
+            Tell("No changes were made.");
             return;
         }
 
@@ -391,7 +472,7 @@ public partial class RentBillingPage : Page
         if (todo.Count == 0)
         {
             Tell(_rows.Count == 0
-                ? "No tenants were staying in that month, so there is nothing to bill."
+                ? "No tenants stayed during this month, so there is no rent to generate."
                 : "All rent for this month has already been generated.");
             return;
         }
@@ -403,7 +484,7 @@ public partial class RentBillingPage : Page
     {
         if (SelectedRow is not RentRow { Generated: false, IsVoided: false } row)
         {
-            Tell("Select a tenant whose rent is not generated yet.");
+            Tell("Select a tenant whose rent has not been generated yet.");
             return;
         }
 
@@ -426,10 +507,10 @@ public partial class RentBillingPage : Page
         var due = DateOnly.FromDateTime(dueDt);
         var monthName = (MonthCombo.SelectedItem as MonthOption)?.Display ?? "this month";
 
-        var confirm = MessageBox.Show(
+        var confirm = ConfirmActionDialog.YesNo(
             $"Create {todo.Count} rent charge(s) for {monthName}, totalling {Fmt.Peso(todo.Sum(r => r.Amount))}, " +
-            $"due {Fmt.Date(due)}?",
-            "Confirm rent", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            $"due {Fmt.Date(due)}?\n\nA charge can be voided later in Billing Charges if it was created by mistake.",
+            "Generate rent", confirmText: "Generate rent");
         if (confirm != MessageBoxResult.Yes) return;
 
         var count = todo.Count;
@@ -457,8 +538,8 @@ public partial class RentBillingPage : Page
             }
             catch (DbUpdateException)
             {
-                Tell("The rent charges could not be saved, so nothing was saved. Some of them may already exist for this month.\n\n" +
-                     "The list has been refreshed.");
+                Tell("The rent charges could not be saved and nothing was saved. Some of them may already exist for this month.\n\n" +
+                     "The list has been refreshed. Check it and try again.");
                 LoadList();
                 return;
             }
@@ -468,7 +549,7 @@ public partial class RentBillingPage : Page
 
         var message = $"Rent charges created: {count}.";
         if (partial > 0)
-            message += $"\n\n{partial} charge(s) were billed by days (a mid-month move, or more than one stay this month).";
+            message += $"\n\n{partial} charge(s) were calculated by days (a move-in or move-out during the month, or more than one stay this month).";
         Tell(message);
     }
 }

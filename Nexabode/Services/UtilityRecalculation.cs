@@ -181,7 +181,7 @@ public static class UtilityRecalculation
                     (paidTotal > 0 ? $" The {Fmt.Peso(paidTotal)} already paid stays applied." : ""),
 
                 RentAction.Void =>
-                    $"{name}: the {Fmt.Peso(currentTotal)} share is cancelled (voided) because they have no days " +
+                    $"{name}: the {Fmt.Peso(currentTotal)} share will be voided because the tenant has no days " +
                     "in this bill's period.",
 
                 RentAction.AddAdjustment =>
@@ -190,13 +190,13 @@ public static class UtilityRecalculation
                     $", and an adjustment charge of {Fmt.Peso(decision.Difference)} is added.",
 
                 RentAction.FlagOverpaid =>
-                    $"NEEDS YOUR DECISION - {name}: {Fmt.Peso(paidTotal)} has been paid but only " +
-                    $"{Fmt.Peso(decision.NewAmount)} would be due, {Fmt.Peso(paidTotal - decision.NewAmount)} too much. " +
+                    $"NEEDS YOUR DECISION ({name}): {Fmt.Peso(paidTotal)} has been paid but only " +
+                    $"{Fmt.Peso(decision.NewAmount)} would be due, which is {Fmt.Peso(paidTotal - decision.NewAmount)} too much. " +
                     "The share is left as it is. To correct it, return the extra to the tenant, void the payment " +
                     "on the Payments page (enter the amount you gave back), then use Recalculate shares on the Utility Bills page.",
 
                 _ =>
-                    $"NEEDS YOUR DECISION - {name}: only {Fmt.Peso(decision.NewAmount)} would be due instead of " +
+                    $"NEEDS YOUR DECISION ({name}): only {Fmt.Peso(decision.NewAmount)} would be due instead of " +
                     $"{Fmt.Peso(currentTotal)}, but this share already has an earlier adjustment. " +
                     "Review it on Billing Charges."
             };

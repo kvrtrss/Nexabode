@@ -125,7 +125,7 @@ public static class BackupService
         }
         catch (CryptographicException)
         {
-            throw new InvalidDataException("Wrong backup password, or the backup file is damaged.");
+            throw new InvalidDataException("The backup password is incorrect, or the backup file is damaged.");
         }
 
         var keyLength = BitConverter.ToInt32(plain, 0);
@@ -214,12 +214,12 @@ public static class BackupService
             }
             catch (Exception)
             {
-                throw new IOException("The backup could not be put in place, and your previous data could not be put back automatically. " +
-                                      $"Your previous data was saved here: {safety}");
+                throw new IOException("The backup could not be restored, and your previous data could not be put back automatically. " +
+                                      $"A copy of your previous data was saved here: {safety}");
             }
 
             DeleteQuietly(temp);
-            throw new IOException("The backup could not be put in place, so your current data was left as it was.");
+            throw new IOException("The backup could not be restored, so your current data has not been changed.");
         }
 
         DeleteQuietly(oldDb);

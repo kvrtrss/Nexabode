@@ -10,12 +10,12 @@ public static class AuditService
     // by the caller's SaveChanges (the correction and its record succeed or fail as one).
     public static void Record(AppDbContext db, string entityType, int entityId, int? tenantId,
                               string field, string? oldValue, string? newValue,
-                              string reason, bool conflictException = false)
+                              string reason, bool conflictException = false, string? administrator = null)
     {
         db.AuditLog.Add(new AuditLogEntry
         {
             ChangedAt = DateTime.Now,
-            Administrator = Session.Administrator,
+            Administrator = administrator ?? Session.Administrator,
             EntityType = entityType,
             EntityId = entityId,
             TenantId = tenantId,

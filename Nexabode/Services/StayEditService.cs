@@ -48,9 +48,9 @@ public static class StayEditService
 
         var parts = new List<string>();
         if (bed.Count > 0)
-            parts.Add("Another tenant would be in this bed on the same day:\n" + StayConflicts.Describe(bed));
+            parts.Add("Bed clash: this change would put another tenant in the same bed on the same days.\n" + StayConflicts.Describe(bed));
         if (tenant.Count > 0)
-            parts.Add("This tenant would be in two beds on the same day:\n" + StayConflicts.Describe(tenant));
+            parts.Add("Tenant clash: this change would give the tenant two stays on the same days.\n" + StayConflicts.Describe(tenant));
         return string.Join("\n\n", parts);
     }
 

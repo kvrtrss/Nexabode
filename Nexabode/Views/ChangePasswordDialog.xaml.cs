@@ -16,6 +16,7 @@ public partial class ChangePasswordDialog : Window
         _username = username;
         _finalUsername = username;
         _forced = forced;
+        StrengthMeter.Attach(NewBox, () => _forced ? UsernameBox.Text : _username);
 
         if (forced)
         {
@@ -76,7 +77,7 @@ public partial class ChangePasswordDialog : Window
             var nameError = UsernameRules.Validate(requested);
             if (requested.Equals("admin", StringComparison.OrdinalIgnoreCase))
             {
-                Fail("Please choose a username other than the default \"admin\".");
+                Fail("Choose a username other than the default \"admin\".");
                 return;
             }
             if (nameError != null) { Fail(nameError); return; }
@@ -96,18 +97,24 @@ public partial class ChangePasswordDialog : Window
         }
 
         if (newPassword.Length < 8) { Fail("The new password must be at least 8 characters."); return; }
-        if (newPassword == "admin123") { Fail("Please choose a password other than the default."); return; }
+        if (newPassword == "admin123") { Fail("Choose a password other than the default."); return; }
         if (newPassword.Equals(requested, StringComparison.OrdinalIgnoreCase))
         {
-            Fail("The password can't be the same as the username.");
+            Fail("The password cannot be the same as the username.");
             return;
         }
-        if (newPassword != ConfirmBox.Password) { Fail("The two new passwords don't match."); return; }
+        if (newPassword != ConfirmBox.Password) { Fail("The two new passwords do not match."); return; }
         if (BCrypt.Net.BCrypt.Verify(newPassword, user.PasswordHash))
         {
             Fail("The new password must be different from the current one.");
             return;
         }
+
+        // Everything checked out: one last "are you sure?" before the password (and username) change.
+        var confirmText = _forced
+            ? ConfirmWording.FirstSignIn(user.Username, requested)
+            : ConfirmWording.ChangePassword(user.Username);
+        if (!ConfirmActionDialog.Ask(this, _forced ? "Save your account" : "Change password", confirmText)) return;
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
         user.MustChangePassword = false;   // the person has now chosen their own password

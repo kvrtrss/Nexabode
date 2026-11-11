@@ -38,6 +38,7 @@ public partial class PaymentsPage : Page
         public string Tenant { get; set; } = "";
         public decimal Amount { get; set; }
         public string Method { get; set; } = "";
+        public string ReceiptNo { get; set; } = "";
         public string Reference { get; set; } = "";
         public string? Remarks { get; set; }
         public string Details { get; set; } = "";
@@ -76,12 +77,47 @@ public partial class PaymentsPage : Page
         InitializeComponent();
         PayDatePicker.SelectedDate = DateTime.Today;
         MethodCombo.SelectedIndex = 0;
+
+        // The method box can be typed in, so watch its text (picking from the list changes it too).
+        MethodCombo.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,
+                               new TextChangedEventHandler((_, _) => UpdateReferenceBox()));
+        UpdateReferenceBox();
+
         Loaded += (_, _) =>
         {
             _ready = true;
             LoadTenants();
             RefreshAll();
         };
+    }
+
+    // ---------- Receipt and reference numbers ----------
+
+    // The receipt number is Nexabode's own: show the one the next payment will get, and don't let anyone type it.
+    private void RefreshReceiptNumber()
+    {
+        var date = DateOnly.FromDateTime(PayDatePicker.SelectedDate ?? DateTime.Today);
+        using var db = new AppDbContext();
+        ReceiptNoBox.Text = ReceiptNumbers.Peek(db, date);
+    }
+
+    // A reference number comes from outside (GCash, a bank, a check). Cash has none, so the box is switched off.
+    private void UpdateReferenceBox()
+    {
+        var method = MethodCombo.Text?.Trim() ?? "";
+        var needsReference = method.Length > 0 && !method.Equals("Cash", StringComparison.OrdinalIgnoreCase);
+
+        if (!needsReference) ReferenceBox.Text = "";
+        ReferenceBox.IsEnabled = needsReference;
+        ReferenceBox.PlaceholderText = needsReference
+            ? "GCash, bank or check ref. no."
+            : "Not needed for cash";
+    }
+
+    // The receipt number starts again each year, so the payment date can change which number is next.
+    private void PayDate_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_ready) RefreshReceiptNumber();
     }
 
     // ---------- Helpers ----------
@@ -103,6 +139,7 @@ public partial class PaymentsPage : Page
 
     private void RefreshAll()
     {
+        RefreshReceiptNumber();
         LoadStats();
         LoadHistory();
         LoadAllBalances();
@@ -173,8 +210,8 @@ public partial class PaymentsPage : Page
 
         OutstandingCard.Value = Fmt.Peso(open.Sum(x => x.Balance));
         OutstandingCard.Caption = open.Count == 0
-            ? "Everyone is settled"
-            : $"{open.Select(x => x.TenantId).Distinct().Count()} tenant(s) owe money";
+            ? "No outstanding balances"
+            : $"{open.Select(x => x.TenantId).Distinct().Count()} tenant(s) with a balance";
         OutstandingCard.Tone = open.Count == 0 ? "Success" : "Warning";
 
         OverdueCard.Value = Fmt.Peso(overdue.Sum(x => x.Balance));
@@ -238,6 +275,7 @@ public partial class PaymentsPage : Page
                 Received = p.AmountReceived ?? p.Amount,
                 Change = (p.AmountReceived ?? p.Amount) - p.Amount,
                 Method = p.Method ?? "",
+                ReceiptNo = p.ReceiptNo ?? "",
                 Reference = p.ReferenceNo ?? "",
                 Remarks = p.Remarks,
                 IsVoided = p.IsVoided,
@@ -253,6 +291,7 @@ public partial class PaymentsPage : Page
                 || r.Tenant.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || r.Method.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || r.Reference.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || r.ReceiptNo.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || r.PaidFor.Contains(query, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(r => r.Date).ThenByDescending(r => r.Id)
             .ToList();
@@ -268,10 +307,43 @@ public partial class PaymentsPage : Page
         var selected = SelectedPayment;
         EditButton.IsEnabled = selected is { IsVoided: false };
         VoidButton.IsEnabled = selected is { IsVoided: false };
+        PrintReceiptButton.IsEnabled = selected != null && ReceiptWording.CanPrint(selected.IsVoided);
 
         var rows = SelectedPayments;
         ArchiveButton.IsEnabled = rows.Any(r => !r.IsArchived);
         UnarchiveButton.IsEnabled = rows.Any(r => r.IsArchived);
+
+        ShowSelectedInfo(selected, rows.Count);
+    }
+
+    // One line under the buttons that always takes the same space, so the table never jumps when a row is picked.
+    private void ShowSelectedInfo(PaymentRow? selected, int selectedCount)
+    {
+        string text;
+        if (selectedCount > 1)
+        {
+            text = $"{selectedCount} payments selected.";
+        }
+        else if (selected == null)
+        {
+            text = "Select a payment to see its reference no. and remarks.";
+        }
+        else
+        {
+            var parts = new List<string> { selected.ReceiptNo };
+            parts.Add(selected.Reference.Length > 0 ? $"Ref. no. {selected.Reference}" : "No reference no.");
+            if (selected.Details.Length > 0) parts.Add(selected.Details);
+            text = string.Join("   |   ", parts.Where(p => p.Length > 0));
+        }
+
+        SelectedInfo.Text = text;
+        SelectedInfo.ToolTip = text;
+    }
+
+    // Prints the receipt of the selected payment. A reprint is marked as a duplicate copy.
+    private void PrintReceipt_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedPayment is { } row) ReceiptPrinter.Print(Window.GetWindow(this), row.Id);
     }
 
     private void EditPayment_Click(object sender, RoutedEventArgs e)
@@ -281,25 +353,35 @@ public partial class PaymentsPage : Page
 
         var today = DateOnly.FromDateTime(DateTime.Today);
 
-        var v = FormDialog.Ask(Owner, $"Edit payment - {row.Tenant}", "Save changes",
+        var v = FormDialog.Ask(Owner, $"Edit payment: {row.Tenant}", "Save changes",
             new[]
             {
                 ("Payment date (e.g. 2026-10-14)", row.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
                 ("Method", row.Method),
-                ("Reference no. (optional)", row.Reference),
+                ("GCash, bank or check ref. no. (optional)", row.Reference),
                 ("Remarks (optional)", row.Remarks ?? "")
             },
             vals =>
             {
                 if (!DateOnly.TryParse(vals[0].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var date))
-                    return "Enter the date like 2026-10-14.";
-                if (date > today) return "The payment date can't be in the future.";
+                    return "Enter the payment date in the format 2026-10-14.";
+                if (date > today) return "The payment date cannot be in the future. Select today's date or an earlier date.";
                 return null;
             },
-            note: $"Amount: {Fmt.Peso(row.Amount)}. The amount can't be edited. If it is wrong, void this payment and record a new one.");
+            note: $"Receipt no. {row.ReceiptNo}. Amount: {Fmt.Peso(row.Amount)}. The amount cannot be edited. If it is wrong, void this payment and record a new one.");
         if (v == null) return;
 
         DateOnly.TryParse(v[0].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var newDate);
+
+        // A short review of what changes. If nothing did, there is nothing to save.
+        var reviewList = ConfirmWording.Changes(
+            ("Payment date", Fmt.Date(row.Date), Fmt.Date(newDate)),
+            ("Method", row.Method, v[1]),
+            ("Reference no.", row.Reference, v[2]),
+            ("Remarks", row.Remarks, v[3]));
+        if (reviewList.Count == 0) return;
+        if (!ConfirmActionDialog.Ask(Owner, "Edit payment",
+                ConfirmWording.EditRecord($"receipt {row.ReceiptNo} ({row.Tenant})", reviewList), "Save changes")) return;
 
         using var db = new AppDbContext();
         var payment = db.Payments.Find(row.Id)!;
@@ -318,7 +400,7 @@ public partial class PaymentsPage : Page
         if (row == null || row.IsVoided) return;
 
         var note = $"This cancels the payment of {Fmt.Peso(row.Amount)} from {row.DateText}. The charges it paid become unpaid again, " +
-                   "and the payment stays in the history marked Voided (tick Show voided to see it). This can't be undone." +
+                   "and the payment remains in the history marked Voided (tick Show voided to see it). This cannot be undone." +
                    (row.Change > 0 ? $"\n\nThe tenant handed over {Fmt.Peso(row.Received)} and {Fmt.Peso(row.Change)} was returned as change." : "");
 
         // A payment made from the tenant's credit gives its money back to the credit, so there is nothing to hand back.
@@ -331,17 +413,17 @@ public partial class PaymentsPage : Page
             note += "\n\nIf you gave money back to the tenant, enter how much. The charges it paid will then show as refunded in Billing Charges.";
         }
 
-        var v = FormDialog.Ask(Owner, $"Void payment - {row.Tenant}", "Void payment",
+        var v = FormDialog.Ask(Owner, $"Void payment: {row.Tenant}", "Void payment",
             fields.ToArray(),
             vals =>
             {
-                if (vals[0].Trim() == "") return "Please enter a reason.";
+                if (!ReasonRules.IsReal(vals[0])) return "Enter a reason for voiding the payment (at least 3 letters or digits).";
                 if (vals.Length > 1)
                 {
                     if (!decimal.TryParse(vals[1], NumberStyles.Number, CultureInfo.CurrentCulture, out var given) || given < 0)
                         return "Enter the amount given back as a number (use 0 if no money was given back).";
                     if (Math.Round(given, 2) > row.Amount)
-                        return $"The amount given back can't be more than the payment ({Fmt.Peso(row.Amount)}).";
+                        return $"The amount given back cannot be more than the payment amount ({Fmt.Peso(row.Amount)}). Enter a smaller amount.";
                 }
                 return null;
             },
@@ -441,7 +523,7 @@ public partial class PaymentsPage : Page
                 Key = "item:" + group.Key,
                 Item = group.Key,
                 Display = $"{group.Key}  -  {Fmt.Peso(due)} unpaid",
-                Hint = $"Pays only {group.Key} charges, oldest first. Up to {Fmt.Peso(due)}; any extra is change to return."
+                Hint = $"Pays only {group.Key} charges, oldest first. Up to {Fmt.Peso(due)}. Any extra is change to return."
             });
         }
 
@@ -450,7 +532,7 @@ public partial class PaymentsPage : Page
             Key = "specific",
             Specific = true,
             Display = "One specific charge (pick it in Unpaid charges)",
-            Hint = "Click a charge in the Unpaid charges tab, then record the payment."
+            Hint = "Select a charge in the Unpaid charges tab, then record the payment."
         });
 
         _loadingPayFor = true;
@@ -544,13 +626,13 @@ public partial class PaymentsPage : Page
         var open = GetOpenCharges(db, tenantId);
         if (open.Count == 0)
             return (null, 0, 0, "This tenant has no unpaid charges, so there is nothing to apply this payment to.\n\n" +
-                                "Nexabode does not hold advance payments, so nothing was recorded.");
+                                "Nexabode does not accept advance payments, so nothing was recorded.");
 
         List<OpenChargeRow> scope;
         if (chosenChargeId is int chargeId)
         {
             var fresh = open.FirstOrDefault(r => r.Id == chargeId);
-            if (fresh == null) return (null, 0, 0, "That charge is already fully paid.");
+            if (fresh == null) return (null, 0, 0, "That charge has already been fully paid. Select another charge.");
             scope = new List<OpenChargeRow> { fresh };
         }
         else
@@ -620,12 +702,12 @@ public partial class PaymentsPage : Page
         }
         if (DateOnly.FromDateTime(payDate) > DateOnly.FromDateTime(DateTime.Today))
         {
-            Tell("The payment date can't be in the future.");
+            Tell("The payment date cannot be in the future. Select today's date or an earlier date.");
             return;
         }
         if (!decimal.TryParse(AmountBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var amount) || amount <= 0)
         {
-            Tell("Enter a valid payment amount greater than zero.");
+            Tell("Enter the payment amount as a number greater than zero.");
             return;
         }
         amount = Math.Round(amount, 2);
@@ -643,7 +725,7 @@ public partial class PaymentsPage : Page
         {
             if (ChargeGrid.SelectedItem is not OpenChargeRow chosen)
             {
-                Tell("Click a charge in the Unpaid charges tab first, or choose a different option.");
+                Tell("Select a charge in the Unpaid charges tab first, or choose a different option.");
                 Tabs.SelectedIndex = 1;
                 return;
             }
@@ -673,17 +755,18 @@ public partial class PaymentsPage : Page
         }
 
         var purpose = option.Specific ? "one specific charge" : item ?? "oldest charges first";
-        var confirm = MessageBox.Show(
+        var confirm = ConfirmActionDialog.YesNo(
             $"Record a payment from {tenant.Name}?\n\n" +
             $"Amount received:   {Fmt.Peso(amount)}\n" +
             $"Applied to {chargeCount} charge(s):   {Fmt.Peso(plannedApplied)}\n" +
             (plannedChange > 0 ? $"Change to return:   {Fmt.Peso(plannedChange)}\n" : "") +
-            $"\nPaying for: {purpose}",
-            "Confirm payment", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            $"\nPaying for: {purpose}\n\nA recorded payment can be voided later if it was entered by mistake.",
+            "Confirm payment", confirmText: "Record payment");
         if (confirm != MessageBoxResult.Yes) return;
 
         decimal savedApplied = 0;
-        decimal savedChange = 0;
+        var savedReceipt = "";
+        var savedPaymentId = 0;
         try
         {
             using var db = new AppDbContext();
@@ -694,13 +777,13 @@ public partial class PaymentsPage : Page
             if (plan.Allocations == null || plan.Applied != plannedApplied)
             {
                 transaction.Rollback();
-                Tell((plan.Error ?? $"The change would now be {Fmt.Peso(plan.Change)} instead of {Fmt.Peso(plannedChange)}.") +
-                     "\n\nThe balances changed while you were confirming. Nothing was saved.");
+                Tell((plan.Error ?? $"The change to return would now be {Fmt.Peso(plan.Change)} instead of {Fmt.Peso(plannedChange)}.") +
+                     "\n\nThe balances changed while you were confirming this payment. Nothing was saved. Review the updated amounts and record the payment again.");
                 RefreshAll();
                 return;
             }
 
-            db.Payments.Add(new Payment
+            var newPayment = new Payment
             {
                 TenantId = tenant.Id,
                 PaymentDate = DateOnly.FromDateTime(payDate),
@@ -710,12 +793,15 @@ public partial class PaymentsPage : Page
                 ReferenceNo = Blank(ReferenceBox.Text),
                 Remarks = Blank(RemarksBox.Text),
                 Allocations = plan.Allocations
-            });
-            db.SaveChanges();
+            };
+            db.Payments.Add(newPayment);
+            db.SaveChanges();       // also gives the payment its receipt number
             transaction.Commit();   // the payment and its allocations are saved together or not at all
 
+            savedReceipt = newPayment.ReceiptNo ?? "";
+            savedPaymentId = newPayment.Id;
+
             savedApplied = plan.Applied;
-            savedChange = plan.Change;
         }
         catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
         {
@@ -726,12 +812,14 @@ public partial class PaymentsPage : Page
         }
 
         AmountBox.Text = ReferenceBox.Text = RemarksBox.Text = "";
+        ReceiptText.Text = $"Payment recorded. Receipt no. {savedReceipt}";
+        ReceiptBanner.Visibility = Visibility.Visible;
         PayForCombo.SelectedIndex = 0;   // back to "oldest charges first"
         Tabs.SelectedIndex = 0;
         RefreshAll();
 
-        if (savedChange > 0)
-            Tell($"Payment recorded.\n\nChange to return to {tenant.Name}: {Fmt.Peso(savedChange)}\n" +
-                 $"(received {Fmt.Peso(amount)}, applied {Fmt.Peso(savedApplied)})");
+        // Always shown, so a receipt can be printed right away. It also tells the cashier about any change to return.
+        PaymentRecordedDialog.Show(Window.GetWindow(this), savedPaymentId,
+            ReceiptWording.PaymentRecordedMessage(savedReceipt, tenant.Name, amount, savedApplied));
     }
 }

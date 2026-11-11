@@ -4,7 +4,12 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Utility Bills">
-    <Grid Margin="32,24,32,24">
+    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto" Background="Transparent">
+    <Border Padding="32,24" MinWidth="900" MinHeight="780"
+            Width="{Binding ViewportWidth, ElementName=PageScroll}"
+            Height="{Binding ViewportHeight, ElementName=PageScroll}">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -55,27 +60,26 @@
                                 ToolTip="Optional: the last day this bill covers" />
                 </WrapPanel>
                 <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                           Text="Billing period (optional): the last two dates. Leave both blank if the bill covers the whole month. Pick both for a bill that spans months, for example Sep 15 to Oct 14. It is listed under the month selected above." />
+                           Text="Billing period (optional): use the last two date fields. Leave both blank if the bill covers the whole month. Enter both dates for a bill that spans two months, for example Sep 15 to Oct 14. The bill is listed under the month selected above." />
             </StackPanel>
         </ui:Card>
 
         <WrapPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,6">
+            <WrapPanel.Resources>
+                <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+            </WrapPanel.Resources>
+            <!-- Split the bill | change the bill | tidy up -->
             <ui:Button x:Name="SplitButton" Content="Split selected bill" Appearance="Primary"
-               Click="SplitBill_Click" IsEnabled="False" Margin="0,0,8,6" />
-            <ui:Button x:Name="UndoButton" Content="Undo split" Click="UndoSplit_Click"
-               IsEnabled="False" Margin="0,0,8,6" />
-            <ui:Button x:Name="RecalcButton" Content="Recalculate shares" Click="Recalculate_Click"
-               IsEnabled="False" Margin="0,0,8,6" />
-            <ui:Button x:Name="EditButton" Content="Edit bill" Click="EditBill_Click"
-               IsEnabled="False" Margin="0,0,8,6" />
-            <ui:Button x:Name="DeleteButton" Content="Delete bill" Click="DeleteBill_Click"
-               IsEnabled="False" Margin="0,0,20,6" />
-            <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click"
-               IsEnabled="False" Margin="0,0,8,6" />
-            <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click"
-               IsEnabled="False" Margin="0,0,8,6" />
-            <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled"
-               Click="ArchiveSettled_Click" Margin="0,0,0,6" />
+                       Click="SplitBill_Click" IsEnabled="False" />
+            <ui:Button x:Name="UndoButton" Content="Undo split" Click="UndoSplit_Click" IsEnabled="False" />
+            <ui:Button x:Name="RecalcButton" Content="Recalculate shares" Click="Recalculate_Click" IsEnabled="False" />
+            <Border Style="{StaticResource ToolbarDivider}" />
+            <ui:Button x:Name="EditButton" Content="Edit bill" Click="EditBill_Click" IsEnabled="False" />
+            <ui:Button x:Name="DeleteButton" Content="Delete bill" Click="DeleteBill_Click" IsEnabled="False" />
+            <Border Style="{StaticResource ToolbarDivider}" />
+            <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click" IsEnabled="False" />
+            <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
+            <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled" Click="ArchiveSettled_Click" />
         </WrapPanel>
 
         <DataGrid x:Name="BillGrid" Grid.Row="5" AutoGenerateColumns="False"
@@ -99,4 +103,6 @@
             </DataGrid.Columns>
         </DataGrid>
     </Grid>
+    </Border>
+    </ScrollViewer>
 </Page>

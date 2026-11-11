@@ -101,6 +101,38 @@ public class StayRulesTests
     }
 
     [Fact]
+    public void LastDayHoldingBed_IsTheMoveOutDate_UntilTheTenantIsConfirmedAsLeft()
+    {
+        Assert.Equal<DateOnly?>(D(1, 20), StayRules.LastDayHoldingBed(D(1, 20), null));
+        Assert.Null(StayRules.LastDayHoldingBed(null, null));
+    }
+
+    [Fact]
+    public void LastDayHoldingBed_FreesTheBedFromTheDayTheTenantLeft()
+    {
+        // Confirmed on the move-out day: the bed is free that same day, not the day after.
+        Assert.Equal<DateOnly?>(D(1, 19), StayRules.LastDayHoldingBed(D(1, 20), D(1, 20)));
+        // Confirmed on an earlier day than the planned last day (left early).
+        Assert.Equal<DateOnly?>(D(1, 14), StayRules.LastDayHoldingBed(D(1, 20), D(1, 15)));
+        // Confirmed after the last day: the move-out date already freed it.
+        Assert.Equal<DateOnly?>(D(1, 20), StayRules.LastDayHoldingBed(D(1, 20), D(1, 25)));
+    }
+
+    [Fact]
+    public void ATenantWhoMovedInAndOutOnTheSameDay_HoldsNoDays()
+    {
+        var end = StayRules.LastDayHoldingBed(D(11, 7), D(11, 7));
+        Assert.Null(StayRules.Overlap(S(D(11, 7), end), S(D(11, 7), null, 2)));
+    }
+
+    [Fact]
+    public void ANewTenantCanTakeTheBedOnTheDayTheOldTenantLeft()
+    {
+        var old = S(D(1, 1), StayRules.LastDayHoldingBed(D(1, 10), D(1, 10)));
+        Assert.Null(StayRules.Overlap(old, S(D(1, 10), null, 2)));
+    }
+
+    [Fact]
     public void FreeFrom_ReportsTheFirstConflictFreeDay()
     {
         var today = D(1, 5);

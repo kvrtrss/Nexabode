@@ -35,6 +35,12 @@ public static class StayRules
     public static bool BlocksFrom(StayRange s, DateOnly day) =>
         s.MoveOut == null || s.MoveOut.Value >= day;
 
+    // The last day a stay holds its bed. The move-out date is the tenant's last day and is still billed, but once
+    // the administrator has confirmed that the tenant has left (movedOutOn), the bed is free from that day on,
+    // so it is shown as available straight away instead of tomorrow. Nothing is billed differently.
+    public static DateOnly? LastDayHoldingBed(DateOnly? moveOut, DateOnly? movedOutOn) =>
+        moveOut is DateOnly last && movedOutOn is DateOnly left && last >= left ? left.AddDays(-1) : moveOut;
+
     public static StayPhase PhaseOn(StayRange s, DateOnly day) =>
         s.MoveIn > day ? StayPhase.Reserved
         : (s.MoveOut == null || s.MoveOut.Value >= day) ? StayPhase.Staying

@@ -1,0 +1,85 @@
+﻿<Window x:Class="Nexabode.Views.SetupCodesDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:controls="clr-namespace:Nexabode.Controls"
+        Title="Save your recovery codes"
+        Width="500" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="24">
+            <TextBlock Text="Save your recovery codes" Style="{StaticResource SectionTitle}"
+                       FontSize="18" Margin="0,0,0,6" />
+            <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,16"
+                       Text="These are two spare keys for use if you are ever locked out. You can also set a reset phrase below, which is optional. This takes about a minute, and you can also do it later from the Dashboard." />
+
+            <!-- Recovery code -->
+            <Border CornerRadius="8" Padding="16,12" Margin="0,0,0,10" BorderThickness="1"
+                    BorderBrush="{DynamicResource AppBorderBrush}" Background="{DynamicResource AppBackgroundBrush}">
+                <StackPanel>
+                    <TextBlock Text="RECOVERY CODE" Style="{StaticResource MutedText}" FontSize="11"
+                               FontWeight="SemiBold" HorizontalAlignment="Center" />
+                    <TextBlock Text="For use if you forget your password" Style="{StaticResource MutedText}" FontSize="12"
+                               HorizontalAlignment="Center" Margin="0,0,0,6" />
+                    <TextBlock x:Name="RecoveryText" FontFamily="Consolas" FontSize="22" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" Foreground="{DynamicResource AppTextBrush}"
+                               AutomationProperties.Name="Recovery code" />
+                    <ui:Button Content="Print this code" Click="PrintRecovery_Click" HorizontalAlignment="Center"
+                               Margin="0,8,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- Emergency key -->
+            <Border x:Name="EmergencyBox" CornerRadius="8" Padding="16,12" Margin="0,0,0,10" BorderThickness="1"
+                    BorderBrush="{DynamicResource AppBorderBrush}" Background="{DynamicResource AppBackgroundBrush}">
+                <StackPanel>
+                    <TextBlock Text="EMERGENCY ACCESS KEY" Style="{StaticResource MutedText}" FontSize="11"
+                               FontWeight="SemiBold" HorizontalAlignment="Center" />
+                    <TextBlock Text="For use if nobody can sign in" Style="{StaticResource MutedText}"
+                               FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,6" />
+                    <TextBlock x:Name="EmergencyText" FontFamily="Consolas" FontSize="22" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" Foreground="{DynamicResource AppTextBrush}"
+                               AutomationProperties.Name="Emergency access key" />
+                    <ui:Button Content="Print this key" Click="PrintEmergency_Click" HorizontalAlignment="Center"
+                               Margin="0,8,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- Reset phrase (optional): saved on its own, so it does not wait for the check box below -->
+            <Border x:Name="PhraseCard" CornerRadius="8" Padding="16,12" Margin="0,0,0,10" BorderThickness="1"
+                    BorderBrush="{DynamicResource AppBorderBrush}" Background="{DynamicResource AppBackgroundBrush}">
+                <StackPanel>
+                    <TextBlock Text="RESET PHRASE (OPTIONAL)" Style="{StaticResource MutedText}" FontSize="11"
+                               FontWeight="SemiBold" HorizontalAlignment="Center" />
+                    <TextBlock Text="An easier-to-remember way back in if nobody can sign in" Style="{StaticResource MutedText}"
+                               FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <TextBlock x:Name="PhraseStatus" HorizontalAlignment="Center" Foreground="{DynamicResource AppTextBrush}"
+                               AutomationProperties.Name="Reset phrase status" />
+                    <ui:Button x:Name="PhraseButton" Content="Set a reset phrase" Click="SetPhrase_Click"
+                               HorizontalAlignment="Center" Margin="0,8,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource BannerInfo}" Margin="0,4,0,14">
+                <StackPanel>
+                    <TextBlock Text="Shown only once" FontWeight="SemiBold" Foreground="{DynamicResource AppTextBrush}" />
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Text="Write them down or print them, and keep the paper in a locked place, away from this computer. Anyone who has the emergency key (or knows the reset phrase) can create an Owner account, so treat them like the key to the building. Nexabode cannot show them again, but you can create new ones in Settings at any time." />
+                </StackPanel>
+            </Border>
+
+            <CheckBox x:Name="SavedCheck" Content="I have written down or printed both codes shown above"
+                      Checked="SavedCheck_Changed" Unchecked="SavedCheck_Changed" />
+
+            <controls:InlineError x:Name="ErrorText" Visibility="Collapsed" Margin="0,8,0,0" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <ui:Button Content="Not now" IsCancel="True" Margin="0,0,8,0" />
+                <ui:Button x:Name="ContinueButton" Content="Save and continue" Appearance="Primary"
+                           FontWeight="SemiBold" IsDefault="True" IsEnabled="False" Click="Continue_Click" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

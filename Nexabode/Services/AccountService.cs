@@ -24,12 +24,15 @@ public static class AccountService
 {
     private const string DefaultPassword = "admin123";
 
+    // How many Owner accounts there are. With only one, losing that person's password and codes locks everyone out.
+    public static int OwnerCount(AppDbContext db) => db.AdminUsers.Count(u => u.Role == AccountRoles.Owner);
+
     public static string? PasswordError(string username, string password)
     {
         if (password.Length < 8) return "The password must be at least 8 characters.";
-        if (password == DefaultPassword) return "Please choose a password other than the default.";
+        if (password == DefaultPassword) return "Choose a password other than the default.";
         if (password.Equals(username, StringComparison.OrdinalIgnoreCase))
-            return "The password can't be the same as the username.";
+            return "The password cannot be the same as the username.";
         return null;
     }
 
@@ -39,7 +42,7 @@ public static class AccountService
         var error = UsernameRules.Validate(name);
         if (error != null) return error;
         if (name.Equals("admin", StringComparison.OrdinalIgnoreCase))
-            return "Please choose a username other than the default \"admin\".";
+            return "Choose a username other than the default \"admin\".";
 
         var lower = name.ToLower();
         return db.AdminUsers.Any(u => u.Username.ToLower() == lower) ? "That username is already taken." : null;
@@ -86,7 +89,7 @@ public static class AccountService
         user.MustChangePassword = true;
 
         AuditService.Record(db, "Account", user.Id, null, "Password", null, null,
-                            $"Password reset for {user.Username}. They choose a new one at their next sign-in.");
+                            $"Password reset for {user.Username}. They must choose a new one at their next sign-in.");
         db.SaveChanges();
         return null;
     }
@@ -101,7 +104,7 @@ public static class AccountService
         if (canonical == user.Role) return null;
 
         if (user.Username.Equals(Session.Administrator, StringComparison.OrdinalIgnoreCase))
-            return "You can't change the role of the account you are signed in with.";
+            return "You cannot change the role of the account you are currently signed in with.";
         if (user.Role == AccountRoles.Owner && db.AdminUsers.Count(u => u.Role == AccountRoles.Owner) <= 1)
             return "At least one Owner account must remain.";
 
@@ -118,7 +121,7 @@ public static class AccountService
         if (user == null) return "The account could not be found.";
 
         if (user.Username.Equals(Session.Administrator, StringComparison.OrdinalIgnoreCase))
-            return "You can't remove the account you are signed in with. Sign in with another Owner account to remove it.";
+            return "You cannot remove the account you are currently signed in with. Sign in with another Owner account to remove it.";
         if (user.Role == AccountRoles.Owner && db.AdminUsers.Count(u => u.Role == AccountRoles.Owner) <= 1)
             return "At least one Owner account must remain.";
 

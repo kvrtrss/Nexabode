@@ -9,7 +9,8 @@ namespace Nexabode.Services;
 public sealed class StayImpactReport
 {
     public string Heading { get; set; } = string.Empty;
-    public List<string> BedLines { get; } = new();
+    public List<string> ChangeLines { get; } = new();   // what the person is changing: bed, move-in, move-out
+    public List<string> BedLines { get; } = new();      // what that does to the bed
     public List<string> RentLines { get; } = new();
     public List<string> UtilityLines { get; } = new();
     public List<string> DepositLines { get; } = new();
@@ -29,32 +30,55 @@ public sealed class StayImpactReport
         RentPlan.Any(p => p.Action is RentAction.FlagOverpaid or RentAction.NeedsReview) ||
         UtilityPlans.Any(p => p.Items.Any(i => i.Action is ShareAction.FlagOverpaid or ShareAction.NeedsReview));
 
+    // What the plan does to the rent owed: more, less, or nothing. Items that need a decision change nothing.
+    public decimal NetRentChange => RentPlan.Sum(p => p.Action switch
+    {
+        RentAction.AddAdjustment => p.Difference,
+        RentAction.UpdateInPlace => p.NewAmount - p.CurrentTotal,
+        RentAction.Void => -p.CurrentTotal,
+        _ => 0m
+    });
+
+    // The text shown in the Review changes window. It uses the line markers in ImpactWording, so the window can
+    // draw headings, a summary box, bullets and small notes. In plain words it reads: what you are changing,
+    // what happens to the bed, and what happens to billing, with a one-sentence summary on top of the billing part.
     public string ToText()
     {
         var sb = new StringBuilder();
-        sb.AppendLine(Heading);
-        AddSection(sb, "BEDS AND OCCUPANCY", BedLines);
-        AddSection(sb, "RENT", RentLines);
-        AddSection(sb, "UTILITIES", UtilityLines);
-        AddSection(sb, "DEPOSIT", DepositLines);
 
-        sb.AppendLine();
+        AddSection(sb, "What is changing", ChangeLines);
+        AddSection(sb, "The bed", BedLines);
+
+        if (HasBillingImpact)
+        {
+            sb.AppendLine(ImpactWording.Heading + "Billing");
+            sb.AppendLine(ImpactWording.Summary +
+                ImpactWording.NetRentSentence(NetRentChange, NeedsDecision, UtilityLines.Count > 0));
+            AddSubSection(sb, "Rent", RentLines);
+            AddSubSection(sb, "Utilities", UtilityLines);
+            AddSubSection(sb, "Deposit", DepositLines);
+        }
+
         if (HasPaidRecords)
-            sb.AppendLine("Paid charges are never altered. Extra amounts are added as separate adjustment charges.");
+            sb.AppendLine(ImpactWording.Note + "Paid charges are never altered. Extra amounts are added as separate adjustment charges.");
         if (WillChangeBilling)
-            sb.AppendLine("If you apply this change, the rent and utility corrections described above are made " +
+            sb.AppendLine(ImpactWording.Note + "If you save this change, the rent and utility corrections above are made " +
                           "automatically and recorded in the change history.");
-        if (NeedsDecision)
-            sb.AppendLine("Items marked NEEDS YOUR DECISION are left exactly as they are.");
-        sb.Append("Months with no rent charge yet, and deposits, are not changed automatically.");
+        sb.Append(ImpactWording.Note + "Months with no rent charge yet, and deposits, are not changed automatically.");
         return sb.ToString();
     }
 
     private static void AddSection(StringBuilder sb, string title, List<string> lines)
     {
         if (lines.Count == 0) return;
-        sb.AppendLine();
-        sb.AppendLine(title);
+        sb.AppendLine(ImpactWording.Heading + title);
+        foreach (var line in lines) sb.AppendLine(line.StartsWith("   ") ? line : "  - " + line);
+    }
+
+    private static void AddSubSection(StringBuilder sb, string title, List<string> lines)
+    {
+        if (lines.Count == 0) return;
+        sb.AppendLine(ImpactWording.SubHeading + title);
         foreach (var line in lines) sb.AppendLine(line.StartsWith("   ") ? line : "  - " + line);
     }
 }
@@ -90,14 +114,18 @@ public static class StayImpact
         var newBed = StayEditService.BedName(db, edit.BedId);
         report.Heading = $"{oldBed}, {RangeText(oldRange)}\n   changes to\n{newBed}, {RangeText(newRange)}";
 
-        // ----- Beds and occupancy -----
-        if (edit.BedId != stay.BedId) report.BedLines.Add($"Bed: {oldBed} -> {newBed}.");
+        // ----- What is changing -----
+        if (edit.BedId != stay.BedId) report.ChangeLines.Add($"Bed: {oldBed} \u2192 {newBed}");
         if (edit.MoveIn != stay.MoveInDate)
-            report.BedLines.Add($"Move-in: {D(stay.MoveInDate)} -> {D(edit.MoveIn)}.");
+            report.ChangeLines.Add($"Move-in date: {D(stay.MoveInDate)} \u2192 {D(edit.MoveIn)}");
         if (edit.MoveOut != stay.MoveOutDate)
-            report.BedLines.Add("Move-out: " +
-                (stay.MoveOutDate is DateOnly oldOut ? D(oldOut) : "none (ongoing)") + " -> " +
-                (edit.MoveOut is DateOnly newOut ? D(newOut) : "none (ongoing)") + ".");
+            report.ChangeLines.Add("Move-out date: " +
+                (stay.MoveOutDate is DateOnly oldOut ? D(oldOut) : "none (ongoing)") + " \u2192 " +
+                (edit.MoveOut is DateOnly newOut ? D(newOut) : "none (ongoing)"));
+        if (edit.Deposit != stay.Deposit)
+            report.ChangeLines.Add($"Deposit: {Fmt.Peso(stay.Deposit)} \u2192 {Fmt.Peso(edit.Deposit)}");
+        if (report.ChangeLines.Count == 0)
+            report.ChangeLines.Add("The dates and bed stay the same. Only the rent or other details change.");
 
         var freed = edit.BedId != stay.BedId
             ? new List<DateSpan> { new(oldRange.MoveIn, oldRange.MoveOut) }
@@ -105,8 +133,8 @@ public static class StayImpact
         var taken = edit.BedId != stay.BedId
             ? new List<DateSpan> { new(newRange.MoveIn, newRange.MoveOut) }
             : StayRules.Subtract(newRange, oldRange);
-        foreach (var span in freed) report.BedLines.Add($"{oldBed} becomes free for {SpanText(span)}.");
-        foreach (var span in taken) report.BedLines.Add($"{newBed} becomes occupied for {SpanText(span)}.");
+        foreach (var span in freed) report.BedLines.Add($"{oldBed} will be free for {SpanText(span)}.");
+        foreach (var span in taken) report.BedLines.Add($"{newBed} will be taken for {SpanText(span)}.");
 
         // The tenant's other stays matter for the rent policy.
         var otherRanges = db.Occupancies.AsNoTracking()

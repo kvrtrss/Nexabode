@@ -26,8 +26,8 @@ public partial class App : Application
 
         DispatcherUnhandledException += (_, args) =>
         {
-            MessageBox.Show("Something went wrong:\n\n" + args.Exception.Message +
-                            "\n\nNexabode will keep running. If this keeps happening, restart it.",
+            MessageBox.Show("An unexpected error occurred.\n\nDetails: " + args.Exception.Message +
+                            "\n\nNexabode will keep running. If the problem continues, close and reopen Nexabode.",
                             "Nexabode", MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;
         };
@@ -39,7 +39,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Database error:\n{ex.Message}", "Nexabode",
+            MessageBox.Show($"Nexabode could not open its data.\n\nDetails: {ex.Message}\n\nNexabode will now close.", "Nexabode",
                 MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown();
             return;
@@ -47,12 +47,14 @@ public partial class App : Application
 
         base.OnStartup(e);
         ThemeService.Initialize();
+        ScrollForwarding.Register();   // one scroll area at a time; a table with nothing to scroll lets the page have the wheel
+        WindowFit.Register();          // dialogs never run off a small screen
 
         if (warnings.Count > 0)
             MessageBox.Show(
-                "Nexabode could not turn on every data safety rule, because your existing data already contains duplicates:\n\n" +
+                "Nexabode could not turn on every data safety rule because your existing data already contains duplicate records:\n\n" +
                 string.Join("\n\n", warnings.Select(w => "- " + w)) +
-                "\n\nThe app works normally. Please report this on the project's GitHub page so it can be fixed.",
+                "\n\nNexabode can still be used as normal. Please report this on the project's GitHub page so that it can be investigated.",
                 "Nexabode", MessageBoxButton.OK, MessageBoxImage.Warning);
 
         new LoginWindow().Show();
