@@ -15,11 +15,13 @@ public partial class RoomsPage : Page
     public class OccupantInfo
     {
         public string Name { get; set; } = "";
+        public string? Gender { get; set; }
         public string BedLabel { get; set; } = "";
         public DateOnly MoveIn { get; set; }
         public bool IsReserved { get; set; }
         public DateOnly? MoveOut { get; set; }
         public string OverlapNote { get; set; } = "";
+        public int StayId { get; set; }
     }
 
     public class BedInfo
@@ -121,7 +123,7 @@ public partial class RoomsPage : Page
             {
                 Id = r.Id,
                 Name = r.RoomName,
-                Floor = r.Floor,
+                Floor = FloorRules.Normalize(r.Floor),   // older rooms may have it typed differently or not at all
                 Notes = r.Notes,
                 IsActive = r.IsActive,
                 Beds = r.Beds
@@ -171,7 +173,9 @@ public partial class RoomsPage : Page
 
             return new OccupantInfo
             {
+                StayId = o.Id,
                 Name = o.Tenant.FullName,
+                Gender = GenderRules.Normalize(o.Tenant.Gender),
                 BedLabel = bed.BedLabel,
                 MoveIn = o.MoveInDate,
                 MoveOut = o.MoveOutDate,
@@ -239,7 +243,8 @@ public partial class RoomsPage : Page
         var query = SearchBox.Text.Trim();
 
         var shown = _rooms
-            .Where(r => query == "" || r.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .Where(r => query == "" || r.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                                    || FloorRules.Label(r.Floor).Contains(query, StringComparison.OrdinalIgnoreCase))
             .Where(r => _filter == "All" || r.Beds.Any(b => b.Status == _filter))
             .ToList();
 
@@ -248,7 +253,7 @@ public partial class RoomsPage : Page
             RoomWrap.Children.Add(new TextBlock
             {
                 Text = _rooms.Count == 0
-                    ? "No rooms yet. Click Add room to create your first room."
+                    ? "No rooms yet. Select Add room to create the first one."
                     : "No rooms match your search or filter.",
                 Style = (Style)FindResource("MutedText"),
                 Margin = new Thickness(4, 8, 0, 0)
@@ -256,8 +261,51 @@ public partial class RoomsPage : Page
             return;
         }
 
-        foreach (var room in shown)
-            RoomWrap.Children.Add(MakeRoomCard(room));
+        // One heading per floor, with that floor's rooms wrapped underneath it.
+        var floors = shown.GroupBy(r => r.Floor ?? "")
+                          .OrderBy(g => g.Key == "" ? null : g.Key, Comparer<string?>.Create(FloorRules.Compare));
+        foreach (var floor in floors)
+        {
+            var rooms = floor.OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            RoomWrap.Children.Add(MakeFloorHeader(floor.Key == "" ? null : floor.Key, rooms));
+
+            var wrap = new WrapPanel();
+            foreach (var room in rooms)
+                wrap.Children.Add(MakeRoomCard(room));
+            RoomWrap.Children.Add(wrap);
+        }
+    }
+
+    private FrameworkElement MakeFloorHeader(string? floor, List<RoomInfo> rooms)
+    {
+        var bedCount = rooms.Sum(r => r.Beds.Count);
+        var summary = $"{rooms.Count} room{(rooms.Count == 1 ? "" : "s")}  -  {bedCount} bed{(bedCount == 1 ? "" : "s")}";
+        if (floor == null) summary += "  -  edit these rooms to set their floor";
+
+        var row = new DockPanel { Margin = new Thickness(2, 4, 0, 10), LastChildFill = true };
+        row.Children.Add(new TextBlock
+        {
+            Text = FloorRules.Label(floor),
+            FontSize = 15,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Res("AppTextBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0)
+        });
+        row.Children.Add(new TextBlock
+        {
+            Text = summary,
+            Style = (Style)FindResource("MutedText"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 12, 0)
+        });
+        row.Children.Add(new Border
+        {
+            Height = 1,
+            Background = Res("AppBorderBrush"),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        return row;
     }
 
     private Border MakeRoomCard(RoomInfo room)
@@ -339,7 +387,7 @@ public partial class RoomsPage : Page
             Margin = new Thickness(0, 0, 8, 8),
             CornerRadius = new CornerRadius(8),
             Background = Res(tone + "SoftBrush"),
-            ToolTip = bed.HasOverlap ? $"{bed.Label}: {bed.Status} - overlapping stays, check the occupants" : $"{bed.Label}: {bed.Status}",
+            ToolTip = bed.HasOverlap ? ClashWarnings.BedChipTip(bed.Label, bed.Status) : $"{bed.Label}: {bed.Status}",
             Child = new TextBlock
             {
                 Text = bed.HasOverlap ? "⚠ " + bed.Label : bed.Label,
@@ -363,12 +411,14 @@ public partial class RoomsPage : Page
         DetailTitle.Text = room.IsActive ? room.Name : $"{room.Name} (Inactive)";
 
         var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(room.Floor)) parts.Add(room.Floor!);
+        parts.Add(FloorRules.Label(room.Floor));
         parts.Add($"{room.Beds.Count} bed(s)");
         if (!string.IsNullOrWhiteSpace(room.Notes)) parts.Add(room.Notes!);
         DetailSub.Text = string.Join("  -  ", parts);
 
         RoomToggleButton.Content = room.IsActive ? "Deactivate room" : "Activate room";
+
+        ShowClashBanner(room);
 
         var keep = _bedId;   // setting the list clears the selection, so remember it first
         BedGrid.ItemsSource = room.Beds;
@@ -378,6 +428,55 @@ public partial class RoomsPage : Page
         UpdateBedButtons();
         RenderOccupants();
     }
+
+    // A red banner when two stays share a bed on the same days: it names the beds and the tenants, and says
+    // what to do about it, so whoever manages the data does not have to work it out from the small red lines.
+    private void ShowClashBanner(RoomInfo room)
+    {
+        var clashing = room.Beds.Where(b => b.HasOverlap).ToList();
+        ClashBanner.Visibility = clashing.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        if (clashing.Count == 0) return;
+
+        ClashTitle.Text = ClashWarnings.RoomTitle(clashing.Count);
+        ClashLines.Text = string.Join("\n", clashing.Select(b => ClashWarnings.BedLine(
+            b.Label,
+            b.Occupants.Where(o => o.OverlapNote != "").Select(o => o.Name).Distinct().ToList())));
+        ClashAdvice.Text = ClashWarnings.RoomAdvice(Session.IsOwner);
+    }
+
+    // Under each "Overlaps with..." line: fix the stay, or remove it when it was entered by mistake. These are the
+    // same actions, with the same safety rules, as Edit this stay and Remove this stay on the Tenants page.
+    private StackPanel MakeClashButtons(OccupantInfo occupant)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+
+        var edit = new Wpf.Ui.Controls.Button
+        {
+            Content = "Edit this stay",
+            ToolTip = $"Correct the dates or the bed of {occupant.Name}'s stay"
+        };
+        edit.Click += (_, _) => StayActions.Edit(Window.GetWindow(this), occupant.StayId, () => Reload());
+        row.Children.Add(edit);
+
+        // Only an Owner can remove a stay, and only one that was never billed.
+        if (Session.IsOwner)
+        {
+            var remove = new Wpf.Ui.Controls.Button
+            {
+                Content = "Remove this stay",
+                Style = (Style)Application.Current.FindResource("DangerButton"),
+                Margin = new Thickness(8, 0, 0, 0),
+                ToolTip = "For a stay entered by mistake. Deleted if it was never billed, otherwise kept as Cancelled."
+            };
+            remove.Click += (_, _) => StayActions.Remove(Window.GetWindow(this), occupant.StayId, () => Reload());
+            row.Children.Add(remove);
+        }
+
+        return row;
+    }
+
+    private void OpenTenants_Click(object sender, RoutedEventArgs e) =>
+        (Window.GetWindow(this) as MainWindow)?.NavigateTo(typeof(TenantsPage));
 
     // Shows who is staying in the selected bed, or in the whole room when no bed is selected.
     private void RenderOccupants()
@@ -424,6 +523,7 @@ public partial class RoomsPage : Page
                 ? $"Reserved, moves in {Fmt.Date(occupant.MoveIn)}"
                 : $"Since {Fmt.Date(occupant.MoveIn)}";
             if (occupant.MoveOut is DateOnly leaving) detail += $", until {Fmt.Date(leaving)}";
+            if (occupant.Gender != null) detail += $"  -  {occupant.Gender}";
 
             var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
             stack.Children.Add(new TextBlock
@@ -439,6 +539,7 @@ public partial class RoomsPage : Page
                 FontSize = 12.5
             });
             if (occupant.OverlapNote != "")
+            {
                 stack.Children.Add(new TextBlock
                 {
                     Text = occupant.OverlapNote,
@@ -446,6 +547,8 @@ public partial class RoomsPage : Page
                     TextWrapping = TextWrapping.Wrap,
                     Foreground = Res("DangerBrush")
                 });
+                stack.Children.Add(MakeClashButtons(occupant));
+            }
             OccupantPanel.Children.Add(stack);
         }
     }
@@ -477,11 +580,13 @@ public partial class RoomsPage : Page
     private void AddRoom_Click(object sender, RoutedEventArgs e)
     {
         var values = FormDialog.Ask(Owner, "Add room", "Add room",
-            new[] { ("Room name (e.g. Room 101)", ""), ("Floor (optional)", ""), ("Notes (optional)", "") },
+            new[] { ("Room name (e.g. Room 101)", ""), ("Floor (e.g. 1, 2 or Ground)", ""), ("Notes (optional)", "") },
             v =>
             {
                 var name = v[0].Trim();
                 if (name == "") return "Please enter a room name.";
+                var floorError = FloorRules.Validate(v[1]);
+                if (floorError != null) return floorError;
                 var lower = name.ToLower();
                 using var check = new AppDbContext();
                 return check.Rooms.Any(r => r.RoomName.ToLower() == lower) ? "A room with that name already exists." : null;
@@ -489,7 +594,7 @@ public partial class RoomsPage : Page
         if (values == null) return;
 
         using var db = new AppDbContext();
-        var room = new Room { RoomName = values[0].Trim(), Floor = Blank(values[1]), Notes = Blank(values[2]) };
+        var room = new Room { RoomName = values[0].Trim(), Floor = FloorRules.Normalize(values[1]), Notes = Blank(values[2]) };
         db.Rooms.Add(room);
         db.SaveChanges();
 
@@ -502,11 +607,13 @@ public partial class RoomsPage : Page
         if (room == null) return;
 
         var values = FormDialog.Ask(Owner, "Edit room", "Save changes",
-            new[] { ("Room name", room.Name), ("Floor (optional)", room.Floor ?? ""), ("Notes (optional)", room.Notes ?? "") },
+            new[] { ("Room name", room.Name), ("Floor (e.g. 1, 2 or Ground)", room.Floor ?? ""), ("Notes (optional)", room.Notes ?? "") },
             v =>
             {
                 var name = v[0].Trim();
                 if (name == "") return "Please enter a room name.";
+                var floorError = FloorRules.Validate(v[1]);
+                if (floorError != null) return floorError;
                 var lower = name.ToLower();
                 using var check = new AppDbContext();
                 return check.Rooms.Any(r => r.RoomName.ToLower() == lower && r.Id != room.Id)
@@ -514,10 +621,17 @@ public partial class RoomsPage : Page
             });
         if (values == null) return;
 
+        var changes = ConfirmWording.Changes(
+            ("Room name", room.Name, values[0]),
+            ("Floor", room.Floor, FloorRules.Normalize(values[1])),
+            ("Notes", room.Notes, values[2]));
+        if (changes.Count == 0) return;
+        if (!ConfirmActionDialog.Ask(Owner, "Edit room", ConfirmWording.EditRoom(room.Name, changes))) return;
+
         using var db = new AppDbContext();
         var entity = db.Rooms.Find(room.Id)!;
         entity.RoomName = values[0].Trim();
-        entity.Floor = Blank(values[1]);
+        entity.Floor = FloorRules.Normalize(values[1]);
         entity.Notes = Blank(values[2]);
         db.SaveChanges();
 
@@ -533,9 +647,12 @@ public partial class RoomsPage : Page
 
         if (room.IsActive && db.Occupancies.CurrentOrUpcoming().Any(o => o.Bed.RoomId == room.Id))
         {
-            Tell("This room still has tenants (or upcoming move-ins). Move them out first.");
+            Tell("This room cannot be deactivated because it still has tenants or upcoming move-ins. Move them out first.");
             return;
         }
+
+        if (!ConfirmActionDialog.Ask(Owner, room.IsActive ? "Deactivate room" : "Activate room",
+                                     ConfirmWording.RoomStatus(room.Name, activate: !room.IsActive))) return;
 
         var entity = db.Rooms.Find(room.Id)!;
         entity.IsActive = !room.IsActive;
@@ -552,7 +669,7 @@ public partial class RoomsPage : Page
         if (room == null) return;
         if (!room.IsActive)
         {
-            Tell("This room is inactive. Activate the room before adding beds.");
+            Tell("Beds cannot be added to an inactive room. Activate the room first.");
             return;
         }
 
@@ -602,6 +719,12 @@ public partial class RoomsPage : Page
 
         TryMoney(values[1], out var rate);
 
+        var changes = ConfirmWording.Changes(
+            ("Bed label", bed.Label, values[0]),
+            ("Monthly rent", Fmt.Peso(bed.Rate), Fmt.Peso(Math.Round(rate, 2))));
+        if (changes.Count == 0) return;
+        if (!ConfirmActionDialog.Ask(Owner, "Edit bed", ConfirmWording.EditBed(room.Name, bed.Label, changes))) return;
+
         using var db = new AppDbContext();
         var entity = db.Beds.Find(bed.Id)!;
         entity.BedLabel = values[0].Trim();
@@ -619,9 +742,12 @@ public partial class RoomsPage : Page
         using var db = new AppDbContext();
         if (db.Occupancies.CurrentOrUpcoming().Any(o => o.BedId == bed.Id))
         {
-            Tell("This bed has a tenant (or an upcoming move-in). Move the tenant out first.");
+            Tell("This bed cannot be deactivated because it has a tenant or an upcoming move-in. Move the tenant out first.");
             return;
         }
+
+        if (!ConfirmActionDialog.Ask(Owner, "Deactivate bed",
+                                     ConfirmWording.BedStatus(CurrentRoom?.Name ?? "", bed.Label, activate: false))) return;
 
         var entity = db.Beds.Find(bed.Id)!;
         entity.IsActive = false;
@@ -635,6 +761,9 @@ public partial class RoomsPage : Page
         if (bed == null) return;
 
         using var db = new AppDbContext();
+        if (!ConfirmActionDialog.Ask(Owner, "Activate bed",
+                                     ConfirmWording.BedStatus(CurrentRoom?.Name ?? "", bed.Label, activate: true))) return;
+
         var entity = db.Beds.Find(bed.Id)!;
         entity.IsActive = true;
         db.SaveChanges();
@@ -649,9 +778,12 @@ public partial class RoomsPage : Page
         using var db = new AppDbContext();
         if (db.Occupancies.CurrentOrUpcoming().Any(o => o.BedId == bed.Id))
         {
-            Tell("This bed has a tenant. Move the tenant out before starting maintenance.");
+            Tell("Maintenance cannot be started because this bed has a tenant or an upcoming move-in. Move the tenant out first.");
             return;
         }
+
+        if (!ConfirmActionDialog.Ask(Owner, "Start maintenance",
+                                     ConfirmWording.MaintenanceStart(CurrentRoom?.Name ?? "", bed.Label))) return;
 
         var entity = db.Beds.Find(bed.Id)!;
         entity.IsMaintenance = true;
@@ -665,6 +797,9 @@ public partial class RoomsPage : Page
         if (bed == null) return;
 
         using var db = new AppDbContext();
+        if (!ConfirmActionDialog.Ask(Owner, "End maintenance",
+                                     ConfirmWording.MaintenanceEnd(CurrentRoom?.Name ?? "", bed.Label))) return;
+
         var entity = db.Beds.Find(bed.Id)!;
         entity.IsMaintenance = false;
         db.SaveChanges();

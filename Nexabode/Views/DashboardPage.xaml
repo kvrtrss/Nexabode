@@ -4,8 +4,11 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Dashboard">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="32,24,32,24">
+    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto" Background="Transparent">
+        <Border Padding="32,24" MinWidth="880"
+                Width="{Binding ViewportWidth, ElementName=PageScroll}">
+        <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -17,16 +20,100 @@
                 <controls:PageHeader x:Name="Header" Title="Dashboard"
                          ActionText="Add tenant" ActionClick="AddTenant_Click" />
 
-                <Border x:Name="BackupBanner" Visibility="Collapsed" Margin="0,0,0,16" Padding="16,12"
-            CornerRadius="8" Background="{DynamicResource WarningSoftBrush}">
+                <!-- One reminder for everything still to do. Colored as a warning while setup is unfinished. -->
+                <Border x:Name="SetupCard" Visibility="Collapsed" Margin="0,0,0,16" Padding="18,14"
+                        CornerRadius="8" BorderThickness="3,0,0,0"
+                        Background="{DynamicResource WarningSoftBrush}" BorderBrush="{DynamicResource WarningBrush}">
+                    <Border.Resources>
+                        <!-- The reminder's buttons take the card's own color (amber while setup is unfinished, blue for tips),
+                             so they sit naturally on the tint instead of fighting it. SetupAccent is set in code. -->
+                        <SolidColorBrush x:Key="SetupAccent" Color="#B45309" />
+
+                        <Style x:Key="SetupSolidButton" TargetType="ui:Button">
+                            <Setter Property="Foreground" Value="White" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                            <Setter Property="Padding" Value="16,7" />
+                            <Setter Property="Cursor" Value="Hand" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ui:Button">
+                                        <Grid>
+                                            <Border x:Name="Fill" CornerRadius="6" Background="{DynamicResource SetupAccent}" />
+                                            <Border x:Name="Shade" CornerRadius="6" Background="#26000000" Visibility="Collapsed" />
+                                            <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Shade" Property="Visibility" Value="Visible" />
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="Shade" Property="Visibility" Value="Visible" />
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Opacity" Value="0.5" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+
+                        <Style x:Key="SetupQuietButton" TargetType="ui:Button">
+                            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+                            <Setter Property="Padding" Value="16,6" />
+                            <Setter Property="Cursor" Value="Hand" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ui:Button">
+                                        <Grid>
+                                            <Border x:Name="Fill" CornerRadius="6" BorderThickness="1"
+                                                    BorderBrush="{DynamicResource SetupAccent}" Background="Transparent" />
+                                            <Border x:Name="Shade" CornerRadius="6" Background="{DynamicResource SetupAccent}"
+                                                    Opacity="0.14" Visibility="Collapsed" />
+                                            <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Shade" Property="Visibility" Value="Visible" />
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="Shade" Property="Visibility" Value="Visible" />
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Opacity" Value="0.5" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Border.Resources>
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="BackupBannerText" VerticalAlignment="Center" TextWrapping="Wrap"
-                       Foreground="{DynamicResource AppTextBrush}" />
-                        <ui:Button Grid.Column="1" Content="Back up now" Click="BackupNow_Click" Margin="12,0,0,0" />
+                        <ui:SymbolIcon x:Name="SetupIcon" Symbol="ShieldError24" FontSize="28" VerticalAlignment="Top"
+                                       Margin="0,2,14,0" Foreground="{DynamicResource WarningBrush}" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock x:Name="SetupTitle" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AppTextBrush}" />
+                            <TextBlock x:Name="SetupSubtitle" TextWrapping="Wrap" Margin="0,2,0,6"
+                                       Foreground="{DynamicResource AppTextBrush}" />
+                            <StackPanel x:Name="SetupRows" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="16,0,0,0" VerticalAlignment="Center">
+                            <ui:Button x:Name="SetupPrimary" Style="{StaticResource SetupSolidButton}"
+                                       HorizontalAlignment="Stretch" Click="SetupPrimary_Click" />
+                            <ui:Button x:Name="SetupSecondary" Style="{StaticResource SetupQuietButton}"
+                                       Visibility="Collapsed" Margin="0,6,0,0"
+                                       HorizontalAlignment="Stretch" Click="SetupSecondary_Click" />
+                            <ui:Button Content="Remind me later" Style="{StaticResource SetupQuietButton}"
+                                       Margin="0,6,0,0" HorizontalAlignment="Stretch" Click="HideSetup_Click" />
+                        </StackPanel>
                     </Grid>
                 </Border>
             </StackPanel>
@@ -110,5 +197,6 @@
                 </ui:Card>
             </Grid>
         </Grid>
+        </Border>
     </ScrollViewer>
 </Page>

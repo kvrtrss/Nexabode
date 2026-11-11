@@ -107,7 +107,7 @@ public partial class StayEditDialog : Window
             Reason = ReasonBox.Text.Trim()
         };
 
-        if (SameAsOriginal(result)) { Fail("Nothing was changed. Press Cancel to close."); return; }
+        if (SameAsOriginal(result)) { Fail("Nothing was changed. Select Cancel to close this window."); return; }
 
         // Always blocked: a move-out before the move-in.
         if (!StayRules.IsValidRange(result.MoveIn, result.MoveOut))
@@ -119,9 +119,9 @@ public partial class StayEditDialog : Window
         var hardError = _hardCheck(result);
         if (hardError != null) { Fail(hardError); return; }
 
-        if (result.Reason.Length == 0)
+        if (!ReasonRules.IsReal(result.Reason))
         {
-            Fail("Enter a reason for this change. It is saved in the audit trail.");
+            Fail("Enter a reason of at least 3 letters or digits for this change. It is saved in the change history.");
             return;
         }
 
@@ -136,8 +136,8 @@ public partial class StayEditDialog : Window
             {
                 ExceptionCheck.IsChecked = false;
                 _acknowledged = conflicts;
-                Fail("These stays would overlap. Read the warning, tick the exception box if this is " +
-                     "really correct, then press Save changes again.");
+                Fail("These stays would overlap. Change the dates or the bed to avoid the clash. If the overlap is correct, " +
+                     "tick the exception box, then select Save changes again.");
                 return;
             }
             result.ConflictException = true;

@@ -1,8 +1,8 @@
-﻿<ui:FluentWindow x:Class="Nexabode.Views.LoginWindow"
+<ui:FluentWindow x:Class="Nexabode.Views.LoginWindow"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-                 Title="Nexabode - Sign in" Height="600" Width="460"
+                 Title="Nexabode - Sign in" Height="680" Width="460"
                  ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
                  ExtendsContentIntoTitleBar="True" WindowBackdropType="None"
                  Background="{DynamicResource AppBackgroundBrush}"
@@ -10,7 +10,8 @@
     <Grid>
         <ui:TitleBar Title="Nexabode" VerticalAlignment="Top" ShowMaximize="False" />
 
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,24,0,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Background="Transparent" Margin="0,32,0,0">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,16">
             <!-- Logo and name -->
             <Border Width="52" Height="52" CornerRadius="13" HorizontalAlignment="Center"
                     Background="{DynamicResource AppPrimaryBrush}">
@@ -27,26 +28,79 @@
                     BorderBrush="{DynamicResource AppBorderBrush}"
                     Background="{DynamicResource AppSurfaceBrush}">
                 <StackPanel>
-                    <TextBlock Text="Sign in" Style="{StaticResource SectionTitle}" FontSize="18"
-                               Margin="0,0,0,16" />
+                    <TextBlock Text="Sign in" Style="{StaticResource SectionTitle}" FontSize="18" />
+                    <TextBlock Text="Enter your username and password to continue."
+                               Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,2,0,18" />
 
                     <TextBlock Text="Username" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
-                    <ui:TextBox x:Name="UsernameBox" Margin="0,0,0,12" />
+                    <ui:TextBox x:Name="UsernameBox" Margin="0,0,0,14"
+                                AutomationProperties.Name="Username" />
 
-                    <TextBlock Text="Password" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
-                    <ui:PasswordBox x:Name="PasswordInput" Margin="0,0,0,12" />
+                    <!-- Label on the left, the reset link on the right, as people expect to find it -->
+                    <Grid Margin="0,0,0,10">
+                        <TextBlock Text="Password" Style="{StaticResource MutedText}"
+                                   VerticalAlignment="Center" />
+                        <ui:Button x:Name="ForgotButton" Content="Forgot password?"
+                                   Style="{StaticResource LinkButton}" HorizontalAlignment="Right"
+                                   Margin="0,-3,0,-3" Click="ForgotButton_Click"
+                                   ToolTip="Reset your password using your recovery code"
+                                   AutomationProperties.Name="Forgot password" />
+                    </Grid>
+                    <ui:PasswordBox x:Name="PasswordInput" Margin="0,0,0,16"
+                                    AutomationProperties.Name="Password" />
 
-                    <TextBlock x:Name="ErrorText" Foreground="{DynamicResource DangerBrush}"
-                               TextWrapping="Wrap" Visibility="Collapsed" Margin="0,0,0,12" />
+                    <!-- Wrong username or password -->
+                    <Border x:Name="ErrorBanner" Style="{StaticResource BannerDanger}"
+                            Visibility="Collapsed" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock x:Name="ErrorTitle" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource AppTextBrush}" />
+                            <TextBlock x:Name="ErrorDetail" Style="{StaticResource MutedText}"
+                                       TextWrapping="Wrap" Margin="0,2,0,0" Visibility="Collapsed" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Sign-in is locked after too many failed attempts -->
+                    <Border x:Name="LockBanner" Style="{StaticResource BannerWarning}"
+                            Visibility="Collapsed" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="Sign-in is temporarily locked" FontWeight="SemiBold"
+                                       TextWrapping="Wrap" Foreground="{DynamicResource AppTextBrush}" />
+                            <TextBlock x:Name="LockText" Style="{StaticResource MutedText}"
+                                       TextWrapping="Wrap" Margin="0,2,0,0" />
+                            <TextBlock Text="When the lock ends, you can:" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource AppTextBrush}" Margin="0,10,0,2" />
+                            <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                                       Text="1. Sign in with another Owner account. That Owner can reset your password in Settings.&#x0A;2. Select &quot;Forgot password?&quot; and enter your recovery code.&#x0A;3. If no account can be used, select &quot;Locked out of every account?&quot; and enter the emergency access key or the reset phrase." />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Password was changed -->
+                    <Border x:Name="SuccessBanner" Style="{StaticResource BannerSuccess}"
+                            Visibility="Collapsed" Margin="0,0,0,14">
+                        <TextBlock x:Name="NoticeText" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource AppTextBrush}" />
+                    </Border>
 
                     <ui:Button x:Name="LoginButton" Content="Sign in" Appearance="Primary"
-                               HorizontalAlignment="Stretch" IsDefault="True"
-                               Click="LoginButton_Click" Margin="0,4,0,0" />
+                               HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                               Padding="0,9" FontWeight="SemiBold" IsDefault="True"
+                               Click="LoginButton_Click" />
                 </StackPanel>
             </Border>
 
+            <ui:Button x:Name="EmergencyButton" Content="Locked out of every account?"
+                       Style="{StaticResource LinkButton}" HorizontalAlignment="Center" Margin="0,10,0,0"
+                       Click="EmergencyButton_Click"
+                       ToolTip="Use your emergency access key or reset phrase to create a new Owner account"
+                       AutomationProperties.Name="Locked out of every account" />
+            <TextBlock x:Name="EmergencyHint" Style="{StaticResource MutedText}" FontSize="12" Width="340"
+                       TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,0"
+                       Text="Use your emergency access key or reset phrase to create a new Owner account." />
+
             <TextBlock Text="Bed occupancy and payment monitoring" Style="{StaticResource MutedText}"
-                       HorizontalAlignment="Center" Margin="0,18,0,0" />
+                       HorizontalAlignment="Center" Margin="0,8,0,0" />
         </StackPanel>
+        </ScrollViewer>
     </Grid>
 </ui:FluentWindow>

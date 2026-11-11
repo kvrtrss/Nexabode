@@ -47,6 +47,8 @@ public static class NotificationService
         AddCreditNotices(db, today, list);
         AddReminderNotices(db, today, soon, list);
         AddBackupNotice(list);
+        AddOwnerNotice(db, list);
+        AddResetPhraseNotice(list);
 
         return list
             .OrderBy(n => n.Rank)
@@ -221,7 +223,7 @@ public static class NotificationService
                     Tone = "Warning",
                     Category = "MOVE-OUT",
                     Title = $"{name}'s last day is today",
-                    Detail = $"{bed}. Press Move out on the Tenants page once they have left.",
+                    Detail = $"{bed}. Select Move out on the Tenants page once the tenant has left.",
                     Date = today,
                     Target = NoticeTarget.Tenants
                 });
@@ -275,8 +277,8 @@ public static class NotificationService
             Key = $"rent:{key}:{missing.Count}",
             Tone = "Warning",
             Category = "RENT",
-            Title = $"Rent for {monthStart.ToString("MMMM yyyy", CultureInfo.CurrentCulture)} is not generated for {missing.Count} tenant(s)",
-            Detail = names + ". Open Rent Billing and press Generate rent.",
+            Title = $"Rent for {monthStart.ToString("MMMM yyyy", CultureInfo.CurrentCulture)} has not been generated for {missing.Count} tenant(s)",
+            Detail = names + ". Open Rent Billing and select Generate rent.",
             Date = monthStart,
             Target = NoticeTarget.RentBilling
         });
@@ -305,7 +307,7 @@ public static class NotificationService
                 Category = "UTILITY",
                 Title = $"{b.UtilityType} bill for {month} is not split yet",
                 Detail = $"{Fmt.Peso(b.TotalAmount)} for {(b.Room?.RoomName ?? "the whole house")}. " +
-                         "Split it on Utility Bills so tenants are charged their share.",
+                         "Open Utility Bills and split it so that each tenant is charged a share.",
                 Date = monthDate,
                 Target = NoticeTarget.UtilityBills
             });
@@ -340,7 +342,7 @@ public static class NotificationService
                 Tone = "Info",
                 Category = "CREDIT",
                 Title = $"{name} has {Fmt.Peso(held)} credit left",
-                Detail = "They have moved out. Refund the credit, or apply it to unpaid charges, on the Tenants page.",
+                Detail = "This tenant has moved out. Refund the credit, or apply it to unpaid charges, on the Tenants page.",
                 Target = NoticeTarget.Tenants
             });
         }
@@ -371,6 +373,41 @@ public static class NotificationService
         }
     }
 
+    // ---------- Owners ----------
+
+    // Told to Owners only, since only an Owner can add an account. A single Owner account is a single point of failure.
+    private static void AddOwnerNotice(AppDbContext db, List<Notice> list)
+    {
+        if (!Session.IsOwner || AccountService.OwnerCount(db) >= 2 || AppSettings.Load().HideSecondOwnerTip) return;
+
+        list.Add(new Notice
+        {
+            Key = "owners:1",
+            Tone = "Info",
+            Category = "SECURITY",
+            Title = "Optional: add a second Owner",
+            Detail = "Helpful if more than one person runs the house. Either Owner can help the other get back in. Add one in Settings.",
+            Target = NoticeTarget.Settings
+        });
+    }
+
+    // Told to Owners only, since only an Owner can set the phrase. It is optional, so "Not needed" on the Dashboard
+    // (or setting a phrase) makes it go away. Marking it as read just clears the badge, as for every notice.
+    private static void AddResetPhraseNotice(List<Notice> list)
+    {
+        if (!Session.IsOwner || AppSettings.Load().HideResetPhraseTip || AuthService.HasResetPhrase()) return;
+
+        list.Add(new Notice
+        {
+            Key = "phrase:1",
+            Tone = "Info",
+            Category = "SECURITY",
+            Title = "Optional: set a reset phrase",
+            Detail = "An easier-to-remember way back in if nobody can sign in. It works with \"Locked out of every account?\" on the sign-in screen. Set one in Settings.",
+            Target = NoticeTarget.Settings
+        });
+    }
+
     // ---------- Backup ----------
 
     private static void AddBackupNotice(List<Notice> list)
@@ -384,8 +421,8 @@ public static class NotificationService
             Key = $"backup:{lastBackup}",
             Tone = "Warning",
             Category = "BACKUP",
-            Title = days == null ? "You haven't made a backup yet" : $"Your last backup was {days} day(s) ago",
-            Detail = "Make a fresh backup in Settings so your recent records are protected.",
+            Title = days == null ? "No backup has been made yet" : $"Your last backup was {days} day(s) ago",
+            Detail = "Make a fresh backup in Settings so that your recent records are protected.",
             Target = NoticeTarget.Settings
         });
     }

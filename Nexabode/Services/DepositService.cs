@@ -124,8 +124,8 @@ public static class DepositService
         newHeld = Math.Round(newHeld, 2);
         if (newHeld < 0)
             return "The credit can't be less than zero.";
-        if (string.IsNullOrWhiteSpace(reason))
-            return "Please enter a reason.";
+        if (!ReasonRules.IsReal(reason))
+            return "Please enter a reason (at least 3 letters or digits).";
 
         using var transaction = db.Database.BeginTransaction();
 
@@ -186,8 +186,8 @@ public static class DepositService
         amount = Math.Round(amount, 2);
         if (amount <= 0)
             return "Enter the amount to put back as a number greater than zero.";
-        if (string.IsNullOrWhiteSpace(reason))
-            return "Please enter a reason.";
+        if (!ReasonRules.IsReal(reason))
+            return "Please enter a reason (at least 3 letters or digits).";
 
         using var transaction = db.Database.BeginTransaction();
 

@@ -4,7 +4,12 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Billing Charges">
-    <Grid Margin="32,24,32,24">
+    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto" Background="Transparent">
+    <Border Padding="32,24" MinWidth="900" MinHeight="640"
+            Width="{Binding ViewportWidth, ElementName=PageScroll}"
+            Height="{Binding ViewportHeight, ElementName=PageScroll}">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -35,30 +40,37 @@
           Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
         </StackPanel>
 
-        <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,6">
-            <ComboBox x:Name="ItemFilter" Width="150" Margin="0,0,8,6"
-              SelectionChanged="Filter_Changed" />
-            <ComboBox x:Name="StatusFilter" Width="160" Margin="0,0,8,6"
-              SelectionChanged="Filter_Changed">
-                <ComboBoxItem Content="All statuses" IsSelected="True" />
-                <ComboBoxItem Content="Not fully paid" />
-                <ComboBoxItem Content="Fully paid" />
-                <ComboBoxItem Content="Overdue" />
-                <ComboBoxItem Content="Refunded" />
-            </ComboBox>
-            <ui:TextBox x:Name="SearchBox" Width="220" Margin="0,0,20,6"
-                PlaceholderText="Search by tenant" TextChanged="SearchBox_TextChanged" />
-            <ui:Button x:Name="EditButton" Content="Edit charge" Click="EditCharge_Click"
-               IsEnabled="False" Margin="0,0,8,6" />
-            <ui:Button x:Name="VoidButton" Content="Void charge" Click="VoidCharge_Click"
-               IsEnabled="False" Margin="0,0,20,6" />
-            <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click"
-               IsEnabled="False" Margin="0,0,8,6" />
-            <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click"
-               IsEnabled="False" Margin="0,0,8,6" />
-            <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled"
-               Click="ArchiveSettled_Click" Margin="0,0,0,6" />
-        </WrapPanel>
+        <StackPanel Grid.Row="3" Margin="0,0,0,6">
+            <!-- Filters -->
+            <WrapPanel>
+                <ComboBox x:Name="ItemFilter" Width="150" Margin="0,0,8,8"
+                          SelectionChanged="Filter_Changed" />
+                <ComboBox x:Name="StatusFilter" Width="160" Margin="0,0,8,8"
+                          SelectionChanged="Filter_Changed">
+                    <ComboBoxItem Content="All statuses" IsSelected="True" />
+                    <ComboBoxItem Content="Not fully paid" />
+                    <ComboBoxItem Content="Fully paid" />
+                    <ComboBoxItem Content="Overdue" />
+                    <ComboBoxItem Content="Refunded" />
+                </ComboBox>
+                <ui:TextBox x:Name="SearchBox" Width="220" Margin="0,0,0,8"
+                            PlaceholderText="Search by tenant" TextChanged="SearchBox_TextChanged" />
+            </WrapPanel>
+
+            <!-- Actions: change a charge | tidy up -->
+            <WrapPanel>
+                <WrapPanel.Resources>
+                <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+            </WrapPanel.Resources>
+                <ui:Button x:Name="EditButton" Content="Edit charge" Click="EditCharge_Click" IsEnabled="False" />
+                <ui:Button x:Name="VoidButton" Content="Void charge" Click="VoidCharge_Click" IsEnabled="False"
+                           Style="{StaticResource DangerToolbarButton}" />
+                <Border Style="{StaticResource ToolbarDivider}" />
+                <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click" IsEnabled="False" />
+                <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
+                <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled" Click="ArchiveSettled_Click" />
+            </WrapPanel>
+        </StackPanel>
 
         <DataGrid x:Name="ChargeGrid" Grid.Row="4" AutoGenerateColumns="False"
                   IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended"
@@ -90,9 +102,9 @@
 
         <ui:Card Grid.Row="5" Margin="0,12,0,0">
             <ScrollViewer MaxHeight="230" VerticalScrollBarVisibility="Auto">
-                <Grid>
+                <Grid Margin="0,0,14,0">
                     <TextBlock x:Name="DetailEmpty" Style="{StaticResource MutedText}"
-                               Text="Click a charge to see who paid it, when, and how." />
+                               Text="Select a charge to see who paid it, when and how." />
 
                     <Grid x:Name="DetailBody" Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
@@ -127,4 +139,6 @@
             </ScrollViewer>
         </ui:Card>
     </Grid>
+    </Border>
+    </ScrollViewer>
 </Page>

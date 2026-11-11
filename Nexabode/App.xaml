@@ -28,6 +28,27 @@
             <SolidColorBrush x:Key="NeutralSoftBrush" Color="#2664748B" />
             <SolidColorBrush x:Key="OccupiedSoftBrush" Color="#264F46E5" />
 
+            <!-- The colors of the kinds of change in the Change history (light theme; ThemeService swaps them for dark).
+                 Stay = indigo, Billing = amber, Payment = green, Account = teal, Security = rose. -->
+            <SolidColorBrush x:Key="CatStayFillBrush" Color="#E0E7FF" />
+            <SolidColorBrush x:Key="CatStayTextBrush" Color="#3730A3" />
+            <SolidColorBrush x:Key="CatStayBarBrush" Color="#6366F1" />
+            <SolidColorBrush x:Key="CatBillingFillBrush" Color="#FEF3C7" />
+            <SolidColorBrush x:Key="CatBillingTextBrush" Color="#92400E" />
+            <SolidColorBrush x:Key="CatBillingBarBrush" Color="#F59E0B" />
+            <SolidColorBrush x:Key="CatPaymentFillBrush" Color="#DCFCE7" />
+            <SolidColorBrush x:Key="CatPaymentTextBrush" Color="#166534" />
+            <SolidColorBrush x:Key="CatPaymentBarBrush" Color="#22C55E" />
+            <SolidColorBrush x:Key="CatAccountFillBrush" Color="#CCFBF1" />
+            <SolidColorBrush x:Key="CatAccountTextBrush" Color="#115E59" />
+            <SolidColorBrush x:Key="CatAccountBarBrush" Color="#14B8A6" />
+            <SolidColorBrush x:Key="CatSecurityFillBrush" Color="#FFE4E6" />
+            <SolidColorBrush x:Key="CatSecurityTextBrush" Color="#9F1239" />
+            <SolidColorBrush x:Key="CatSecurityBarBrush" Color="#F43F5E" />
+            <SolidColorBrush x:Key="CatOtherFillBrush" Color="#E2E8F0" />
+            <SolidColorBrush x:Key="CatOtherTextBrush" Color="#475569" />
+            <SolidColorBrush x:Key="CatOtherBarBrush" Color="#94A3B8" />
+
             <FontFamily x:Key="AppFont">Segoe UI Variable Text, Segoe UI</FontFamily>
 
             <Style x:Key="PageTitle" TargetType="TextBlock">
@@ -43,6 +64,84 @@
             <Style x:Key="MutedText" TargetType="TextBlock">
                 <Setter Property="FontSize" Value="12.5" />
                 <Setter Property="Foreground" Value="{DynamicResource AppSecondaryBrush}" />
+            </Style>
+
+            <!-- A button for something that voids or removes: the normal Windows button, with red text.
+                 Same idea as the Log out button, so it is noticed without shouting. Disabled looks like any
+                 other disabled button. -->
+            <Style x:Key="DangerButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+                <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                <Style.Triggers>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- Buttons in a toolbar row: the same size and gap everywhere. -->
+            <Style x:Key="ToolbarButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+                <Setter Property="Margin" Value="0,0,8,8" />
+                <Setter Property="Padding" Value="14,7" />
+            </Style>
+            <!-- A thin vertical line that separates groups of buttons in a toolbar row. -->
+            <Style x:Key="ToolbarDivider" TargetType="Border">
+                <Setter Property="Width" Value="1" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="Margin" Value="8,4,16,12" />
+                <Setter Property="Background" Value="{DynamicResource AppBorderBrush}" />
+            </Style>
+            <!-- The same, for a void or remove button in a toolbar row. -->
+            <Style x:Key="DangerToolbarButton" TargetType="ui:Button" BasedOn="{StaticResource DangerButton}">
+                <Setter Property="Margin" Value="0,0,8,8" />
+                <Setter Property="Padding" Value="14,7" />
+            </Style>
+            <!-- Buttons in a two-column block of actions (the side panels): equal width, evenly spaced. -->
+            <Style x:Key="ActionButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+                <Setter Property="Margin" Value="3" />
+                <Setter Property="Padding" Value="10,7" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+            </Style>
+            <!-- The small heading above a block of actions, such as STAY or CREDIT. -->
+            <Style x:Key="GroupLabel" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Margin" Value="0,0,0,4" />
+            </Style>
+
+            <!-- A text link: the primary color, no box. Used for secondary actions such as "Forgot password?". -->
+            <Style x:Key="LinkButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+                <Setter Property="Appearance" Value="Transparent" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource AppPrimaryBrush}" />
+                <Setter Property="FontSize" Value="12.5" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Padding" Value="6,3" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+
+            <!-- Message banners: a soft tint with a colored edge, matching the status colors used across the app. -->
+            <Style x:Key="BannerBase" TargetType="Border">
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="BorderThickness" Value="3,0,0,0" />
+                <Setter Property="Padding" Value="12,10" />
+            </Style>
+            <Style x:Key="BannerDanger" TargetType="Border" BasedOn="{StaticResource BannerBase}">
+                <Setter Property="Background" Value="{DynamicResource DangerSoftBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
+            </Style>
+            <Style x:Key="BannerWarning" TargetType="Border" BasedOn="{StaticResource BannerBase}">
+                <Setter Property="Background" Value="{DynamicResource WarningSoftBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
+            </Style>
+            <Style x:Key="BannerSuccess" TargetType="Border" BasedOn="{StaticResource BannerBase}">
+                <Setter Property="Background" Value="{DynamicResource SuccessSoftBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource SuccessBrush}" />
+            </Style>
+            <Style x:Key="BannerInfo" TargetType="Border" BasedOn="{StaticResource BannerBase}">
+                <Setter Property="Background" Value="{DynamicResource InfoSoftBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource InfoBrush}" />
             </Style>
 
             <Style TargetType="ui:Card" BasedOn="{StaticResource {x:Type ui:Card}}">

@@ -4,7 +4,12 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Payments">
-    <Grid Margin="32,24,32,24">
+    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto" Background="Transparent">
+    <Border Padding="32,24" MinWidth="900" MinHeight="600"
+            Width="{Binding ViewportWidth, ElementName=PageScroll}"
+            Height="{Binding ViewportHeight, ElementName=PageScroll}">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -23,16 +28,25 @@
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="340" />
+                <ColumnDefinition Width="354" />
                 <ColumnDefinition Width="20" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <!-- Record a payment -->
-            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
-                <ui:Card VerticalAlignment="Top">
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Background="Transparent">
+                <!-- The right 14px is kept free for the scroll bar, so it never sits on top of the content. -->
+                <ui:Card VerticalAlignment="Top" Margin="0,0,14,0">
                     <StackPanel>
                         <TextBlock Text="Record a payment" Style="{StaticResource SectionTitle}" Margin="0,0,0,12" />
+
+                        <!-- Filled in by Nexabode: shows the number this payment will get. Nobody types it. -->
+                        <TextBlock Text="Receipt no." Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                        <ui:TextBox x:Name="ReceiptNoBox" IsReadOnly="True" IsTabStop="False" FontWeight="SemiBold"
+                                    Margin="0,0,0,4" AutomationProperties.Name="Receipt number, assigned automatically"
+                                    ToolTip="Assigned automatically when you record the payment. It can't be changed." />
+                        <TextBlock Text="Assigned automatically." Style="{StaticResource MutedText}"
+                                   FontSize="11" Margin="0,0,0,12" />
 
                         <TextBlock Text="Tenant" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
                         <ComboBox x:Name="TenantCombo" DisplayMemberPath="Name" Margin="0,0,0,6"
@@ -41,7 +55,7 @@
                                    TextWrapping="Wrap" Margin="0,0,0,12" Text="Select a tenant to begin." />
 
                         <TextBlock Text="Payment date" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
-                        <DatePicker x:Name="PayDatePicker" Margin="0,0,0,10" />
+                        <DatePicker x:Name="PayDatePicker" Margin="0,0,0,10" SelectedDateChanged="PayDate_Changed" />
                         <TextBlock Text="Amount received" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
                         <ui:TextBox x:Name="AmountBox" Margin="0,0,0,4" TextChanged="AmountBox_TextChanged" />
                         <TextBlock x:Name="ChangeHint" TextWrapping="Wrap" FontWeight="SemiBold"
@@ -53,7 +67,10 @@
                             <ComboBoxItem Content="Bank transfer" />
                             <ComboBoxItem Content="Other" />
                         </ComboBox>
-                        <ui:TextBox x:Name="ReferenceBox" PlaceholderText="Reference no. (optional)" Margin="0,0,0,10" />
+                        <!-- Only for payments that come with a reference from outside (GCash, bank, check). Cash has none, so it is switched off. -->
+                        <ui:TextBox x:Name="ReferenceBox" PlaceholderText="GCash, bank or check ref. no."
+                                    Margin="0,0,0,10"
+                                    ToolTip="Enter the reference number from GCash, the bank or the check. It is not needed for cash payments." />
                         <ui:TextBox x:Name="RemarksBox" PlaceholderText="Remarks (optional)" Margin="0,0,0,14" />
 
                         <TextBlock Text="What is the tenant paying for?" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
@@ -63,6 +80,11 @@
 
                         <ui:Button Content="Record payment" Appearance="Primary"
                                    HorizontalAlignment="Stretch" Click="RecordPayment_Click" />
+
+                        <Border x:Name="ReceiptBanner" Style="{StaticResource BannerSuccess}" Visibility="Collapsed" Margin="0,12,0,0">
+                            <TextBlock x:Name="ReceiptText" TextWrapping="Wrap" Foreground="{DynamicResource AppTextBrush}"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </Border>
                     </StackPanel>
                 </ui:Card>
             </ScrollViewer>
@@ -76,42 +98,54 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
-                            <ui:TextBox x:Name="SearchBox" Width="240" Margin="0,0,12,6"
-                PlaceholderText="Search tenant, method, or reference"
-                TextChanged="SearchBox_TextChanged" />
-                            <CheckBox x:Name="ShowVoidedCheck" Content="Show voided"
-              VerticalAlignment="Center" Margin="0,0,16,6"
-              Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
-                            <CheckBox x:Name="ShowArchivedCheck" Content="Show archived"
-              VerticalAlignment="Center" Margin="0,0,16,6"
-              Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
-                            <ui:Button x:Name="EditButton" Content="Edit payment" Click="EditPayment_Click"
-               IsEnabled="False" Margin="0,0,8,6" />
-                            <ui:Button x:Name="VoidButton" Content="Void payment" Click="VoidPayment_Click"
-               IsEnabled="False" Margin="0,0,16,6" />
-                            <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click"
-               IsEnabled="False" Margin="0,0,8,6" />
-                            <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click"
-               IsEnabled="False" Margin="0,0,0,6" />
-                        </WrapPanel>
+                        <StackPanel Margin="0,0,0,4">
+                            <!-- Search and view options -->
+                            <WrapPanel>
+                                <ui:TextBox x:Name="SearchBox" Width="240" Margin="0,0,16,8"
+                                            PlaceholderText="Search tenant, method, or reference"
+                                            TextChanged="SearchBox_TextChanged" />
+                                <CheckBox x:Name="ShowVoidedCheck" Content="Show voided"
+                                          VerticalAlignment="Center" Margin="0,0,16,8"
+                                          Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
+                                <CheckBox x:Name="ShowArchivedCheck" Content="Show archived"
+                                          VerticalAlignment="Center" Margin="0,0,0,8"
+                                          Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
+                            </WrapPanel>
+
+                            <!-- Actions: change a payment | tidy up -->
+                            <WrapPanel>
+                                <WrapPanel.Resources>
+                <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+            </WrapPanel.Resources>
+                                <ui:Button x:Name="EditButton" Content="Edit payment" Click="EditPayment_Click" IsEnabled="False" />
+                                <ui:Button x:Name="VoidButton" Content="Void payment" Click="VoidPayment_Click" IsEnabled="False"
+                                           Style="{StaticResource DangerToolbarButton}" />
+                                <ui:Button x:Name="PrintReceiptButton" Content="Print receipt" Click="PrintReceipt_Click" IsEnabled="False" />
+                                <Border Style="{StaticResource ToolbarDivider}" />
+                                <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click" IsEnabled="False" />
+                                <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
+                            </WrapPanel>
+
+                            <!-- The reference no., remarks and void reason of the selected payment. They are not table columns, so the table stays easy to read. -->
+                            <TextBlock x:Name="SelectedInfo" Style="{StaticResource MutedText}" FontSize="12.5"
+                                       Margin="2,8,0,0" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
 
                         <DataGrid x:Name="PaymentGrid" Grid.Row="1" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended"
                                   SelectionChanged="PaymentGrid_SelectionChanged">
                             <DataGrid.Columns>
+                                <DataGridTextColumn Header="Receipt no." Binding="{Binding ReceiptNo}" Width="125" />
                                 <DataGridTextColumn Header="Date" Binding="{Binding DateText}" Width="105" />
-                                <DataGridTextColumn Header="Tenant" Binding="{Binding Tenant}" Width="*" />
+                                <DataGridTextColumn Header="Tenant" Binding="{Binding Tenant}" Width="*" MinWidth="140" />
                                 <DataGridTextColumn Header="Received" Binding="{Binding Received, StringFormat='₱{0:N2}'}"
                         ElementStyle="{StaticResource RightCell}" Width="105" />
                                 <DataGridTextColumn Header="Applied" Binding="{Binding Amount, StringFormat='₱{0:N2}'}"
                         ElementStyle="{StaticResource RightCell}" Width="105" />
                                 <DataGridTextColumn Header="Change" Binding="{Binding Change, StringFormat='₱{0:N2}'}"
                         ElementStyle="{StaticResource RightCell}" Width="95" />
-                                <DataGridTextColumn Header="Paid for" Binding="{Binding PaidFor}" Width="130" />
-                                <DataGridTextColumn Header="Method" Binding="{Binding Method}" Width="90" />
-                                <DataGridTextColumn Header="Reference" Binding="{Binding Reference}" Width="100" />
-                                <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="150" />
+                                <DataGridTextColumn Header="Paid for" Binding="{Binding PaidFor}" Width="140" />
+                                <DataGridTextColumn Header="Method" Binding="{Binding Method}" Width="110" />
                                 <DataGridTemplateColumn Header="Status" Width="100">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -170,4 +204,6 @@
             </TabControl>
         </Grid>
     </Grid>
+    </Border>
+    </ScrollViewer>
 </Page>

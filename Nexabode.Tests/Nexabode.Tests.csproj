@@ -20,6 +20,25 @@
   <Compile Include="..\Nexabode\Services\UtilityRules.cs" Link="UtilityRules.cs" />
   <Compile Include="..\Nexabode\Services\PaymentRules.cs" Link="PaymentRules.cs" />
   <Compile Include="..\Nexabode\Services\UsernameRules.cs" Link="UsernameRules.cs" />
+  <Compile Include="..\Nexabode\Services\LockoutRules.cs" Link="LockoutRules.cs" />
+  <Compile Include="..\Nexabode\Services\RecoveryCodeRules.cs" Link="RecoveryCodeRules.cs" />
+  <Compile Include="..\Nexabode\Services\PasswordStrengthRules.cs" Link="PasswordStrengthRules.cs" />
+
+  <Compile Include="..\Nexabode\Services\ResetPhraseRules.cs" Link="ResetPhraseRules.cs" />
+  <Compile Include="..\Nexabode\Services\RecoverySheetText.cs" Link="RecoverySheetText.cs" />
+  <Compile Include="..\Nexabode\Services\ReceiptWording.cs" Link="ReceiptWording.cs" />
+  <Compile Include="..\Nexabode\Services\StayRemovalRules.cs" Link="StayRemovalRules.cs" />
+  <Compile Include="..\Nexabode\Services\RentRestoreRules.cs" Link="RentRestoreRules.cs" />
+  <Compile Include="..\Nexabode\Services\ClashWarnings.cs" Link="ClashWarnings.cs" />
+  <Compile Include="..\Nexabode\Services\ConfirmWording.cs" Link="ConfirmWording.cs" />
+  <Compile Include="..\Nexabode\Services\GenderRules.cs" Link="GenderRules.cs" />
+  <Compile Include="..\Nexabode\Services\StayCancelRules.cs" Link="StayCancelRules.cs" />
+  <Compile Include="..\Nexabode\Services\ImpactWording.cs" Link="ImpactWording.cs" />
+  <Compile Include="..\Nexabode\Services\ReasonRules.cs" Link="ReasonRules.cs" />
+  <Compile Include="..\Nexabode\Services\AuditWording.cs" Link="AuditWording.cs" />
+  <Compile Include="..\Nexabode\Services\Fmt.cs" Link="Fmt.cs" />
+  <Compile Include="..\Nexabode\Services\FloorRules.cs" Link="FloorRules.cs" />
+  <Compile Include="..\Nexabode\Services\ReceiptNumberRules.cs" Link="ReceiptNumberRules.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -47,7 +47,7 @@ public partial class ChangeUsernameDialog : Window
 
         var nameError = UsernameRules.Validate(requested);
         if (nameError != null) { Fail(nameError); return; }
-        if (requested == _username) { Fail("That is already your username."); return; }
+        if (requested == _username) { Fail("This is already your username."); return; }
 
         using var db = new AppDbContext();
         var user = db.AdminUsers.FirstOrDefault(u => u.Username == _username);
@@ -55,13 +55,13 @@ public partial class ChangeUsernameDialog : Window
 
         if (!BCrypt.Net.BCrypt.Verify(PasswordInput.Password, user.PasswordHash))
         {
-            Fail("The password is not correct.");
+            Fail("The current password is not correct.");
             return;
         }
 
         if (requested.Equals(PasswordInput.Password, StringComparison.OrdinalIgnoreCase))
         {
-            Fail("The username can't be the same as your password.");
+            Fail("The username cannot be the same as your password.");
             return;
         }
 
@@ -71,6 +71,8 @@ public partial class ChangeUsernameDialog : Window
             Fail("That username is already taken.");
             return;
         }
+
+        if (!ConfirmActionDialog.Ask(this, "Change username", ConfirmWording.ChangeUsername(_username, requested))) return;
 
         // The history entry is written under the old name, because that is who made the change.
         AuditService.Record(db, "Account", user.Id, null, "Username", user.Username, requested,

@@ -1,0 +1,49 @@
+<Window x:Class="Nexabode.Views.ResetPhraseDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:controls="clr-namespace:Nexabode.Controls"
+        Title="Reset phrase" Width="460" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI">
+    <StackPanel Margin="24">
+        <TextBlock x:Name="TitleText" Text="Set a reset phrase" Style="{StaticResource SectionTitle}"
+                   FontSize="18" Margin="0,0,0,6" />
+        <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,14"
+                   Text="Choose a phrase that only you know. If nobody can sign in, entering it under &quot;Locked out of every account?&quot; on the sign-in screen lets you create a new Owner account. The phrase can be used only once and is then removed." />
+
+        <Border Style="{StaticResource BannerWarning}" Margin="0,0,0,16">
+            <StackPanel>
+                <TextBlock Text="Anyone who knows this phrase and can use this computer can become an Owner"
+                           FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{DynamicResource AppTextBrush}" />
+                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Choose a sentence that is easy for you to remember but that nobody could guess, and do not share it. Capital letters and extra spaces are ignored." />
+            </StackPanel>
+        </Border>
+
+        <TextBlock Text="Reset phrase" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+        <ui:PasswordBox x:Name="PhraseBox" Margin="0,0,0,4" AutomationProperties.Name="Reset phrase" />
+        <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12" FontSize="12"
+                   Text="Use at least 3 different words and 16 characters, for example a sentence that only you would write." />
+
+        <TextBlock Text="Confirm reset phrase" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+        <ui:PasswordBox x:Name="ConfirmBox" Margin="0,0,0,8" AutomationProperties.Name="Reset phrase again" />
+
+        <controls:InlineError x:Name="ErrorText" Visibility="Collapsed" Margin="0,0,0,8" />
+
+        <Grid Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ui:Button x:Name="RemoveButton" Content="Remove phrase" Visibility="Collapsed" Click="Remove_Click"
+                       ToolTip="Remove the reset phrase" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                <ui:Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
+                <ui:Button Content="Save phrase" Appearance="Primary" FontWeight="SemiBold"
+                           IsDefault="True" Click="Save_Click" />
+            </StackPanel>
+        </Grid>
+    </StackPanel>
+</Window>

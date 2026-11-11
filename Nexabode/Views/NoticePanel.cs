@@ -35,7 +35,7 @@ public static class NoticePanel
         {
             host.Children.Add(new TextBlock
             {
-                Text = "You're all caught up. Nothing is overdue or due soon.",
+                Text = "You are all caught up. Nothing is overdue or due soon.",
                 Style = MutedStyle,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(16, 18, 16, 18)

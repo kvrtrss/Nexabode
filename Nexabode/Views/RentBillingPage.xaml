@@ -4,7 +4,12 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Rent Billing">
-    <Grid Margin="32,24,32,24">
+    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto" Background="Transparent">
+    <Border Padding="32,24" MinWidth="900" MinHeight="660"
+            Width="{Binding ViewportWidth, ElementName=PageScroll}"
+            Height="{Binding ViewportHeight, ElementName=PageScroll}">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -37,7 +42,7 @@
                 <DatePicker x:Name="RentDuePicker" Width="170" Margin="0,0,20,8" />
                 <CheckBox x:Name="FullRentCheck" Content="Charge full rent for partial months"
                   VerticalAlignment="Center" Margin="0,0,20,8"
-                  ToolTip="By default, a stay that doesn't cover the whole month is billed by days. Tick this to bill the full monthly rent instead."
+                  ToolTip="By default, a stay that does not cover the whole month is charged by the number of days. Tick this to charge the full monthly rent instead."
                   Checked="FullRent_Changed" Unchecked="FullRent_Changed" />
                 <CheckBox x:Name="ShowVoidedCheck" Content="Show voided"
                   VerticalAlignment="Center" Margin="0,0,20,8"
@@ -48,17 +53,19 @@
             </WrapPanel>
 
             <WrapPanel Orientation="Horizontal">
+                <WrapPanel.Resources>
+                <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+            </WrapPanel.Resources>
                 <ui:Button x:Name="GenerateSelectedButton" Content="Generate for selected tenant"
-                   IsEnabled="False" Click="GenerateSelected_Click" Margin="0,0,8,0" />
-                <ui:Button x:Name="EditRentButton" Content="Edit rent" Click="EditRent_Click"
-                   IsEnabled="False" Margin="0,0,32,0"
-                   ToolTip="Change the details, due date, or (while nothing is paid) the amount of a generated rent charge." />
-                <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click"
-                   IsEnabled="False" Margin="0,0,8,0" />
-                <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click"
-                   IsEnabled="False" Margin="0,0,8,0" />
-                <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled"
-                   Click="ArchiveSettled_Click" />
+                           IsEnabled="False" Click="GenerateSelected_Click" />
+                <ui:Button x:Name="EditRentButton" Content="Edit rent" Click="EditRent_Click" IsEnabled="False"
+                           ToolTip="Change the details or due date of a generated rent charge. The amount can be changed only while no payment has been applied." />
+                <ui:Button x:Name="RestoreRentButton" Content="Restore charge" Click="RestoreRent_Click" IsEnabled="False"
+                           ToolTip="Bring back a voided rent charge, updated to the stay as it is now. Tick Show voided to see voided charges." />
+                <Border Style="{StaticResource ToolbarDivider}" />
+                <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click" IsEnabled="False" />
+                <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
+                <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled" Click="ArchiveSettled_Click" />
             </WrapPanel>
         </StackPanel>
 
@@ -85,6 +92,8 @@
         </DataGrid>
 
         <TextBlock Grid.Row="5" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,10,0,0"
-                   Text="Voided rent charges count as already billed and are not created again. To void a charge, or to see who has paid, open Billing Charges." />
+                   Text="A voided rent charge counts as already generated and is not created again. To bring one back, tick Show voided, select it and use Restore charge. To void a charge or see who has paid, open Billing Charges." />
     </Grid>
+    </Border>
+    </ScrollViewer>
 </Page>

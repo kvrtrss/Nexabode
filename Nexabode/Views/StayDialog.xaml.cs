@@ -57,7 +57,7 @@ public partial class StayDialog : Window
     public static MoveInResult? AskMoveIn(Window? owner, string tenantName, List<BedChoice> beds,
                                           Func<MoveInResult, string?>? validate)
     {
-        var dialog = new StayDialog(true, $"Move in - {tenantName}", "Move in", null)
+        var dialog = new StayDialog(true, $"Move in: {tenantName}", "Move in", null)
         {
             _validateIn = validate
         };
@@ -70,7 +70,7 @@ public partial class StayDialog : Window
 
     public static DateOnly? AskMoveOut(Window? owner, string tenantName, DateOnly min, DateOnly max, string? note)
     {
-        var dialog = new StayDialog(false, $"Move out - {tenantName}", "Move out", note)
+        var dialog = new StayDialog(false, $"Move out: {tenantName}", "Move out", note)
         {
             _min = min,
             _max = max
@@ -102,7 +102,7 @@ public partial class StayDialog : Window
             if (NewMoveOutDate.SelectedDate is DateTime outDate) moveOut = DateOnly.FromDateTime(outDate);
             if (!StayRules.IsValidRange(DateOnly.FromDateTime(date), moveOut))
             {
-                Fail("The move-out date can't be before the move-in date.");
+                Fail("The move-out date cannot be before the move-in date.");
                 return;
             }
 

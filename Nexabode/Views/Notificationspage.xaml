@@ -24,8 +24,8 @@
             <ui:Button Content="Mark all as read" Click="MarkAllRead_Click" Margin="8,0,0,0" />
         </StackPanel>
 
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-            <StackPanel>
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Background="Transparent">
+            <StackPanel Margin="0,0,14,0">
                 <TextBlock x:Name="NoticeTitle" Text="Needs your attention" Style="{StaticResource SectionTitle}"
                            Margin="0,0,0,8" />
                 <StackPanel x:Name="NoticeList" />

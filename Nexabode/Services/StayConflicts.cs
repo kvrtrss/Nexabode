@@ -54,7 +54,8 @@ public static class StayConflicts
         foreach (var o in stays)
         {
             var range = new StayRange(o.Id, o.MoveInDate, o.MoveOutDate);
-            if (StayRules.Overlap(proposed, range) is DateSpan span)
+            // A tenant who has already left no longer holds the bed, so their last (billed) day doesn't block a move-in.
+            if (StayRules.Overlap(proposed, o.BedRange()) is DateSpan span)
                 found.Add(new StayConflict(o.Id, o.Tenant.FullName, BedName(o), range, span));
         }
         return found.OrderBy(c => c.Stay.MoveIn).ToList();
@@ -65,7 +66,7 @@ public static class StayConflicts
     private static string StayText(StayRange s) =>
         s.MoveOut is DateOnly end
             ? $"{Fmt.Date(s.MoveIn)} to {Fmt.Date(end)}"
-            : $"{Fmt.Date(s.MoveIn)}, no move-out date";
+            : $"{Fmt.Date(s.MoveIn)} with no move-out date";
 
     private static string SpanText(DateSpan s) =>
         s.End is DateOnly end
@@ -75,7 +76,7 @@ public static class StayConflicts
     // Names each conflicting stay and the exact days that overlap.
     public static string Describe(IEnumerable<StayConflict> conflicts) =>
         string.Join("\n", conflicts.Select(c =>
-            $"- {c.TenantName}, {c.BedName} ({StayText(c.Stay)}). Overlap: {SpanText(c.Overlap)}"));
+            $"{c.BedName} is booked for {c.TenantName} from {StayText(c.Stay)}. Overlapping days: {SpanText(c.Overlap)}."));
 
     // Read-only: reports existing stays that break the rules. Changes nothing.
     public static List<string> ScanExisting()
@@ -110,7 +111,9 @@ public static class StayConflicts
                     var b = list[j];
                     var ra = new StayRange(a.Id, a.MoveInDate, a.MoveOutDate);
                     var rb = new StayRange(b.Id, b.MoveInDate, b.MoveOutDate);
-                    if (StayRules.Overlap(ra, rb) is not DateSpan span) continue;
+                    // Same bed: a tenant who has already left no longer holds it.
+                    var overlap = sameBed ? StayRules.Overlap(a.BedRange(), b.BedRange()) : StayRules.Overlap(ra, rb);
+                    if (overlap is not DateSpan span) continue;
 
                     var handover = span.End == span.Start ? " (same-day handover)" : "";
                     problems.Add(sameBed

@@ -4,7 +4,7 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Settings">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Background="Transparent">
         <StackPanel Margin="32,24,32,24" MaxWidth="760" HorizontalAlignment="Left">
             <controls:PageHeader Title="Settings"
                                  Subtitle="Security, backups, and app information." />
@@ -13,10 +13,18 @@
                 <StackPanel>
                     <TextBlock Text="Security" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
                     <TextBlock x:Name="AccountText" Style="{StaticResource MutedText}" Margin="0,0,0,12" />
-                    <StackPanel Orientation="Horizontal">
-                        <ui:Button Content="Change password" Click="ChangePassword_Click" Margin="0,0,8,0" />
+                    <WrapPanel>
+                        <WrapPanel.Resources>
+                            <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+                        </WrapPanel.Resources>
+                        <ui:Button Content="Change password" Click="ChangePassword_Click" />
                         <ui:Button Content="Change username" Click="ChangeUsername_Click" />
-                    </StackPanel>
+                        <Border Style="{StaticResource ToolbarDivider}" />
+                        <ui:Button Content="New recovery code" Click="RecoveryCode_Click"
+                                   ToolTip="Create a new code for resetting a forgotten password" />
+                    </WrapPanel>
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,10,0,0"
+                               Text="Your recovery code lets you reset a forgotten password from the sign-in screen. A new code replaces the old one. A code is shown only once, so you can print it on a recovery sheet as soon as it is created." />
                 </StackPanel>
             </ui:Card>
 
@@ -24,7 +32,18 @@
                 <StackPanel>
                     <TextBlock Text="Accounts" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
                     <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12"
-                               Text="Give each person their own account, so the change history shows who did what. An Owner can do everything. Staff can work with tenants, rooms, billing, payments and reports, but can't manage accounts or restore a backup." />
+                               Text="Give each person their own account so that the change history shows who made each change. An Owner can do everything. Staff can work with tenants, rooms, billing, payments and reports, but cannot manage accounts or restore a backup." />
+
+                    <!-- With only one Owner, losing that person's password and codes locks everyone out -->
+                    <Border x:Name="OwnerWarning" Style="{StaticResource BannerWarning}" Margin="0,0,0,12"
+                            Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="There is only one Owner account" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource AppTextBrush}" />
+                            <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                       Text="If that person forgets their password and loses their recovery code, nobody can reset it. Add a second Owner account (for a trusted person, or a second account for yourself) so that either Owner can reset the other's password." />
+                        </StackPanel>
+                    </Border>
                     <DataGrid x:Name="AccountGrid" AutoGenerateColumns="False" IsReadOnly="True"
                               CanUserAddRows="False" SelectionMode="Single" Height="160" Margin="0,0,0,12"
                               SelectionChanged="AccountGrid_SelectionChanged">
@@ -34,16 +53,27 @@
                             <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="240" />
                         </DataGrid.Columns>
                     </DataGrid>
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,10"
+                               Text="Ways back in if nobody can sign in: the emergency key is a code to write down and keep somewhere safe. The reset phrase is a sentence you choose and remember instead. Either one, entered under &quot;Locked out of every account?&quot; on the sign-in screen, creates a new Owner account." />
                     <WrapPanel>
-                        <ui:Button Content="Add account" Appearance="Primary" Click="AddAccount_Click"
-                                   Margin="0,0,8,8" />
-                        <ui:Button x:Name="ResetPasswordButton" Content="Reset password" Click="ResetPassword_Click"
-                                   Margin="0,0,8,8" IsEnabled="False" />
-                        <ui:Button x:Name="ChangeRoleButton" Content="Change role" Click="ChangeRole_Click"
-                                   Margin="0,0,8,8" IsEnabled="False" />
-                        <ui:Button x:Name="RemoveAccountButton" Content="Remove account" Click="RemoveAccount_Click"
-                                   Margin="0,0,8,8" IsEnabled="False" />
+                        <WrapPanel.Resources>
+                            <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+                        </WrapPanel.Resources>
+                        <ui:Button Content="Add account" Appearance="Primary" Click="AddAccount_Click" />
+                        <Border Style="{StaticResource ToolbarDivider}" />
+                        <ui:Button x:Name="ResetPasswordButton" Content="Reset password" Click="ResetPassword_Click" IsEnabled="False" />
+                        <ui:Button x:Name="ChangeRoleButton" Content="Change role" Click="ChangeRole_Click" IsEnabled="False" />
+                        <Border Style="{StaticResource ToolbarDivider}" />
+                        <ui:Button x:Name="RemoveAccountButton" Content="Remove account" Click="RemoveAccount_Click" IsEnabled="False"
+                                   Style="{StaticResource DangerToolbarButton}" />
+                        <Border Style="{StaticResource ToolbarDivider}" />
+                        <ui:Button Content="New emergency key" Click="EmergencyKey_Click"
+                                   ToolTip="Create a new emergency access key, for use when nobody can sign in" />
+                        <ui:Button Content="Reset phrase" Click="ResetPhrase_Click"
+                                   ToolTip="Set a phrase that can also be used to regain access when nobody can sign in" />
                     </WrapPanel>
+                    <TextBlock x:Name="RecoveryStatusText" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                               Margin="0,10,0,0" />
                 </StackPanel>
             </ui:Card>
 
@@ -52,12 +82,14 @@
                     <TextBlock Text="Backup and restore" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
                     <TextBlock x:Name="LastBackupText" Margin="0,0,0,6" TextWrapping="Wrap" />
                     <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12"
-                               Text="A backup holds all your rooms, tenants, billing, and payments in one file protected by a backup password. Keep it on a USB drive or cloud storage, not only on this computer. It is also how you move Nexabode to another computer." />
-                    <StackPanel Orientation="Horizontal">
-                        <ui:Button Content="Create backup" Appearance="Primary" Click="CreateBackup_Click"
-                                   Margin="0,0,8,0" />
+                               Text="A backup contains all your rooms, tenants, billing and payments in one file protected by a backup password. Keep a copy on a USB drive or cloud storage, not only on this computer. A backup is also how you move Nexabode to another computer." />
+                    <WrapPanel>
+                        <WrapPanel.Resources>
+                            <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+                        </WrapPanel.Resources>
+                        <ui:Button Content="Create backup" Appearance="Primary" Click="CreateBackup_Click" />
                         <ui:Button x:Name="RestoreButton" Content="Restore from backup" Click="Restore_Click" />
-                    </StackPanel>
+                    </WrapPanel>
                 </StackPanel>
             </ui:Card>
 
@@ -65,11 +97,14 @@
                 <StackPanel>
                     <TextBlock Text="Stay records check" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
                     <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12"
-                   Text="Looks for stays that overlap on the same bed or for the same tenant, counting the move-out date as the last day. It only reads your data and changes nothing." />
-                    <StackPanel Orientation="Horizontal">
-                        <ui:Button Content="Check stay records" Click="CheckStays_Click" Margin="0,0,8,0" />
+                   Text="Checks for stays that overlap on the same bed or for the same tenant, counting the move-out date as the last day. This check only reads your data and does not change anything." />
+                    <WrapPanel>
+                        <WrapPanel.Resources>
+                            <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+                        </WrapPanel.Resources>
+                        <ui:Button Content="Check stay records" Click="CheckStays_Click" />
                         <ui:Button Content="View change history" Click="ViewHistory_Click" />
-                    </StackPanel>
+                    </WrapPanel>
                 </StackPanel>
             </ui:Card>
 
@@ -83,7 +118,7 @@
                                Foreground="{DynamicResource AppTextBrush}" Margin="0,0,0,2" />
                     <TextBlock x:Name="DataPathText" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
                     <TextBlock x:Name="RulesText" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0" />
-                    <TextBlock Text="Everything stays on this computer. The database is encrypted."
+                    <TextBlock Text="All data stays on this computer, and the database is encrypted."
                                Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0" />
                 </StackPanel>
             </ui:Card>

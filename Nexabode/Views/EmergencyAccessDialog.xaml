@@ -1,0 +1,55 @@
+<Window x:Class="Nexabode.Views.EmergencyAccessDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:controls="clr-namespace:Nexabode.Controls"
+        Title="Emergency access" Width="440" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI">
+    <StackPanel Margin="24">
+        <TextBlock Text="Locked out of every account?" Style="{StaticResource SectionTitle}"
+                   FontSize="18" Margin="0,0,0,6" />
+        <TextBlock x:Name="IntroText" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,14"
+                   Text="Enter the emergency access key that was saved when Nexabode was set up, then choose a username and password for a new Owner account." />
+
+        <!-- Two ways in. Both only add a new Owner account. -->
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+            <RadioButton x:Name="KeyMode" Content="Emergency access key" GroupName="Way" IsChecked="True"
+                         Margin="0,0,20,0" Checked="Way_Changed" />
+            <RadioButton x:Name="PhraseMode" Content="Reset phrase" GroupName="Way" Checked="Way_Changed" />
+        </StackPanel>
+
+        <Border Style="{StaticResource BannerInfo}" Margin="0,0,0,16">
+            <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                       Text="This only adds a new Owner account. It does not change or remove any existing account, and it does not affect your data." />
+        </Border>
+
+        <TextBlock x:Name="SecretLabel" Text="Emergency access key" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+        <ui:TextBox x:Name="KeyBox" FontFamily="Consolas" CharacterCasing="Upper" MaxLength="30"
+                    PlaceholderText="XXXX-XXXX-XXXX-XXXX-XXXX" Margin="0,0,0,12"
+                    AutomationProperties.Name="Emergency access key" />
+        <ui:PasswordBox x:Name="PhraseBox" Visibility="Collapsed" Margin="0,0,0,12"
+                        AutomationProperties.Name="Reset phrase" />
+
+        <TextBlock Text="New Owner username" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+        <ui:TextBox x:Name="UsernameBox" Margin="0,0,0,12" AutomationProperties.Name="New Owner username" />
+
+        <TextBlock Text="New password" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+        <ui:PasswordBox x:Name="NewBox" Margin="0,0,0,8" AutomationProperties.Name="New password" />
+        <controls:PasswordStrengthMeter x:Name="StrengthMeter" />
+
+        <TextBlock Text="Confirm new password" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+        <ui:PasswordBox x:Name="ConfirmBox" Margin="0,0,0,6" AutomationProperties.Name="Confirm new password" />
+        <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12"
+                   Text="Use at least 8 characters. An incorrect key or phrase counts as a failed sign-in attempt. Three failed attempts in a row lock sign-in temporarily." />
+
+        <controls:InlineError x:Name="ErrorText" Visibility="Collapsed" Margin="0,0,0,8" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <ui:Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
+            <ui:Button Content="Create Owner account" Appearance="Primary" FontWeight="SemiBold"
+                       IsDefault="True" Click="Create_Click" />
+        </StackPanel>
+    </StackPanel>
+</Window>

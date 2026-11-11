@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using Microsoft.EntityFrameworkCore;
 using Nexabode.Models;
+using Nexabode.Services;
 
 namespace Nexabode.Data;
 
@@ -27,6 +28,7 @@ public static class DbInitializer
 
         if (hasData) BackupBeforeUpgrade(db);
         UpgradeSchema(db);
+        ReceiptNumbers.BackfillMissing(db);   // payments from before receipt numbers get one too
 
         var warnings = AddSafetyRules(db);
 
@@ -71,6 +73,21 @@ public static class DbInitializer
         AddColumnIfMissing(db, "UtilityBills", "PeriodEnd", "TEXT NULL");
         AddColumnIfMissing(db, "AdminUsers", "Role", "TEXT NOT NULL DEFAULT 'Owner'");
         AddColumnIfMissing(db, "AdminUsers", "MustChangePassword", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "Payments", "ReceiptNo", "TEXT NULL");
+        db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Payments_ReceiptNo ON Payments (ReceiptNo)");
+        AddColumnIfMissing(db, "AdminUsers", "RecoveryCodeHash", "TEXT NULL");
+        db.Database.ExecuteSqlRaw(
+            "CREATE TABLE IF NOT EXISTS SignInGuards (" +
+            "Id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+            "FailedAttempts INTEGER NOT NULL DEFAULT 0, " +
+            "LockLevel INTEGER NOT NULL DEFAULT 0, " +
+            "LockedUntilUtc TEXT NULL)");
+        AddColumnIfMissing(db, "SignInGuards", "EmergencyKeyHash", "TEXT NULL");
+        AddColumnIfMissing(db, "SignInGuards", "ResetPhraseHash", "TEXT NULL");
+        AddColumnIfMissing(db, "Tenants", "Gender", "TEXT NULL");
+        AddColumnIfMissing(db, "Occupancies", "IsCancelled", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "Occupancies", "CancelReason", "TEXT NULL");
+        AddColumnIfMissing(db, "Occupancies", "CancelledOn", "TEXT NULL");
         db.Database.ExecuteSqlRaw(
         "CREATE TABLE IF NOT EXISTS AuditLog (" +
         "Id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -110,7 +127,7 @@ public static class DbInitializer
             "CREATE UNIQUE INDEX " + OneRentRule + " ON Charges (OccupancyId, BillingMonth) WHERE ChargeType = 'Rent'",
             "SELECT COUNT(*) AS Value FROM (SELECT 1 FROM Charges WHERE ChargeType = 'Rent' " +
             "GROUP BY OccupancyId, BillingMonth HAVING COUNT(*) > 1)",
-            "Some stays have more than one rent charge for the same month (rule: one rent charge per stay and month)."));
+            "Some stays have more than one rent charge for the same month. Each stay should have only one rent charge per month."));
 
         // One utility share per bill and stay. Voided shares are excluded, so undoing a split and splitting again still works.
         Add(CreateIndexIfSafe(db, OneShareRule,
@@ -118,7 +135,7 @@ public static class DbInitializer
             "WHERE UtilityBillId IS NOT NULL AND IsVoided = 0",
             "SELECT COUNT(*) AS Value FROM (SELECT 1 FROM Charges WHERE UtilityBillId IS NOT NULL AND IsVoided = 0 " +
             "GROUP BY UtilityBillId, OccupancyId HAVING COUNT(*) > 1)",
-            "Some utility bills were split more than once for the same tenant (rule: one share per bill and stay)."));
+            "Some utility bills have been split more than once for the same stay. Each stay should have only one share of each bill."));
 
         // One utility bill per month, utility type, and room or whole house.
         // The expression keeps "no room" (whole house) from counting as different each time.
@@ -127,7 +144,7 @@ public static class DbInitializer
             " ON UtilityBills (BillingMonth, lower(UtilityType), ifnull(RoomId, 0))",
             "SELECT COUNT(*) AS Value FROM (SELECT 1 FROM UtilityBills " +
             "GROUP BY BillingMonth, lower(UtilityType), ifnull(RoomId, 0) HAVING COUNT(*) > 1)",
-            "Some months have the same utility bill entered twice (rule: one bill per month, utility, and room)."));
+            "Some months have the same utility bill entered more than once. Only one bill is allowed for each month, utility type and room."));
 
         return warnings;
     }
@@ -150,7 +167,14 @@ public static class DbInitializer
             ColumnExists(db, "Payments", "AmountReceived") &&
             ColumnExists(db, "Charges", "RefundedAmount") &&
             ColumnExists(db, "Occupancies", "MovedOutOn") &&
-            ColumnExists(db, "AdminUsers", "Role")) return;
+            ColumnExists(db, "AdminUsers", "Role") &&
+            ColumnExists(db, "AdminUsers", "RecoveryCodeHash") &&
+            ColumnExists(db, "Payments", "ReceiptNo") &&
+            ColumnExists(db, "Tenants", "Gender") &&
+            ColumnExists(db, "Occupancies", "IsCancelled") &&
+            TableExists(db, "SignInGuards") &&
+            ColumnExists(db, "SignInGuards", "EmergencyKeyHash") &&
+            ColumnExists(db, "SignInGuards", "ResetPhraseHash")) return;
 
         try
         {
@@ -167,7 +191,7 @@ public static class DbInitializer
         }
         catch (Exception ex)
         {
-            throw new IOException("A safety copy of your data could not be saved, so the upgrade was stopped. " +
+            throw new IOException("A safety copy of your data could not be saved, so the upgrade was stopped. Details: " +
                                   ex.Message, ex);
         }
     }

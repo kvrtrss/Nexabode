@@ -74,7 +74,7 @@ public partial class NotificationsPage : Page
         {
             NoticeList.Children.Add(new TextBlock
             {
-                Text = "You're all caught up. Nothing is overdue or due soon.",
+                Text = "You are all caught up. Nothing is overdue or due soon.",
                 Style = (Style)FindResource("MutedText"),
                 Margin = new Thickness(0, 0, 0, 8)
             });
@@ -87,7 +87,7 @@ public partial class NotificationsPage : Page
         {
             ReminderList.Children.Add(new TextBlock
             {
-                Text = "No reminders yet. Use Add reminder for things Nexabode can't know about, such as a meter reading or a repair visit.",
+                Text = "No reminders yet. Select Add reminder for things Nexabode cannot track on its own, such as a meter reading or a repair visit.",
                 Style = (Style)FindResource("MutedText"),
                 TextWrapping = TextWrapping.Wrap
             });
@@ -220,10 +220,10 @@ public partial class NotificationsPage : Page
             },
             vals =>
             {
-                if (vals[0].Trim() == "") return "Please enter what the reminder is about.";
-                if (vals[0].Trim().Length > 120) return "Please keep the reminder under 120 characters. Use the note for details.";
+                if (vals[0].Trim() == "") return "Enter what the reminder is about.";
+                if (vals[0].Trim().Length > 120) return "Keep the reminder under 120 characters. Use the note for details.";
                 if (!DateOnly.TryParse(vals[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out _))
-                    return "Enter the date like 2026-10-30.";
+                    return "Enter the date in this format: 2026-10-30.";
                 return null;
             });
         if (v == null) return;
@@ -261,8 +261,7 @@ public partial class NotificationsPage : Page
 
     private void DeleteReminder(int reminderId, string title)
     {
-        var confirm = MessageBox.Show($"Delete the reminder \"{title}\"?", "Delete reminder",
-            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        var confirm = ConfirmActionDialog.YesNo($"Delete the reminder \"{title}\"?", "Delete reminder", confirmText: "Delete");
         if (confirm != MessageBoxResult.Yes) return;
 
         using (var db = new AppDbContext())

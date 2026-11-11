@@ -4,7 +4,12 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Tenants">
-    <Grid Margin="32,24,32,24">
+    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto" Background="Transparent">
+    <Border Padding="32,24" MinWidth="980" MinHeight="640"
+            Width="{Binding ViewportWidth, ElementName=PageScroll}"
+            Height="{Binding ViewportHeight, ElementName=PageScroll}">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -50,14 +55,15 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="20" />
-                <ColumnDefinition Width="380" />
+                <ColumnDefinition Width="394" />
             </Grid.ColumnDefinitions>
 
             <DataGrid x:Name="TenantGrid" AutoGenerateColumns="False" IsReadOnly="True"
                       CanUserAddRows="False" SelectionMode="Single"
                       SelectionChanged="TenantGrid_SelectionChanged">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Name" Binding="{Binding FullName}" Width="*" />
+                    <DataGridTextColumn Header="Name" Binding="{Binding NameText}" SortMemberPath="FullName" Width="*" />
+                    <DataGridTextColumn Header="Gender" Binding="{Binding GenderText}" Width="80" />
                     <DataGridTextColumn Header="Contact" Binding="{Binding Contact}" Width="130" />
                     <DataGridTextColumn Header="Current bed" Binding="{Binding CurrentBed}" Width="150" />
                     <DataGridTextColumn Header="Move-in" Binding="{Binding MoveInText}" Width="110" />
@@ -74,10 +80,12 @@
                 </DataGrid.Columns>
             </DataGrid>
 
-            <ui:Card Grid.Column="2" VerticalAlignment="Top">
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" Background="Transparent">
+            <!-- The right 14px is kept free for the scroll bar, so it never sits on top of the content. -->
+            <ui:Card VerticalAlignment="Top" Margin="0,0,14,0">
                 <Grid>
                     <TextBlock x:Name="DetailEmpty" Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                               Text="Click a tenant to see their details, stay history, and actions." />
+                               Text="Select a tenant to view their details, stay history and available actions." />
 
                     <StackPanel x:Name="DetailBody" Visibility="Collapsed">
                         <TextBlock x:Name="DetailName" Style="{StaticResource SectionTitle}" FontSize="18" />
@@ -86,18 +94,37 @@
 
                         <StackPanel x:Name="InfoPanel" Margin="0,0,0,12" />
 
-                        <WrapPanel Margin="0,0,0,12">
-                            <ui:Button x:Name="EditButton" Content="Edit tenant" Click="EditTenant_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="RefundDepositButton" Content="Refund credit" Click="RefundDeposit_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="ApplyDepositButton" Content="Apply credit" Click="ApplyDeposit_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="EditCreditButton" Content="Edit credit" Click="EditCredit_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="UndoRefundButton" Content="Undo refund" Click="UndoRefund_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="EditStayButton" Content="Edit stay" Click="EditStay_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="MoveInButton" Content="Move in" Appearance="Primary"
-                                       Click="MoveIn_Click" Margin="0,0,8,8" />
-                            <ui:Button x:Name="MoveOutButton" Content="Move out" Click="MoveOut_Click" Margin="0,0,0,8" />
-                            <ui:Button x:Name="HistoryButton" Content="Change history" Click="StayHistory_Click" Margin="8,0,0,8" />
-                        </WrapPanel>
+                        <StackPanel Margin="0,0,0,8">
+                            <TextBlock Text="TENANT" Style="{StaticResource GroupLabel}" />
+                            <UniformGrid Columns="2" Margin="-3,0,-3,12">
+                                <UniformGrid.Resources>
+                                    <Style TargetType="ui:Button" BasedOn="{StaticResource ActionButton}" />
+                                </UniformGrid.Resources>
+                                <ui:Button x:Name="EditButton" Content="Edit tenant" Click="EditTenant_Click" />
+                                <ui:Button x:Name="HistoryButton" Content="Change history" Click="StayHistory_Click" />
+                            </UniformGrid>
+
+                            <TextBlock Text="STAY" Style="{StaticResource GroupLabel}" />
+                            <UniformGrid Columns="2" Margin="-3,0,-3,12">
+                                <UniformGrid.Resources>
+                                    <Style TargetType="ui:Button" BasedOn="{StaticResource ActionButton}" />
+                                </UniformGrid.Resources>
+                                <ui:Button x:Name="MoveInButton" Content="Move in" Appearance="Primary" Click="MoveIn_Click" />
+                                <ui:Button x:Name="MoveOutButton" Content="Move out" Click="MoveOut_Click" />
+                                <ui:Button x:Name="EditStayButton" Content="Edit stay" Click="EditStay_Click" />
+                            </UniformGrid>
+
+                            <TextBlock Text="CREDIT" Style="{StaticResource GroupLabel}" />
+                            <UniformGrid Columns="2" Margin="-3,0,-3,0">
+                                <UniformGrid.Resources>
+                                    <Style TargetType="ui:Button" BasedOn="{StaticResource ActionButton}" />
+                                </UniformGrid.Resources>
+                                <ui:Button x:Name="ApplyDepositButton" Content="Apply credit" Click="ApplyDeposit_Click" />
+                                <ui:Button x:Name="RefundDepositButton" Content="Refund credit" Click="RefundDeposit_Click" />
+                                <ui:Button x:Name="EditCreditButton" Content="Edit credit" Click="EditCredit_Click" />
+                                <ui:Button x:Name="UndoRefundButton" Content="Undo refund" Click="UndoRefund_Click" />
+                            </UniformGrid>
+                        </StackPanel>
 
                         <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="0,12,0,0">
                             <StackPanel>
@@ -108,6 +135,9 @@
                     </StackPanel>
                 </Grid>
             </ui:Card>
+            </ScrollViewer>
         </Grid>
     </Grid>
+    </Border>
+    </ScrollViewer>
 </Page>

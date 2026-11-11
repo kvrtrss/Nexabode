@@ -10,7 +10,7 @@ public static class UsernameRules
     {
         var name = username.Trim();
         if (name.Length < MinLength) return $"The username must be at least {MinLength} characters.";
-        if (name.Length > MaxLength) return $"The username can be at most {MaxLength} characters.";
+        if (name.Length > MaxLength) return $"The username must not be longer than {MaxLength} characters.";
         if (!name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-'))
             return "Use only letters, numbers, dots, dashes and underscores (no spaces).";
         return null;

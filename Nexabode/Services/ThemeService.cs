@@ -18,6 +18,26 @@ public static class ThemeService
         ["AppSecondary"] = "#64748B",
         ["AppPrimary"] = "#4F46E5",
         ["AppBorder"] = "#E2E8F0",
+
+        // Kinds of change in the Change history: a soft fill and a text color for the label, and a stronger bar
+        ["CatStayFill"] = "#E0E7FF",
+        ["CatStayText"] = "#3730A3",
+        ["CatStayBar"] = "#6366F1",
+        ["CatBillingFill"] = "#FEF3C7",
+        ["CatBillingText"] = "#92400E",
+        ["CatBillingBar"] = "#F59E0B",
+        ["CatPaymentFill"] = "#DCFCE7",
+        ["CatPaymentText"] = "#166534",
+        ["CatPaymentBar"] = "#22C55E",
+        ["CatAccountFill"] = "#CCFBF1",
+        ["CatAccountText"] = "#115E59",
+        ["CatAccountBar"] = "#14B8A6",
+        ["CatSecurityFill"] = "#FFE4E6",
+        ["CatSecurityText"] = "#9F1239",
+        ["CatSecurityBar"] = "#F43F5E",
+        ["CatOtherFill"] = "#E2E8F0",
+        ["CatOtherText"] = "#475569",
+        ["CatOtherBar"] = "#94A3B8",
     };
 
     private static readonly Dictionary<string, string> Dark = new()
@@ -28,6 +48,26 @@ public static class ThemeService
         ["AppSecondary"] = "#94A3B8",
         ["AppPrimary"] = "#818CF8",
         ["AppBorder"] = "#334155",
+
+        // Kinds of change in the Change history (dark versions of the same colors)
+        ["CatStayFill"] = "#312E81",
+        ["CatStayText"] = "#C7D2FE",
+        ["CatStayBar"] = "#818CF8",
+        ["CatBillingFill"] = "#4A3410",
+        ["CatBillingText"] = "#FCD34D",
+        ["CatBillingBar"] = "#F59E0B",
+        ["CatPaymentFill"] = "#14391F",
+        ["CatPaymentText"] = "#86EFAC",
+        ["CatPaymentBar"] = "#22C55E",
+        ["CatAccountFill"] = "#0F3D3A",
+        ["CatAccountText"] = "#5EEAD4",
+        ["CatAccountBar"] = "#14B8A6",
+        ["CatSecurityFill"] = "#4C1625",
+        ["CatSecurityText"] = "#FDA4AF",
+        ["CatSecurityBar"] = "#FB7185",
+        ["CatOtherFill"] = "#334155",
+        ["CatOtherText"] = "#CBD5E1",
+        ["CatOtherBar"] = "#64748B",
     };
 
     private static readonly Dictionary<string, string> Status = new()

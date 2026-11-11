@@ -168,7 +168,7 @@ public partial class ReportsPage : Page
                 }
                 if (to < from)
                 {
-                    Tell("The To date can't be before the From date.");
+                    Tell("The To date cannot be earlier than the From date.");
                     return;
                 }
                 var fromD = DateOnly.FromDateTime(from);
@@ -330,8 +330,8 @@ public partial class ReportsPage : Page
         if (stay != null)
         {
             doc.Blocks.Add(P($"Bed: {stay.Bed.Room.RoomName} / {stay.Bed.BedLabel}", bottom: 0));
-            doc.Blocks.Add(P($"Move-in: {D(stay.MoveInDate)}" +
-                             (stay.MoveOutDate is DateOnly mo ? $"     Move-out: {D(mo)}" : "     Status: Staying"),
+            doc.Blocks.Add(P($"Move-in date: {D(stay.MoveInDate)}" +
+                             (stay.MoveOutDate is DateOnly mo ? $"     Move-out date: {D(mo)}" : "     Status: Currently staying"),
                              bottom: 10));
         }
 
@@ -375,13 +375,13 @@ public partial class ReportsPage : Page
         else
         {
             doc.Blocks.Add(MakeTable(
-                new[] { "Date", "Method", "Reference", "Amount" },
-                new[] { 1.4, 1.4, 2.0, 1.3 },
+                new[] { "Receipt no.", "Date", "Method", "Ref. no.", "Amount" },
+                new[] { 1.8, 1.3, 1.2, 1.6, 1.3 },
                 payments.Select(p => new[]
                 {
-                    D(p.PaymentDate), p.Method ?? "", p.ReferenceNo ?? "", Money(p.Amount)
+                    p.ReceiptNo ?? "", D(p.PaymentDate), p.Method ?? "", p.ReferenceNo ?? "", Money(p.Amount)
                 }),
-                3));
+                4));
         }
 
         doc.Blocks.Add(P("Summary", 14, bold: true, bottom: 2));
@@ -470,7 +470,7 @@ public partial class ReportsPage : Page
         AddHeader(doc, "Occupancy Report", $"As of {D(today)}");
 
         doc.Blocks.Add(P($"Beds in use: {usable}     Occupied: {occupied}     Reserved: {reserved}     " +
-                         $"Available: {available}     Occupancy rate (incl. reserved): {rate:0.#}%", 12, bold: true, bottom: 8));
+                         $"Available: {available}     Occupancy rate (including reserved): {rate:0.#}%", 12, bold: true, bottom: 8));
 
         if (rows.Count == 0)
             doc.Blocks.Add(P("No beds have been added yet."));
@@ -530,13 +530,13 @@ public partial class ReportsPage : Page
         else
         {
             doc.Blocks.Add(MakeTable(
-                new[] { "Date", "Tenant", "Method", "Reference", "Amount" },
-                new[] { 1.3, 2.3, 1.2, 1.6, 1.3 },
+                new[] { "Receipt no.", "Date", "Tenant", "Method", "Ref. no.", "Amount" },
+                new[] { 1.7, 1.2, 2.0, 1.1, 1.4, 1.2 },
                 payments.Select(p => new[]
                 {
-                    D(p.PaymentDate), p.Tenant.FullName, p.Method ?? "", p.ReferenceNo ?? "", Money(p.Amount)
+                    p.ReceiptNo ?? "", D(p.PaymentDate), p.Tenant.FullName, p.Method ?? "", p.ReferenceNo ?? "", Money(p.Amount)
                 }),
-                4));
+                5));
 
             doc.Blocks.Add(P("Totals by method", 14, bold: true, bottom: 0));
             doc.Blocks.Add(MakeTable(

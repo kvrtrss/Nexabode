@@ -4,7 +4,12 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Reports">
-    <Grid Margin="32,24,32,24">
+    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto" Background="Transparent">
+    <Border Padding="32,24" MinWidth="900" MinHeight="560"
+            Width="{Binding ViewportWidth, ElementName=PageScroll}"
+            Height="{Binding ViewportHeight, ElementName=PageScroll}">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -25,14 +30,14 @@
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="360" />
+                <ColumnDefinition Width="374" />
                 <ColumnDefinition Width="20" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <!-- Left: chart and report builder -->
-            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
-                <StackPanel>
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Background="Transparent">
+                <StackPanel Margin="0,0,14,0">
 
                     <ui:Card>
                         <StackPanel>
@@ -76,10 +81,12 @@
                 <Grid>
                     <TextBlock x:Name="PreviewHint" Style="{StaticResource MutedText}"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
-                               Text="Choose a report and click Generate to preview it here." />
+                               Text="Choose a report, then select Generate to preview it here." />
                     <FlowDocumentScrollViewer x:Name="Viewer" VerticalScrollBarVisibility="Auto" />
                 </Grid>
             </Border>
         </Grid>
     </Grid>
+    </Border>
+    </ScrollViewer>
 </Page>

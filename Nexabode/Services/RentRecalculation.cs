@@ -92,7 +92,7 @@ public static class RentRecalculation
 
             var label = MonthLabel(month);
             var monthDays = DateTime.DaysInMonth(month.Year, month.Month);
-            var days = $"days {oldDays} -> {newDays} of {monthDays}";
+            var days = $"billable days changed from {oldDays} to {newDays} of {monthDays}";
 
             var text = decision.Action switch
             {
@@ -102,23 +102,22 @@ public static class RentRecalculation
                     (paidTotal > 0 ? $" The {Fmt.Peso(paidTotal)} already paid stays applied." : ""),
 
                 RentAction.Void =>
-                    $"{label}: the {Fmt.Peso(currentTotal)} charge is cancelled (voided) because the stay " +
+                    $"{label}: the {Fmt.Peso(currentTotal)} charge will be voided because the stay " +
                     "would have no days in this month.",
 
                 RentAction.AddAdjustment =>
-                    $"{label}: {Fmt.Peso(decision.Difference)} more rent is due ({days}). The charge of " +
-                    $"{Fmt.Peso(currentTotal)} stays as billed" +
-                    (paidTotal > 0 ? $" ({Fmt.Peso(paidTotal)} paid)" : "") +
-                    $", and an adjustment charge of {Fmt.Peso(decision.Difference)} is added.",
+                    ImpactWording.MoreRentDue(label, decision.NewAmount, expected?.Description, decision.Difference,
+                                              currentTotal, paidTotal, days,
+                                              fullMonthPolicyApplies: fullRentForPartialMonths && newDays < oldDays),
 
                 RentAction.FlagOverpaid =>
-                    $"NEEDS YOUR DECISION - {label}: {Fmt.Peso(paidTotal)} has been paid but only " +
-                    $"{Fmt.Peso(decision.NewAmount)} would be due, {Fmt.Peso(paidTotal - decision.NewAmount)} too much. " +
+                    $"NEEDS YOUR DECISION ({label}): {Fmt.Peso(paidTotal)} has been paid but only " +
+                    $"{Fmt.Peso(decision.NewAmount)} would be due, which is {Fmt.Peso(paidTotal - decision.NewAmount)} too much. " +
                     "The charge is left as it is. To correct it, return the extra to the tenant, void the payment " +
                     "on the Payments page (enter the amount you gave back), then edit the charge on Billing Charges.",
 
                 _ =>
-                    $"NEEDS YOUR DECISION - {label}: only {Fmt.Peso(decision.NewAmount)} would be due instead of " +
+                    $"NEEDS YOUR DECISION ({label}): only {Fmt.Peso(decision.NewAmount)} would be due instead of " +
                     $"{Fmt.Peso(currentTotal)}, but this charge already has an earlier adjustment. " +
                     "Review it on Billing Charges."
             };

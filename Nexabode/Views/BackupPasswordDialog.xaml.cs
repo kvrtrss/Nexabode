@@ -22,6 +22,14 @@ public partial class BackupPasswordDialog : Window
         OkButton.Content = okText;
         ConfirmPanel.Visibility = confirm ? Visibility.Visible : Visibility.Collapsed;
 
+        // The strength hint is only for choosing a new password, not for entering an existing one.
+        if (confirm) StrengthMeter.Attach(PasswordInput);
+        else
+        {
+            StrengthMeter.Visibility = Visibility.Collapsed;
+            PasswordInput.Margin = new Thickness(0, 0, 0, 12);
+        }
+
         Loaded += (_, _) => PasswordInput.Focus();
     }
 
@@ -46,12 +54,12 @@ public partial class BackupPasswordDialog : Window
     {
         var password = PasswordInput.Password;
 
-        if (password.Length == 0) { Fail($"Please enter the {_noun}."); return; }
+        if (password.Length == 0) { Fail($"Enter the {_noun}."); return; }
 
         if (_confirm)
         {
             if (password.Length < 8) { Fail($"The {_noun} must be at least 8 characters."); return; }
-            if (password != ConfirmInput.Password) { Fail("The two passwords don't match."); return; }
+            if (password != ConfirmInput.Password) { Fail("The two passwords do not match."); return; }
         }
 
         _result = password;

@@ -36,6 +36,12 @@ public partial class MainWindow : FluentWindow
         RefreshAccount();
         _startPage = startPage;
         Closing += MainWindow_Closing;
+        // Never open larger than the screen's usable area, so nothing starts off-screen on a small display.
+        var area = SystemParameters.WorkArea;
+        MinWidth = Math.Min(MinWidth, area.Width);
+        MinHeight = Math.Min(MinHeight, area.Height);
+        Width = Math.Min(Width, area.Width);
+        Height = Math.Min(Height, area.Height);
 
         ThemeButton.Icon = new SymbolIcon(ThemeService.IsDark
             ? SymbolRegular.WeatherSunny24
@@ -112,7 +118,7 @@ public partial class MainWindow : FluentWindow
         var unread = _notices.Count(n => !read.Contains(n.Key));
 
         PopupSubtitle.Text = _notices.Count == 0 ? "Nothing needs your attention"
-            : unread == 0 ? "You're all caught up"
+            : unread == 0 ? "You are all caught up"
             : $"{unread} new";
         MarkAllButton.Visibility = unread > 0 ? Visibility.Visible : Visibility.Collapsed;
         ViewAllButton.Content = _notices.Count > 0 ? $"View all ({_notices.Count})" : "Open Notifications";
@@ -163,10 +169,7 @@ public partial class MainWindow : FluentWindow
     // Signs out and returns to the login window. The app keeps running, so no backup prompt is shown.
     private void LogoutButton_Click(object sender, RoutedEventArgs e)
     {
-        var answer = System.Windows.MessageBox.Show(this,
-            $"Log out of Nexabode as {Session.Administrator}?",
-            "Log out", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
-        if (answer != System.Windows.MessageBoxResult.Yes) return;
+        if (!ConfirmActionDialog.Ask(this, "Log out", $"Log out of Nexabode as {Session.Administrator}?", "Log out")) return;
 
         NoticePopup.IsOpen = false;
         _loggingOut = true;
@@ -208,12 +211,12 @@ public partial class MainWindow : FluentWindow
 
         var days = BackupReminder.DaysSinceBackup();
         var how = days == null
-            ? "You haven't made a backup yet."
+            ? "You have not made a backup yet."
             : $"Your last backup was {days} day(s) ago.";
 
         var answer = System.Windows.MessageBox.Show(this,
             how + "\n\nBack up before closing?\n\n" +
-            "Yes opens Settings so you can create a backup. No closes Nexabode now.",
+            "Select Yes to open Settings and create a backup, or No to close Nexabode now.",
             "Nexabode", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
 
         if (answer == System.Windows.MessageBoxResult.Yes)

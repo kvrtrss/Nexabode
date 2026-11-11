@@ -16,6 +16,7 @@ public partial class BillingPage : Page
     {
         public DateOnly Date { get; set; }
         public string Method { get; set; } = "";
+        public string ReceiptNo { get; set; } = "";
         public string Reference { get; set; } = "";
         public decimal Amount { get; set; }
     }
@@ -142,16 +143,16 @@ public partial class BillingPage : Page
         var ids = _all.Where(r => !r.IsArchived && !r.IsVoided && r.Balance <= 0).Select(r => r.Id).ToList();
         if (ids.Count == 0)
         {
-            Tell("There are no fully paid charges left to archive in this month.");
+            Tell("There are no fully paid charges to archive for this month.");
             return;
         }
 
         var month = (MonthCombo.SelectedItem as MonthOption)?.Display;
-        var answer = MessageBox.Show(
+        var answer = ConfirmActionDialog.YesNo(
             $"Archive {ids.Count} fully paid charge(s) for {month}?\n\n" +
             "They are only hidden from this list. Totals, reports and statements are not affected, " +
             "and you can bring them back with Show archived and Unarchive.",
-            "Archive settled charges", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            "Archive settled charges", confirmText: "Archive");
         if (answer != MessageBoxResult.Yes) return;
 
         ArchiveCharges(ids, true);
@@ -251,6 +252,7 @@ public partial class BillingPage : Page
                         {
                             Date = a.Payment.PaymentDate,
                             Method = a.Payment.Method ?? "",
+                            ReceiptNo = a.Payment.ReceiptNo ?? "",
                             Reference = a.Payment.ReferenceNo ?? "",
                             Amount = a.AmountApplied
                         })
@@ -389,6 +391,7 @@ public partial class BillingPage : Page
         foreach (var payment in row.Payments)
         {
             var parts = new List<string> { Fmt.Date(payment.Date) };
+            if (payment.ReceiptNo != "") parts.Add(payment.ReceiptNo);
             if (payment.Method != "") parts.Add(payment.Method);
             if (payment.Reference != "") parts.Add("Ref " + payment.Reference);
 
@@ -439,7 +442,7 @@ public partial class BillingPage : Page
         }
 
         var totalBalance = mine.Sum(r => r.Balance);
-        AddLine(SummaryPanel, "Still owed", Fmt.Peso(totalBalance), totalBalance <= 0 ? "Success" : "Warning");
+        AddLine(SummaryPanel, "Outstanding", Fmt.Peso(totalBalance), totalBalance <= 0 ? "Success" : "Warning");
     }
 
     // ---------- Edit and void ----------
@@ -460,21 +463,40 @@ public partial class BillingPage : Page
             fields.Add(("Amount", row.Amount.ToString("0.##", CultureInfo.CurrentCulture)));
 
         var note = row.Type == ChargeType.Utility
-            ? $"Amount: {Fmt.Peso(row.Amount)}. A utility share can't be edited here. To change it, undo the split on the Utility Bills page and split again."
+            ? $"Amount: {Fmt.Peso(row.Amount)}. A utility share cannot be edited here. To change it, undo the split on the Utility Bills page, then split the bill again."
             : row.Paid > 0
-                ? $"Amount: {Fmt.Peso(row.Amount)}. The amount is locked because payments have been applied. Void the payment first if the amount is wrong."
+                ? $"Amount: {Fmt.Peso(row.Amount)}. The amount cannot be changed because a payment has been applied to this charge. If the amount is wrong, void the payment first."
                 : null;
 
-        var v = FormDialog.Ask(Owner, $"Edit charge - {row.Tenant}", "Save changes", fields.ToArray(),
+        var v = FormDialog.Ask(Owner, $"Edit charge: {row.Tenant}", "Save changes", fields.ToArray(),
             vals =>
             {
-                if (vals[0].Trim() == "") return "Please enter a description.";
-                if (!TryDate(vals[1], out _)) return "Enter the due date like 2026-10-05.";
+                if (vals[0].Trim() == "") return "Enter a description.";
+                if (!TryDate(vals[1], out _)) return "Enter the due date in the format 2026-10-05.";
                 if (canEditAmount && (!TryMoney(vals[2], out var amount) || amount <= 0))
                     return "Enter the amount as a number greater than zero.";
                 return null;
             }, note);
         if (v == null) return;
+
+        // A short review of what changes. If nothing did, there is nothing to save.
+        {
+            TryDate(v[1], out var reviewDue);
+            var reviewFields = new List<(string Field, string? Old, string? New)>
+            {
+                ("Description", row.Description, v[0]),
+                ("Due date", Fmt.Date(row.DueDate), Fmt.Date(reviewDue))
+            };
+            if (canEditAmount)
+            {
+                TryMoney(v[2], out var reviewAmount);
+                reviewFields.Add(("Amount", Fmt.Peso(row.Amount), Fmt.Peso(Math.Round(reviewAmount, 2))));
+            }
+            var reviewList = ConfirmWording.Changes(reviewFields.ToArray());
+            if (reviewList.Count == 0) return;
+            if (!ConfirmActionDialog.Ask(Owner, "Edit charge",
+                    ConfirmWording.EditRecord($"{row.Tenant}'s {row.Description.ToLower()}", reviewList), "Save changes")) return;
+        }
 
         using var db = new AppDbContext();
         var charge = db.Charges.First(c => c.Id == row.Id);
@@ -498,30 +520,30 @@ public partial class BillingPage : Page
 
         if (row.Paid > 0)
         {
-            Tell("This charge has payments applied to it.\n\n" +
+            Tell("This charge cannot be voided because payments have been applied to it.\n\n" +
                  "Void those payments first (Payments page, Payment history), then void the charge.");
             return;
         }
 
         var note = $"This cancels the {row.Description.ToLower()} of {Fmt.Peso(row.Amount)} for {row.Tenant}. " +
-                   "It stays visible when you tick Show voided, and it no longer counts in any total. This can't be undone.";
+                   "It remains visible when Show voided is ticked, and it no longer counts in any total. This cannot be undone.";
         if (row.Type == ChargeType.Rent)
             note += " A voided rent charge is not created again when you generate rent.";
         if (row.Type == ChargeType.Utility)
             note += " Other tenants' shares of this bill are not changed.";
 
-        var v = FormDialog.Ask(Owner, $"Void charge - {row.Tenant}", "Void charge",
+        var v = FormDialog.Ask(Owner, $"Void charge: {row.Tenant}", "Void charge",
             new[] { ("Reason for voiding", "") },
-            vals => vals[0].Trim() == "" ? "Please enter a reason." : null,
+            vals => ReasonRules.Error(vals[0], "Enter a reason for voiding the charge (at least 3 letters or digits)."),
             note);
         if (v == null) return;
 
         using var db = new AppDbContext();
-        var charge = db.Charges.Include(c => c.Allocations).First(c => c.Id == row.Id);
+        var charge = db.Charges.Include(c => c.Allocations).Include(c => c.Occupancy).First(c => c.Id == row.Id);
 
         if (charge.Allocations.Count > 0)
         {
-            Tell("A payment was just applied to this charge. Void that payment first.");
+            Tell("A payment was just applied to this charge, so it cannot be voided. Void that payment first, then try again.");
             LoadCharges();
             return;
         }
@@ -529,6 +551,8 @@ public partial class BillingPage : Page
         charge.IsVoided = true;
         charge.VoidReason = v[0].Trim();
         charge.VoidedOn = DateOnly.FromDateTime(DateTime.Today);
+        AuditService.Record(db, "Charge", charge.Id, charge.Occupancy.TenantId, $"{row.Description}: voided",
+                            StayEditService.MoneyText(charge.Amount), null, charge.VoidReason);
         db.SaveChanges();
 
         LoadCharges();

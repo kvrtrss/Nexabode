@@ -4,7 +4,7 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:views="clr-namespace:Nexabode.Views"
                  Title="Nexabode" Height="760" Width="1280"
-                 MinHeight="620" MinWidth="1060"
+                 MinHeight="540" MinWidth="820"
                  WindowStartupLocation="CenterScreen"
                  ExtendsContentIntoTitleBar="True" WindowBackdropType="None"
                  Background="{DynamicResource AppBackgroundBrush}"
@@ -52,7 +52,7 @@
                                 <Border Grid.Row="1" BorderThickness="0,1,0,0"
                                         BorderBrush="{DynamicResource AppBorderBrush}">
                                     <ScrollViewer MaxHeight="380" VerticalScrollBarVisibility="Auto">
-                                        <StackPanel x:Name="PopupList" />
+                                        <StackPanel x:Name="PopupList" Margin="0,0,12,0" />
                                     </ScrollViewer>
                                 </Border>
 

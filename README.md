@@ -82,6 +82,7 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 **Rooms and Beds**
 
 - Manage rooms and beds with search, filters, and visual status indicators.
+- Rooms are grouped under a heading for each floor; the floor is required for every room.
 - Track available, occupied, reserved, maintenance, and inactive beds.
 - Activate or deactivate rooms and beds while preserving historical records.
 
@@ -93,6 +94,7 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 - Correct any stay (bed, dates, rent, deposit) with a recorded reason.
 - Tenants show as Staying, Moving out (on their last day) or Moved out.
 - Overlapping stays are blocked on new move-ins and flagged as warnings when correcting history.
+- An Owner can remove a stay that was entered by mistake (a duplicate, the wrong tenant or bed) with "Remove this stay" under Stay history. It is allowed only when nothing was ever billed on the stay, needs the Owner's password and a reason, and a record of what was removed is kept in the change history. A stay that already has charges is ended or corrected instead, never deleted.
 - Archive settled, moved-out tenants and flag potentially duplicate names.
 
 **Billing and Payments**
@@ -106,6 +108,16 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 - Apply a tenant's credit to unpaid balances, and refund the credit that is left in full or in part.
 - Edit a generated rent charge, with a recorded reason.
 - Record money given back when a payment is voided. Charges that were refunded are marked Refunded.
+- Tenants have an optional Gender (Male, Female, Other, or Not set), chosen when adding or editing a tenant. It shows in the tenant details and list and beside the name in the Rooms & Beds list of who is staying. Existing tenants start as Not set.
+- Every confirmation in the app uses one window (Back and Confirm, Enter confirms, the confirm button names the action: Archive, Delete, Record payment...). The rule is simple: an action that needs typing and already says what it does (Void charge, Void payment, Undo split, Reset password, Restore charge) is one window that states the facts and consequences, with no second prompt. Edits (tenant, room, bed, charge, payment, rent, utility bill, credit) show a short "Save these changes?" list of old to new, and do nothing when nothing changed. Credit actions (Apply, Refund, Undo refund, Edit) show the credit before and after. Generate rent, Archive all settled, Record payment, Log out and the other yes/no questions use the same window. Archiving or unarchiving a single row does not ask, because it can be undone at once.
+- Change history labels are colour-coded: Stay indigo, Billing amber, Payment green, Account teal, Security rose. Each card also has a coloured edge, and the word stays on the label so colour is never the only clue. Stays are described in plain words ("Room 101 / Bed 2, Nov 9, 2026 to Nov 9, 2026, rent 1,500.00") instead of the stored record.
+- Changes ask "Are you sure?" first, with Confirm and Back: saving edits to a tenant, room or bed (the window lists exactly what will change, and saving with no changes does nothing), activating or deactivating a room or bed, starting or ending maintenance, creating an Owner account from the sign-in screen, and changing a password (Forgot password, first sign-in and Settings). Change role now opens a role choice box first, like Add account, and still shows its message about what the role can do.
+- Clashes are flagged in two places. Rooms & Beds shows a red banner on a room where two stays share a bed on the same days (naming the beds and tenants and what to do, with an Open Tenants button), and each "Overlaps with..." line there has Edit this stay and Remove this stay (Owners only) buttons that work exactly like the ones on the Tenants page, and the Tenants page shows the same kind of red Check line for the tenant, plus a warning mark beside the name in the list.
+- A voided rent charge counts as already generated, so rent is not created again for it. If the void was a mistake, or the stay changed afterwards (for example a move-out was undone), select the voided row on Rent Billing (tick Show voided) and use "Restore charge": the same charge becomes active again, updated to what the stay would be billed now, with a reason saved in the change history. Editing or ending a stay tells you when a voided month gets days back. Voiding a charge is now also written to the change history.
+- Removing a stay that was entered by mistake: "Remove this stay" deletes it when nothing was ever billed on it. If it has billing records it cannot be deleted, so it is cancelled instead (only once its charges are voided and it has no deposit): it stays in Stay history marked Cancelled, but no longer holds a bed, causes no clash and is not billed. Both need an Owner's password and a reason.
+- Review changes (shown before a stay edit or move-out that affects billing) is written in plain language: what is changing, what happens to the bed, and what happens to billing, with a one-sentence summary such as "The tenant will owe 400.00 more in rent". When the full month's rent is charged for a part-month stay it says so, instead of looking like a mistake.
+- Change history reads like a timeline: one card per action in plain words (for example "November 2026 rent was restored"), with what else changed with it and the reason, grouped by day, and filterable by kind of change. "Technical view" shows every stored record in a table as before. Every reason must have at least three letters or digits, so "." or "j" are no longer accepted.
+- Print a payment receipt (receipt no., tenant, room and bed, what was paid for, amount received, change and the balance left) from the Payments page, in the window that appears right after a payment is recorded or later from the payment history. A reprint is marked "DUPLICATE COPY", every printing is written to the change history, and a voided payment cannot be printed.
 - Search payment history and manage archived or voided transactions.
 
 **Reports and Printing**
@@ -125,6 +137,13 @@ It is designed for local use. Data is stored on your computer in an encrypted da
 - Locally stored, encrypted SQLite database using the SQLCipher 4 file format.
 - Password hashing using BCrypt and a required password change on first sign-in.
 - Separate sign-in accounts with two roles: Owner (everything) and Staff (records only, with no account management or backup restore). New and reset accounts must choose their own password.
+- Receipt numbers: every payment gets a numbered receipt automatically (like RCT-2026-00042: the year, then a running number that starts again each year). Nobody types it, and a number is never reused, even when a payment is voided. The optional "Ref. no." box is only for a reference from outside, such as a GCash reference.
+- Forgot password: each account has a one-time recovery code, shown once and kept only as a BCrypt hash. Use it on the sign-in screen to choose a new password. Using it makes a new code.
+- Emergency access: each Owner is shown an emergency access key once. If no account can be signed in to, "Locked out of every account?" on the sign-in screen uses that key to create a new Owner account. It never changes or removes existing accounts, and using it makes a new key.
+- Reset phrase: an Owner can choose a phrase (at least 3 different words and 16 characters) in Settings. If no account can be signed in to, "Locked out of every account?" accepts it instead of the emergency access key and creates a new Owner account. It can be used once, then it is removed. It is easier to remember than the key, and so easier to guess: it only works for someone at this computer, wrong tries count toward the sign-in lock, and it is optional. Nexabode tells Owners about it in the first-time recovery window, in a Dashboard reminder (until it is set or dismissed), under the "Forgot password?" window, below the "Locked out of every account?" link, and in Settings.
+- Recovery sheet: when a recovery code or emergency access key is made, it can be printed on a sheet that says how to use it. Nothing is saved as a file by Nexabode.
+- Two Owners: Nexabode warns Owners (on the Dashboard, in Settings and in Notifications) while there is only one Owner account, because a second Owner can reset the first one's password.
+- Sign-in lock: 3 failed attempts in a row lock sign-in for 5 minutes. Each repeat lock lasts longer (15, 30, then 60 minutes) until a correct sign-in. The lock is saved in the encrypted database, so closing the app or logging out does not clear it.
 - Password-protected database backup and restore, with automatic backup reminders.
 - Database safeguards against duplicate rent charges and utility splits.
 - Protection intended to prevent multiple application instances from running simultaneously.
@@ -238,7 +257,10 @@ Test the restored database and verify important records before relying on it. Ke
 - The database is encrypted, but encryption does not protect against every threat, including all forms of access through a compromised Windows account.
 - Anyone with sufficient access to your Windows account may be able to access application data. Keep Windows secured and up to date.
 - Nexabode supports separate accounts with two roles, Owner and Staff. This is not a full permission system: Staff can still change or void any record, and every account uses the same database on the same computer. Nexabode does not sync between computers.
-- There is no guaranteed password-recovery mechanism. Forgotten passwords or unavailable encryption keys may result in inaccessible data.
+- The sign-in screen deliberately has no open "create account" button: anyone at the computer could use it to get full access. Creating an account without signing in needs the emergency access key.
+- A forgotten password can be reset with the account's recovery code, or by an Owner in **Settings**. Write the recovery code down and keep it somewhere private, away from the computer. If the only Owner loses the password, the recovery code, the emergency access key and the reset phrase, Nexabode cannot reset it. Keep the emergency access key written down somewhere secure, and consider a second Owner account.
+- The sign-in lock slows down guessing, but it is not a defence against someone who controls the computer: they can change the system clock or use the Windows account to reach the files. Lock Windows when you step away.
+- Unavailable encryption keys may result in inaccessible data.
 - Keep backups separate from the computer and protect them with a strong backup password.
 - Do not commit databases, encryption keys, backups, real tenant information, or credentials to the repository.
 - Review the [security policy](SECURITY.md) for information about reporting potential vulnerabilities.
