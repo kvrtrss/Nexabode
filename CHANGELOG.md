@@ -129,7 +129,7 @@ All notable changes to this project are listed here.
 - Nexabode still keeps its data on one computer. Accounts share that computer's database, so people take turns signing in. They do not sync between computers
 - Restoring a backup replaces all accounts with the ones in the backup
 
-## [Unreleased] - Clearer, more professional wording
+## [1.4.0] - Clearer, more professional wording
 
 ### Changed
 - Messages across the whole app were rewritten to read formally and clearly: what happened, why, and what to do next
@@ -138,7 +138,7 @@ All notable changes to this project are listed here.
 - Notifications, reports, sign-in and recovery screens use consistent terms (charge, payment, outstanding, move-in date, sign in) and plain language instead of technical phrases
 - The Dashboard reminder buttons now use the card's own amber (or blue for tips) instead of the app's indigo: a solid main button and a quiet outlined "Remind me later"
 
-## [Unreleased] - A calmer first sign-in
+## [1.4.0] - A calmer first sign-in
 
 ### Changed
 - A new Owner now sees one pop-up at first sign-in showing the recovery code and the emergency access key together (other accounts see just the recovery code). "Not now" is fine; nothing is saved until they confirm they have written it down
@@ -147,7 +147,7 @@ All notable changes to this project are listed here.
 - The "add a second Owner" suggestion is optional: it appears only after everything else is done, can be dismissed for good with "Not needed", and its notification is informational instead of a warning
 - The recovery code and emergency key wording now describes a "spare key" rather than a warning
 
-## [Unreleased] - Rooms grouped by floor
+## [1.4.0] - Rooms grouped by floor
 
 ### Added
 - Rooms and Beds now shows a heading for each floor ("Floor 1", "Floor 2", "Ground floor", ...) with that floor's rooms underneath, plus a count of rooms and beds
@@ -158,7 +158,7 @@ All notable changes to this project are listed here.
 - Floor is now required when adding or editing a room. "Floor 1", "01" and "1" are all saved as the same floor
 - Rooms created before this change that have no floor appear under "No floor set" at the bottom, and ask for a floor the next time they are edited. Nothing is guessed or changed automatically
 
-## [Unreleased] - Getting back in when locked out
+## [1.4.0] - Getting back in when locked out
 
 ### Added
 - Two-Owner warning: while there is only one Owner account, Owners see a notice on the Dashboard, in Settings > Accounts and in Notifications, with a button to add a second Owner. Staff are not shown it, since they can't add accounts
@@ -180,7 +180,7 @@ All notable changes to this project are listed here.
 ### Notes
 - A recovery code or key is shown once, so it can only be printed when it is made. To print another, make a new one in Settings (the old one stops working)
 
-## [Unreleased] - Independent scrolling, automatic receipt number
+## [1.4.0] - Independent scrolling, automatic receipt number
 
 ### Changed
 - Payment history no longer has "Ref. no." and "Details" columns, so the Tenant column is readable again and the table is less crowded
@@ -199,7 +199,7 @@ All notable changes to this project are listed here.
 - A bed is now Available as soon as its tenant is moved out. Before, a tenant who left on their last day was already Moved out, but the bed stayed Occupied until the next day. This also fixes the Dashboard bed count, the occupancy report, the Rooms & Beds details, and lets a bed be deactivated, put under maintenance, or given to a new tenant the same day. The last day is still billed exactly as before
 - The reference number box is switched off for cash payments. It is only for GCash, bank or check references, and it is cleared if the method is changed to cash
 
-## [Unreleased] - Forgot password and sign-in lock
+## [1.4.0] - Forgot password and sign-in lock
 
 ### Added
 - Forgot password: a link on the sign-in screen lets someone choose a new password with their recovery code. The same message is shown for a wrong username and a wrong code, so it doesn't reveal which usernames exist
@@ -240,7 +240,7 @@ All notable changes to this project are listed here.
 - Settings buttons use the same spacing and grouping
 - "Forgot password?" has more space around it, so it no longer sits close to the show/hide password icon, and it no longer has a box around it
 
-## [Unreleased] - Emergency access, error banners and password strength
+## [1.4.0] - Emergency access, error banners and password strength
 
 ### Added
 - Emergency access: Owners are shown an emergency access key once (written as five groups of four characters). "Locked out of every account?" on the sign-in screen uses it to create a new Owner account if no one can sign in. It never changes or removes existing accounts, and using it makes a new key. Only a BCrypt hash is stored. Using it, and making a new key, are written to the change history
@@ -260,7 +260,7 @@ All notable changes to this project are listed here.
 - Password boxes already include the show/hide (eye) button supplied by the interface library, so no change was needed there
 - Existing Owners are asked to save their emergency key the next time they sign in. "Skip for now" is allowed, and they are asked again at the following sign-in
 
-## [Unreleased] - Colour-coded history and confirmations everywhere they make sense
+## [1.4.0] - Colour-coded history and confirmations everywhere they make sense
 
 ### Added
 - Change history: the label of each kind of change is colour-coded (Stay indigo, Billing amber, Payment green, Account teal, Security rose) and each card has a coloured edge. Light and dark versions, with the word kept on the label
@@ -273,7 +273,7 @@ All notable changes to this project are listed here.
 - Stays in the Change history are described in plain words, not as the stored line with raw dates and amounts
 - "Closing the app" still asks whether to back up first with Yes and No, because No means "close now"
 
-## [Unreleased] - Cancel stay, plain-language review, readable history
+## [1.4.0] - Cancel stay, plain-language review, readable history
 
 ### Added
 - Remove this stay on a stay that already has billing now works: it cannot be deleted, so it is cancelled. It needs every charge voided and no deposit on the stay, an Owner's password and a reason. A cancelled stay is kept with its records and shown greyed and struck through in Stay history, but it no longer holds a bed, no longer shows as a clash and is not billed. A stay that was never billed is still deleted, as before
@@ -287,7 +287,7 @@ All notable changes to this project are listed here.
 ### Database
 - Three optional columns on stays (IsCancelled, CancelReason, CancelledOn). They are added when the app starts, existing data is kept, and the first upgrade makes the usual safety copy
 
-## [Unreleased] - Buttons, back to the Windows look
+## [1.4.0] - Buttons, back to the Windows look
 
 ### Changed
 - Buttons keep the native Windows (WPF-UI) look in light and dark mode. A first attempt at a custom button style (stronger borders, bold text, grey fills, red outlines) made the screens busy and was removed
@@ -295,14 +295,14 @@ All notable changes to this project are listed here.
 - "Payment recorded": OK on the left, and Print receipt, the likely next step, on the right in the accent color with a printer icon
 - Buttons that void or remove something (Void payment, Void charge, Remove account, Remove this stay) are normal buttons with red text, the same idea as Log out
 
-## [Unreleased] - Tenant gender
+## [1.4.0] - Tenant gender
 
 ### Added
 - An optional Gender field (Male, Female, Other, or Not set) in Add tenant and Edit tenant. It shows in the tenant details, as a Gender column in the tenant list, and beside the tenant in Rooms & Beds under "Staying in". Existing tenants start as Not set. Edit tenant lists a gender change in its confirmation like any other field
 - The database gets a new optional Tenants.Gender column when the app starts. Existing data is kept, and the first upgrade makes the usual safety copy first
 - Changing your username (Settings) now asks "Are you sure?" and shows the old and new name
 
-## [Unreleased] - Confirmation steps
+## [1.4.0] - Confirmation steps
 
 ### Added
 - A reusable "Are you sure?" window with Confirm and Back (Esc also goes back)
@@ -312,14 +312,14 @@ All notable changes to this project are listed here.
 ### Changed
 - On the sign-in screens, blank fields and mismatched passwords are now reported before the confirmation, so nobody is asked to confirm something that cannot work
 
-## [Unreleased] - Clash warnings on Rooms & Beds and Tenants
+## [1.4.0] - Clash warnings on Rooms & Beds and Tenants
 
 ### Added
 - Rooms & Beds: "Edit this stay" and "Remove this stay" (Owners only) under each "Overlaps with..." line, so a clash can be fixed without leaving the page. They are the same actions as on the Tenants page, with the same rules: a stay can only be removed when nothing was billed on it, and removal asks for a reason and the Owner's password
 - Rooms & Beds: a red banner at the top of a room's details when two stays share a bed on the same days. It names each bed and the tenants involved, says what to do (and, for Staff, to ask an Owner to remove a stay entered by mistake), and has an "Open Tenants" button. The small warning mark on the bed chip now explains itself in its tooltip
 - Tenants: a red "Check" line when another tenant is booked on the same bed on some of the same days (until now only a tenant's own overlapping stays were flagged), and a warning mark beside the name in the tenant list. Only stays that still hold their bed are checked, the same set Rooms & Beds uses
 
-## [Unreleased] - Restoring a voided rent charge
+## [1.4.0] - Restoring a voided rent charge
 
 ### Added
 - "Restore charge" on Rent Billing for a voided rent charge. It reuses the same charge record, updates it to what the stay would be billed today (days, amount, details), moves a past due date to today so it is not overdue at once, asks for a reason, and writes every change to the change history. It is refused when the charge has payments or adjustment charges, or the stay has no days in that month
@@ -330,7 +330,7 @@ All notable changes to this project are listed here.
 - When every rent row of a month was voided, Rent Billing said "No stays this month". It now says how many are voided and how to see and restore them
 - Voiding a charge on Billing Charges is now written to the change history (it was not recorded before)
 
-## [Unreleased] - Removing a stay entered by mistake
+## [1.4.0] - Removing a stay entered by mistake
 
 ### Added
 - "Remove this stay" under Stay history (Owners only), for a stay that was entered by mistake: a duplicate, the wrong tenant or the wrong bed. It only works when no rent or utility charge was ever made for the stay (voided charges count too) and no deposit refund is recorded on it. It asks for a reason and the Owner's password, warns that it cannot be undone (and that a recorded deposit goes with the stay), and writes what was removed to the change history
@@ -338,7 +338,7 @@ All notable changes to this project are listed here.
 ### Changed
 - The red "Check" line for overlapping stays now says when two stays are exactly the same and points to Remove this stay, instead of only pointing to Edit this stay. Staff are told to ask an Owner
 
-## [Unreleased] - Printable payment receipts
+## [1.4.0] - Printable payment receipts
 
 ### Added
 - Print receipt: a one-page receipt for any recorded payment, from the "Payment recorded" window that now appears after every payment, or from the "Print receipt" button in the payment history. It shows the house name and address (from Reports settings), receipt no., date, tenant, room and bed, what was paid for, amount received, change returned, payment method and reference, and the balance left as of the day of printing, with a line for the person who received the money
@@ -351,7 +351,7 @@ All notable changes to this project are listed here.
 ### Changed
 - The "Print receipt" button was removed from the green banner under the payment form. The window shown after recording a payment now has it, next to OK, and is shown for every payment (it used to appear only when there was change to return)
 
-## [Unreleased] - Making the reset phrase easier to find
+## [1.4.0] - Making the reset phrase easier to find
 
 ### Added
 - The first-time recovery window (recovery code and emergency key) now has an optional "Reset phrase" section with a button to set one
@@ -364,7 +364,7 @@ All notable changes to this project are listed here.
 - The "Forgot password?" window no longer says nothing can be done when the only Owner has lost the recovery code: it now points to the emergency access key and the reset phrase
 - The printed emergency key sheet mentions that a reset phrase can be typed instead of the key (the phrase itself is never printed)
 
-## [Unreleased] - Receipt numbers and small-screen fixes
+## [1.4.0] - Receipt numbers and small-screen fixes
 
 ### Added
 - Automatic receipt numbers: every payment is given a receipt number when it is saved, such as RCT-2026-00042 (the year of the payment, then a running number that starts again each year). Nobody has to type it. Numbers are never reused, even when a payment is voided or edited
