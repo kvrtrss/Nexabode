@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
 using Nexabode.Models;
@@ -11,14 +11,12 @@ namespace Nexabode.Views;
 // as the change is saved and before any message is shown, so the screen can refresh behind the message.
 public static class StayActions
 {
-    private static void Tell(string message) =>
-        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
     // ---------- Edit this stay ----------
 
     public static bool Edit(Window? owner, int stayId, Action? afterSave = null)
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var stay = db.Occupancies.Find(stayId);
         if (stay == null) return false;
 
@@ -26,7 +24,7 @@ public static class StayActions
         var chargeCount = db.Charges.IgnoreQueryFilters().Count(c => c.OccupancyId == stay.Id);
 
         DepositSummary depositSummary;
-        using (var sumDb = new AppDbContext())
+        using (var sumDb = AppDb.Create())
             depositSummary = DepositService.Summary(sumDb, stay.TenantId);
         var minDeposit = Math.Max(stay.DepositRefunded, stay.Deposit - depositSummary.Held);
 
@@ -35,7 +33,7 @@ public static class StayActions
             .ToList()
             .Where(b => b.Id == stay.BedId || (b.IsActive && b.Room.IsActive && !b.IsMaintenance))
             .OrderBy(b => b.Room.RoomName).ThenBy(b => b.BedLabel)
-            .Select(b => new BedChoice { Id = b.Id, Display = $"{b.Room.RoomName} - {b.BedLabel}", Rate = b.MonthlyRate })
+            .Select(b => new BedChoice { Id = b.Id, Display = $"{b.Room.RoomName} - {b.BedLabel}  ({Fmt.Peso(b.MonthlyRate)})", Rate = b.MonthlyRate })
             .ToList();
 
         var current = new StayEdit
@@ -48,7 +46,7 @@ public static class StayActions
         };
 
         var note = chargeCount > 0
-            ? $"This stay has {chargeCount} billing record(s). Changing its dates does not change them yet. " +
+            ? $"This stay has {Fmt.Count(chargeCount, "billing record")}. Changing its dates does not change them yet. " +
               "Review them in Rent Billing and Billing Charges afterwards."
             : null;
 
@@ -58,7 +56,7 @@ public static class StayActions
                 : null,
             conflictText: r =>
             {
-                using var check = new AppDbContext();
+                using var check = AppDb.Create();
                 return StayEditService.DescribeConflicts(check, stay, r.BedId, r.MoveIn, r.MoveOut);
             });
         if (result == null) return false;
@@ -80,7 +78,7 @@ public static class StayActions
         }
         catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
         {
-            Tell("The stay could not be saved because the data changed at the same moment. " +
+            Say.Info("The stay could not be saved because the data changed at the same moment. " +
                  "Nothing was saved. Please try again.");
             return false;
         }
@@ -88,7 +86,7 @@ public static class StayActions
         afterSave?.Invoke();
 
         if (billingDone.Count > 0)
-            Tell("The stay was saved. Billing changes and notes:\n\n" + string.Join("\n\n", billingDone));
+            Say.Info("The stay was saved. Billing changes and notes:\n\n" + string.Join("\n\n", billingDone));
         return true;
     }
 
@@ -102,7 +100,7 @@ public static class StayActions
         if (!Session.IsOwner) return false;
 
         bool billed;
-        using (var look = new AppDbContext())
+        using (var look = AppDb.Create())
             billed = HasBilling(look, stayId);
 
         return billed ? Cancel(owner, stayId, afterSave) : Delete(owner, stayId, afterSave);
@@ -114,13 +112,13 @@ public static class StayActions
     {
         string tenantName, summary;
         decimal deposit;
-        using (var look = new AppDbContext())
+        using (var look = AppDb.Create())
         {
             var found = look.Occupancies.AsNoTracking().FirstOrDefault(o => o.Id == stayId);
             if (found == null) { afterSave?.Invoke(); return false; }
 
             var blocked = StayRemovalRules.BlockedReason(HasBilling(look, stayId), found.DepositRefunded);
-            if (blocked != null) { Tell(blocked); return false; }
+            if (blocked != null) { Say.Info(blocked); return false; }
 
             tenantName = look.Tenants.Find(found.TenantId)?.FullName ?? "";
             summary = StayEditService.Summary(look, found);
@@ -139,7 +137,7 @@ public static class StayActions
 
         try
         {
-            using var db = new AppDbContext();
+            using var db = AppDb.Create();
             using var transaction = db.Database.BeginTransaction();
 
             var stay = db.Occupancies.FirstOrDefault(o => o.Id == stayId);
@@ -147,7 +145,7 @@ public static class StayActions
 
             // Look again at the last moment, in case something changed while the windows were open.
             var blocked = StayRemovalRules.BlockedReason(HasBilling(db, stayId), stay.DepositRefunded);
-            if (blocked != null) { transaction.Rollback(); Tell(blocked); return false; }
+            if (blocked != null) { transaction.Rollback(); Say.Info(blocked); return false; }
 
             AuditService.Record(db, "Stay", stay.Id, stay.TenantId, "Removed",
                                 StayEditService.Summary(db, stay), null, reason);
@@ -157,7 +155,7 @@ public static class StayActions
         }
         catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
         {
-            Tell("The stay could not be removed because other records still refer to it. Nothing was changed.");
+            Say.Info("The stay could not be removed because other records still refer to it. Nothing was changed.");
             return false;
         }
 
@@ -172,13 +170,13 @@ public static class StayActions
     private static bool Cancel(Window? owner, int stayId, Action? afterSave)
     {
         string tenantName, summary;
-        using (var look = new AppDbContext())
+        using (var look = AppDb.Create())
         {
             var found = look.Occupancies.AsNoTracking().FirstOrDefault(o => o.Id == stayId);
             if (found == null) { afterSave?.Invoke(); return false; }
 
             var blocked = StayCancelRules.BlockedReason(HasActiveCharges(look, stayId), found.Deposit);
-            if (blocked != null) { Tell(blocked); return false; }
+            if (blocked != null) { Say.Info(blocked); return false; }
 
             tenantName = look.Tenants.Find(found.TenantId)?.FullName ?? "";
             summary = StayEditService.Summary(look, found);
@@ -196,7 +194,7 @@ public static class StayActions
 
         try
         {
-            using var db = new AppDbContext();
+            using var db = AppDb.Create();
             using var transaction = db.Database.BeginTransaction();
 
             var stay = db.Occupancies.FirstOrDefault(o => o.Id == stayId);
@@ -204,7 +202,7 @@ public static class StayActions
 
             // Look again at the last moment, in case something changed while the windows were open.
             var blocked = StayCancelRules.BlockedReason(HasActiveCharges(db, stayId), stay.Deposit);
-            if (blocked != null) { transaction.Rollback(); Tell(blocked); return false; }
+            if (blocked != null) { transaction.Rollback(); Say.Info(blocked); return false; }
 
             AuditService.Record(db, "Stay", stay.Id, stay.TenantId, "Cancelled",
                                 StayEditService.Summary(db, stay), null, reason);
@@ -216,7 +214,7 @@ public static class StayActions
         }
         catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
         {
-            Tell("The stay could not be removed because the data changed at the same moment. Nothing was changed.");
+            Say.Info("The stay could not be removed because the data changed at the same moment. Nothing was changed.");
             return false;
         }
 

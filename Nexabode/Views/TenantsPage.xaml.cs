@@ -51,12 +51,26 @@ public partial class TenantsPage : Page
         public string Status { get; set; } = "";
         public decimal Balance { get; set; }
         public decimal Overdue { get; set; }
-        public DepositSummary Credit { get; set; } = new(0, 0, 0);   // deposit paid, refunded, and used for charges
+        public DepositSummary Deposit { get; set; } = new(0, 0, 0);   // deposit paid, refunded, and used for charges
         public int? OccupancyId { get; set; }
         public DateOnly? ActiveMoveIn { get; set; }
         public DateOnly? LeavingOn { get; set; }   // the last day, when a move-out date is already set
         public List<StayInfo> Stays { get; set; } = new();
         public List<CancelledStayInfo> Cancelled { get; set; } = new();
+
+        // Two-line rows in the list. Second line of the first column: gender and contact; on a narrow list the bed and contact.
+        public string LineTwo => JoinParts(Gender, Contact, "No contact details");
+        public string LineTwoCompact => JoinParts(CurrentBed == "-" ? null : CurrentBed, Contact, "No bed");
+        public string BedText => CurrentBed == "-" ? "No bed" : CurrentBed;
+        public string BedLineTwo => ActiveMoveIn is DateOnly movedIn
+            ? $"Moved in {Fmt.Date(movedIn)}" + (LeavingOn is DateOnly leaving ? $"  ·  leaving {Fmt.Date(leaving)}" : "")
+            : "";
+
+        private static string JoinParts(string? a, string? b, string none)
+        {
+            var parts = new[] { a, b }.Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+            return parts.Count == 0 ? none : string.Join("  ·  ", parts);
+        }
     }
 
     private List<TenantRow> _all = new();
@@ -76,10 +90,9 @@ public partial class TenantsPage : Page
 
     // ---------- Helpers ----------
 
-    private static void Tell(string message) =>
-        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
-    private Window? Owner => Window.GetWindow(this);
+    // Windows opened from the details window belong to it, so they appear above it.
+    private Window? Owner => (Window?)_details ?? Window.GetWindow(this);
 
     private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
 
@@ -95,7 +108,7 @@ public partial class TenantsPage : Page
         if (clean == "") return "Enter the tenant's full name.";
 
         var lower = clean.ToLower();
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         return db.Tenants.Any(t => t.FullName.ToLower() == lower && t.Id != exceptId)
             ? "A tenant with this name already exists. If they are a different person, add a detail to tell them apart (for example \"Juan Cruz Jr.\")."
             : null;
@@ -109,7 +122,7 @@ public partial class TenantsPage : Page
 
         var today = DateOnly.FromDateTime(DateTime.Today);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         var tenants = db.Tenants.OrderBy(t => t.FullName).ToList();
 
@@ -134,8 +147,8 @@ public partial class TenantsPage : Page
             .GroupBy(c => c.Occupancy.TenantId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Credit already used to pay charges, per tenant. A voided payment is not counted, so its money is back in the credit.
-        var creditUsed = db.Payments
+        // Deposit already used to pay charges, per tenant. A voided payment is not counted, so its money is back in the deposit.
+        var depositUsed = db.Payments
             .Where(p => !p.IsVoided && p.Source == DepositService.PaymentSource)
             .ToList()
             .GroupBy(p => p.TenantId)
@@ -155,7 +168,7 @@ public partial class TenantsPage : Page
             list ??= new();
             charges.TryGetValue(t.Id, out var tenantCharges);
             tenantCharges ??= new();
-            creditUsed.TryGetValue(t.Id, out var used);
+            depositUsed.TryGetValue(t.Id, out var used);
 
             // A stay is current through its move-out date, unless the administrator already confirmed the tenant left.
             var currentStays = list
@@ -214,11 +227,11 @@ public partial class TenantsPage : Page
                 Status = status,
                 Balance = balance,
                 Overdue = overdue,
-                Credit = new DepositSummary(list.Sum(o => o.Deposit), list.Sum(o => o.DepositRefunded), used),
+                Deposit = new DepositSummary(list.Sum(o => o.Deposit), list.Sum(o => o.DepositRefunded), used),
                 CurrentBed = active != null
                     ? BedName(active)
                       + (active.MoveOutDate is DateOnly until ? $" (until {Fmt.Date(until)})" : "")
-                      + (currentStays.Count > 1 ? $"  +{currentStays.Count - 1} more stay(s)" : "")
+                      + (currentStays.Count > 1 ? $"  +{Fmt.Count(currentStays.Count - 1, "more stay", "more stays")}" : "")
                     : "-",
                 MoveInText = active != null ? Fmt.Date(active.MoveInDate) : "-",
                 OccupancyId = active?.Id,
@@ -247,19 +260,19 @@ public partial class TenantsPage : Page
         var overdue = _all.Sum(r => r.Overdue);
 
         TotalCard.Value = _all.Count.ToString();
-        TotalCard.Caption = _all.Count == 0 ? "Add your first tenant" : "tenant record(s)";
+        TotalCard.Caption = _all.Count == 0 ? "Add your first tenant" : _all.Count == 1 ? "tenant record" : "tenant records";
         TotalCard.Tone = "Info";
 
         StayingCard.Value = _all.Count(r => r.Status is "Staying" or "Moving out").ToString();
         StayingCard.Caption = "currently in a bed";
-        StayingCard.Tone = "Success";
+        StayingCard.Tone = _all.Any(r => r.Status is "Staying" or "Moving out") ? "Success" : "Neutral";
 
         ReservedCard.Value = _all.Count(r => r.Status == "Reserved").ToString();
         ReservedCard.Caption = "moving in soon";
         ReservedCard.Tone = "Warning";
 
         BalanceCard.Value = Fmt.Peso(_all.Sum(r => r.Balance));
-        BalanceCard.Caption = owing == 0 ? "Everyone is settled" : $"{owing} tenant(s) owe money";
+        BalanceCard.Caption = owing == 0 ? "Everyone is settled" : $"{owing} {(owing == 1 ? "tenant owes" : "tenants owe")} money";
         BalanceCard.Tone = overdue > 0 ? "Danger" : owing > 0 ? "Warning" : "Success";
     }
 
@@ -304,8 +317,8 @@ public partial class TenantsPage : Page
         if (_ready) ApplyFilter();
     }
 
-    // A moved-out tenant with nothing owed and no credit left is "archived": hidden from the default list, never deleted.
-    private static bool IsArchived(TenantRow r) => r.Status == "Moved out" && r.Balance <= 0 && r.Credit.Held <= 0;
+    // A moved-out tenant with nothing owed and no deposit left is "archived": hidden from the default list, never deleted.
+    private static bool IsArchived(TenantRow r) => r.Status == "Moved out" && r.Balance <= 0 && r.Deposit.Held <= 0;
 
     private void ShowArchived_Changed(object sender, RoutedEventArgs e)
     {
@@ -326,183 +339,93 @@ public partial class TenantsPage : Page
 
     // ---------- Details panel ----------
 
+    // ---------- Selected tenant: toolbar and details window ----------
+
+    private TenantDetailsWindow? _details;
+
+    internal int? CurrentId => Current?.Id;
+
+    internal TenantRow? RowFor(int id) => _all.FirstOrDefault(r => r.Id == id);
+
+    // The buttons above the list that apply to the selected tenant. Everything else is in the details window.
     private void ShowDetail()
     {
         var t = Current;
-        DetailEmpty.Visibility = t == null ? Visibility.Visible : Visibility.Collapsed;
-        DetailBody.Visibility = t == null ? Visibility.Collapsed : Visibility.Visible;
-        if (t == null) return;
+        ViewButton.IsEnabled = t != null;
+        EditTenantButton.IsEnabled = t != null;
+        AccountToolbarButton.IsEnabled = t != null;
+        MoveInToolbarButton.IsEnabled = t is { Status: "Moved out" or "No stay yet" };
+        MoveOutToolbarButton.IsEnabled = t is { Status: "Staying" or "Moving out" or "Reserved" };
+        MoveOutToolbarButton.Content = t?.Status == "Reserved" ? "Cancel reservation" : "Move out";
 
-        DetailName.Text = t.FullName;
-        DetailBadge.Content = t.Status;
+        _details?.Refresh();   // keeps an open details window up to date after every action
+    }
 
-        InfoPanel.Children.Clear();
-        AddLine("Gender", GenderRules.Display(t.Gender));
-        AddLine("Contact", t.Contact ?? "-");
-        AddLine("Emergency", t.EmergencyContact ?? "-");
-        AddLine("School / work", t.SchoolOrWork ?? "-");
-        AddLine("Current bed", t.CurrentBed);
-        if (t.LeavingOn is DateOnly leavingOn) AddLine("Last day", Fmt.Date(leavingOn), "Warning");
-        AddLine("Balance", Fmt.Peso(t.Balance), t.Overdue > 0 ? "Danger" : t.Balance > 0 ? "Warning" : "Success");
-        if (t.Overdue > 0) AddLine("Overdue", Fmt.Peso(t.Overdue), "Danger");
-        AddLine("Credit balance", Fmt.Peso(t.Credit.Held), t.Credit.Held > 0 ? "Success" : null);
-        if (t.Credit.Applied > 0) AddLine("Credit used", Fmt.Peso(t.Credit.Applied));
-        if (t.Credit.Refunded > 0) AddLine("Credit refunded", Fmt.Peso(t.Credit.Refunded));
-        // Two of this tenant's stays on the same days: point it out so it can be corrected or removed.
-        var overlapping = t.Stays
-            .SelectMany(a => t.Stays
-                .Where(b => a.Id < b.Id &&
-                            StayRules.Overlaps(new StayRange(a.Id, a.MoveIn, a.MoveOut), new StayRange(b.Id, b.MoveIn, b.MoveOut)))
-                .Select(b => (A: a, B: b)))
-            .ToList();
-        if (overlapping.Count > 0)
+    // Everything this tenant owes and has paid, in one window. Also reachable from the details window.
+    internal void ViewAccount_Click(object sender, RoutedEventArgs e)
+    {
+        if (Current is not { } t) return;
+
+        var window = new TenantAccountWindow(t.Id);
+        if (Owner != null) window.Owner = Owner;
+        window.ShowDialog();
+        Reload(t.Id);   // a payment may have been recorded in the window
+    }
+
+    private void ViewDetails_Click(object sender, RoutedEventArgs e) => OpenDetails();
+
+    // Opens the details window for the selected tenant. Windows opened from inside it belong to it.
+    private void OpenDetails()
+    {
+        if (Current is not { } t || _details != null) return;
+
+        var window = new TenantDetailsWindow(this, t.Id);
+        if (Owner != null) window.Owner = Owner;
+        _details = window;
+        try { window.ShowDialog(); }
+        finally { _details = null; }
+    }
+
+    private void TenantGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        // Only a double-click on a row (not on the header or the empty area) opens the details.
+        for (var element = e.OriginalSource as DependencyObject; element != null; element = VisualTreeHelper.GetParent(element))
         {
-            var duplicate = overlapping.Any(p => StayRemovalRules.IsDuplicate(
-                p.A.Bed, p.A.MoveIn, p.A.MoveOut, p.B.Bed, p.B.MoveIn, p.B.MoveOut));
-            AddLine("Check", StayRemovalRules.OverlapWarning(duplicate, Session.IsOwner), "Danger");
-        }
-
-        // Someone else is booked on the same bed on some of the same days.
-        foreach (var bed in t.Stays.Where(s => s.SharedWith.Count > 0).GroupBy(s => s.Bed))
-        {
-            var others = bed.SelectMany(s => s.SharedWith).Distinct().OrderBy(n => n).ToList();
-            AddLine("Check", ClashWarnings.TenantBedWarning(bed.Key, others, Session.IsOwner), "Danger");
-        }
-        if (!string.IsNullOrWhiteSpace(t.Notes)) AddLine("Notes", t.Notes!);
-
-        MoveInButton.IsEnabled = t.Status is "Moved out" or "No stay yet";
-        MoveOutButton.IsEnabled = t.Status is "Staying" or "Moving out" or "Reserved";
-        MoveOutButton.Content = t.Status == "Reserved" ? "Cancel reservation" : "Move out";
-        EditStayButton.IsEnabled = t.Stays.Count > 0;
-        RefundDepositButton.IsEnabled = t.Credit.Held > 0;
-        ApplyDepositButton.IsEnabled = t.Credit.Held > 0;
-        EditCreditButton.IsEnabled = t.Stays.Count > 0;           // credit is kept on a stay
-        UndoRefundButton.IsEnabled = t.Credit.Refunded > 0;
-
-        HistoryPanel.Children.Clear();
-        if (t.Stays.Count == 0 && t.Cancelled.Count == 0)
-        {
-            HistoryPanel.Children.Add(new TextBlock
-            {
-                Text = "No stays recorded yet.",
-                Style = (Style)FindResource("MutedText")
-            });
-            return;
-        }
-
-        foreach (var stay in t.Stays)
-        {
-            var box = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
-            box.Children.Add(new TextBlock
-            {
-                Text = stay.Bed,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Res("AppTextBrush")
-            });
-            var details = $"{Fmt.Date(stay.MoveIn)} to {(stay.MoveOut is DateOnly mo ? Fmt.Date(mo) : "present")}  -  {Fmt.Peso(stay.Rent)} / month";
-            if (stay.Deposit > 0)
-            {
-                details += $"  -  Deposit {Fmt.Peso(stay.Deposit)}";
-                if (stay.DepositRefunded > 0)
-                    details += $" (refunded {Fmt.Peso(stay.DepositRefunded)}" +
-                               (stay.DepositRefundedOn is DateOnly refundedOn ? $" on {Fmt.Date(refundedOn)}" : "") + ")";
-            }
-            box.Children.Add(new TextBlock
-            {
-                Text = details,
-                Style = (Style)FindResource("MutedText")
-            });
-
-            var actions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
-
-            var editLink = new Wpf.Ui.Controls.Button { Content = "Edit this stay" };
-            editLink.Click += (_, _) => EditStay(stay.Id);
-            actions.Children.Add(editLink);
-
-            // Only an Owner can remove a stay, and only one that was never billed.
-            if (Session.IsOwner)
-            {
-                var removeLink = new Wpf.Ui.Controls.Button
-                {
-                    Content = "Remove this stay",
-                    Style = (Style)Application.Current.FindResource("DangerButton"),
-                    Margin = new Thickness(8, 0, 0, 0),
-                    ToolTip = "For a stay entered by mistake. Deleted if it was never billed, otherwise kept as Cancelled."
-                };
-                removeLink.Click += (_, _) => RemoveStay(stay.Id);
-                actions.Children.Add(removeLink);
-            }
-
-            box.Children.Add(actions);
-
-            HistoryPanel.Children.Add(box);
-        }
-
-        // Stays that were removed after being billed: kept for the records, greyed, with no buttons.
-        foreach (var cancelled in t.Cancelled)
-        {
-            var box = new StackPanel { Margin = new Thickness(0, 0, 0, 8), Opacity = 0.7 };
-            box.Children.Add(new TextBlock
-            {
-                Text = cancelled.Bed,
-                FontWeight = FontWeights.SemiBold,
-                TextDecorations = TextDecorations.Strikethrough,
-                Foreground = Res("AppSecondaryBrush")
-            });
-            box.Children.Add(new TextBlock
-            {
-                Text = $"{Fmt.Date(cancelled.MoveIn)} to {(cancelled.MoveOut is DateOnly mo ? Fmt.Date(mo) : "present")}",
-                Style = (Style)FindResource("MutedText")
-            });
-            box.Children.Add(new TextBlock
-            {
-                Text = cancelled.Line,
-                TextWrapping = TextWrapping.Wrap,
-                Style = (Style)FindResource("MutedText")
-            });
-            HistoryPanel.Children.Add(box);
+            if (element is DataGridRow) { OpenDetails(); return; }
+            if (element is DataGrid) return;
         }
     }
 
-    private void AddLine(string label, string value, string? tone = null)
+    // A narrow table (small screen) drops the Bed column and puts the bed under the name instead.
+    private void TenantGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var line = new TextBlock { Margin = new Thickness(0, 0, 0, 4), TextWrapping = TextWrapping.Wrap };
-        line.Inlines.Add(new Run(label + "   ") { Foreground = Res("AppSecondaryBrush") });
-        line.Inlines.Add(new Run(value)
-        {
-            FontWeight = FontWeights.SemiBold,
-            Foreground = tone == null ? Res("AppTextBrush") : Res(tone + "Brush")
-        });
-        InfoPanel.Children.Add(line);
+        if (!e.WidthChanged) return;
+        var compact = TenantGrid.ActualWidth < 560;
+        if ((TenantGrid.Tag as string == "Compact") == compact) return;
+
+        TenantGrid.Tag = compact ? "Compact" : null;
+        BedColumn.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        GridColumnFix.Refresh(TenantGrid);
     }
 
     // ---------- Actions ----------
 
     private void AddTenant_Click(object sender, RoutedEventArgs e)
     {
-        var v = FormDialog.Ask(Owner, "Add tenant", "Add tenant",
-            new[]
-            {
-                ("Full name", ""),
-                ("Gender (optional)", GenderRules.NotSet),
-                ("Contact number (optional)", ""),
-                ("Emergency contact (optional)", ""),
-                ("School or work (optional)", ""),
-                ("Notes (optional)", "")
-            },
-            vals => NameError(vals[0], 0) ?? GenderRules.Error(vals[1]),
-            choices: new string[]?[] { null, GenderRules.Choices, null, null, null, null });
+        // Same window as Edit tenant, so both look and behave the same.
+        var v = TenantDialog.Ask(Owner, "Add tenant", "Add tenant", null, new TenantValues(),
+            vals => NameError(vals.FullName, 0) ?? GenderRules.Error(vals.Gender));
         if (v == null) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var tenant = new Tenant
         {
-            FullName = v[0].Trim(),
-            Gender = GenderRules.Normalize(v[1]),
-            Contact = Blank(v[2]),
-            EmergencyContact = Blank(v[3]),
-            SchoolOrWork = Blank(v[4]),
-            Notes = Blank(v[5])
+            FullName = v.FullName.Trim(),
+            Gender = GenderRules.Normalize(v.Gender),
+            Contact = Blank(v.Contact),
+            EmergencyContact = Blank(v.EmergencyContact),
+            SchoolOrWork = Blank(v.SchoolOrWork),
+            Notes = Blank(v.Notes)
         };
         db.Tenants.Add(tenant);
         db.SaveChanges();
@@ -512,50 +435,49 @@ public partial class TenantsPage : Page
         Reload(tenant.Id);
     }
 
-    private void EditTenant_Click(object sender, RoutedEventArgs e)
+    internal void EditTenant_Click(object sender, RoutedEventArgs e)
     {
         var t = Current;
         if (t == null) return;
 
-        var v = FormDialog.Ask(Owner, "Edit tenant", "Save changes",
-            new[]
-            {
-                ("Full name", t.FullName),
-                ("Gender (optional)", GenderRules.Display(t.Gender)),
-                ("Contact number (optional)", t.Contact ?? ""),
-                ("Emergency contact (optional)", t.EmergencyContact ?? ""),
-                ("School or work (optional)", t.SchoolOrWork ?? ""),
-                ("Notes (optional)", t.Notes ?? "")
-            },
-            vals => NameError(vals[0], t.Id) ?? GenderRules.Error(vals[1]),
-            choices: new string[]?[] { null, GenderRules.Choices, null, null, null, null });
+        var current = new TenantValues
+        {
+            FullName = t.FullName,
+            Gender = GenderRules.Display(t.Gender),
+            Contact = t.Contact ?? "",
+            EmergencyContact = t.EmergencyContact ?? "",
+            SchoolOrWork = t.SchoolOrWork ?? "",
+            Notes = t.Notes ?? ""
+        };
+
+        // What is about to change. If nothing did, the window stays open and says so (like Edit stay).
+        List<string> ChangesFor(TenantValues x) => ConfirmWording.Changes(
+            ("Full name", t.FullName, x.FullName),
+            ("Gender", GenderRules.Display(t.Gender), GenderRules.Display(x.Gender)),
+            ("Contact number", t.Contact, x.Contact),
+            ("Emergency contact", t.EmergencyContact, x.EmergencyContact),
+            ("School or work", t.SchoolOrWork, x.SchoolOrWork),
+            ("Notes", t.Notes, x.Notes));
+
+        var v = TenantDialog.Ask(Owner, "Edit tenant", "Save changes", t.FullName, current,
+            vals => NameError(vals.FullName, t.Id) ?? GenderRules.Error(vals.Gender)
+                    ?? (ChangesFor(vals).Count == 0 ? "Nothing was changed. Select Cancel to close this window." : null));
         if (v == null) return;
 
-        // Show what is about to change. If nothing did, there is nothing to save.
-        var changes = ConfirmWording.Changes(
-            ("Full name", t.FullName, v[0]),
-            ("Gender", GenderRules.Display(t.Gender), GenderRules.Display(v[1])),
-            ("Contact number", t.Contact, v[2]),
-            ("Emergency contact", t.EmergencyContact, v[3]),
-            ("School or work", t.SchoolOrWork, v[4]),
-            ("Notes", t.Notes, v[5]));
-        if (changes.Count == 0) return;
-        if (!ConfirmActionDialog.Ask(Owner, "Edit tenant", ConfirmWording.EditTenant(t.FullName, changes))) return;
-
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var entity = db.Tenants.Find(t.Id)!;
-        entity.FullName = v[0].Trim();
-        entity.Gender = GenderRules.Normalize(v[1]);
-        entity.Contact = Blank(v[2]);
-        entity.EmergencyContact = Blank(v[3]);
-        entity.SchoolOrWork = Blank(v[4]);
-        entity.Notes = Blank(v[5]);
+        entity.FullName = v.FullName.Trim();
+        entity.Gender = GenderRules.Normalize(v.Gender);
+        entity.Contact = Blank(v.Contact);
+        entity.EmergencyContact = Blank(v.EmergencyContact);
+        entity.SchoolOrWork = Blank(v.SchoolOrWork);
+        entity.Notes = Blank(v.Notes);
         db.SaveChanges();
 
         Reload(t.Id);
     }
 
-    private void EditStay_Click(object sender, RoutedEventArgs e)
+    internal void EditStay_Click(object sender, RoutedEventArgs e)
     {
         var t = Current;
         if (t == null || t.Stays.Count == 0) return;
@@ -565,7 +487,7 @@ public partial class TenantsPage : Page
         EditStay(id);
     }
 
-    private void EditStay(int occupancyId)
+    internal void EditStay(int occupancyId)
     {
         var t = Current;
         if (t == null || t.Stays.All(s => s.Id != occupancyId)) return;
@@ -573,25 +495,25 @@ public partial class TenantsPage : Page
         StayActions.Edit(Owner, occupancyId, () => Reload(t.Id));
     }
 
-    private void StayHistory_Click(object sender, RoutedEventArgs e)
+    internal void StayHistory_Click(object sender, RoutedEventArgs e)
     {
         var t = Current;
         if (t == null) return;
         AuditHistoryWindow.ShowFor(Owner, t.Id, t.FullName);
     }
 
-    private void RefundDeposit_Click(object sender, RoutedEventArgs e)
+    internal void RefundDeposit_Click(object sender, RoutedEventArgs e)
     {
         var t = Current;
         if (t == null) return;
 
         DepositSummary summary;
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
             summary = DepositService.Summary(db, t.Id);
 
         if (summary.Held <= 0)
         {
-            Tell("There is no credit left to refund.");
+            Say.Info("There is no deposit left to refund.");
             return;
         }
 
@@ -602,7 +524,7 @@ public partial class TenantsPage : Page
             if (!TryMoney(vals[0], out var amount) || Math.Round(amount, 2) <= 0)
                 return "Enter the amount to refund as a number greater than zero.";
             if (Math.Round(amount, 2) > summary.Held)
-                return $"That is more than the credit still held ({Fmt.Peso(summary.Held)}).";
+                return $"That is more than the deposit still held ({Fmt.Peso(summary.Held)}).";
             if (!DateOnly.TryParse(vals[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var date))
                 return "Enter the refund date like 2026-10-14.";
             if (date > today)
@@ -610,15 +532,15 @@ public partial class TenantsPage : Page
             return null;
         }
 
-        var note = $"Credit still held: {Fmt.Peso(summary.Held)}. Only the credit that is left can be refunded.\n" +
-                   "Credit that was already used for charges, or already refunded, can't be refunded again.";
+        var note = $"Deposit still held: {Fmt.Peso(summary.Held)}. Only the deposit that is left can be refunded.\n" +
+                   "Deposit that was already used for charges, or already refunded, can't be refunded again.";
 
-        var v = FormDialog.Ask(Owner, $"Refund credit: {t.FullName}", "Refund",
+        var v = FormDialog.Ask(Owner, $"Refund deposit: {t.FullName}", "Refund",
             new[]
             {
             ("Amount to refund", summary.Held.ToString("0.##", CultureInfo.CurrentCulture)),
             ("Refund date (e.g. 2026-10-14)", today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-            ("Note (optional)", "")
+            ("Note", "")
             },
             Validate, note);
         if (v == null) return;
@@ -628,23 +550,23 @@ public partial class TenantsPage : Page
         DateOnly.TryParse(v[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var refundDate);
         var refundNote = string.IsNullOrWhiteSpace(v[2]) ? null : v[2].Trim();
 
-        if (!ConfirmActionDialog.Ask(Owner, "Refund credit",
-                ConfirmWording.RefundCredit(t.FullName, refundAmount, summary.Held), "Refund")) return;
+        if (!ConfirmActionDialog.Ask(Owner, "Refund deposit",
+                ConfirmWording.RefundDeposit(t.FullName, refundAmount, summary.Held), "Refund")) return;
 
         try
         {
-            using var db = new AppDbContext();   // a fresh context, so the check runs on current data
+            using var db = AppDb.Create();   // a fresh context, so the check runs on current data
             var error = DepositService.Refund(db, t.Id, refundAmount, refundDate, refundNote);
             if (error != null)
             {
-                Tell(error);
+                Say.Info(error);
                 Reload(t.Id);
                 return;
             }
         }
         catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
         {
-            Tell("The refund could not be saved because the data changed at the same moment. " +
+            Say.Info("The refund could not be saved because the data changed at the same moment. " +
                  "Nothing was saved. Please try again.");
             return;
         }
@@ -652,59 +574,59 @@ public partial class TenantsPage : Page
         Reload(t.Id);
     }
 
-    private void EditCredit_Click(object sender, RoutedEventArgs e)
+    internal void EditDeposit_Click(object sender, RoutedEventArgs e)
     {
         var t = Current;
         if (t == null) return;
 
         DepositSummary summary;
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
             summary = DepositService.Summary(db, t.Id);
 
         string? Validate(string[] vals)
         {
             if (!TryMoney(vals[0], out var amount) || Math.Round(amount, 2) < 0)
-                return "Enter the credit as a number, zero or more.";
+                return "Enter the deposit as a number, zero or more.";
             if (Math.Round(amount, 2) == summary.Held)
-                return "That is the same as the current credit. Enter a different amount.";
+                return "That is the same as the current deposit. Enter a different amount.";
             if (!ReasonRules.IsReal(vals[1]))
                 return "Please enter a reason (at least 3 letters or digits).";
             return null;
         }
 
-        var note = $"Current credit: {Fmt.Peso(summary.Held)} (deposit {Fmt.Peso(summary.Paid)}, " +
+        var note = $"Current deposit: {Fmt.Peso(summary.Held)} (deposit {Fmt.Peso(summary.Paid)}, " +
                    $"used {Fmt.Peso(summary.Applied)}, refunded {Fmt.Peso(summary.Refunded)}).\n" +
-                   "Use this to correct a credit that was entered wrongly. The change is saved in Change history. " +
-                   "To give money back to the tenant, use Refund credit instead.";
+                   "Use this to correct a deposit that was entered wrongly. The change is saved in Change history. " +
+                   "To give money back to the tenant, use Refund deposit instead.";
 
-        var v = FormDialog.Ask(Owner, $"Edit credit: {t.FullName}", "Save changes",
+        var v = FormDialog.Ask(Owner, $"Edit deposit: {t.FullName}", "Save changes",
             new[]
             {
-            ("New credit balance", summary.Held.ToString("0.##", CultureInfo.CurrentCulture)),
+            ("New deposit balance", summary.Held.ToString("0.##", CultureInfo.CurrentCulture)),
             ("Reason for the change", "")
             },
             Validate, note);
         if (v == null) return;
 
-        TryMoney(v[0], out var newCredit);
+        TryMoney(v[0], out var newDeposit);
 
-        if (!ConfirmActionDialog.Ask(Owner, "Edit credit",
-                ConfirmWording.EditCredit(t.FullName, summary.Held, Math.Round(newCredit, 2), v[1]), "Save credit")) return;
+        if (!ConfirmActionDialog.Ask(Owner, "Edit deposit",
+                ConfirmWording.EditDeposit(t.FullName, summary.Held, Math.Round(newDeposit, 2), v[1]), "Save deposit")) return;
 
         try
         {
-            using var db = new AppDbContext();   // a fresh context, so the check runs on current data
-            var error = DepositService.SetCredit(db, t.Id, newCredit, v[1]);
+            using var db = AppDb.Create();   // a fresh context, so the check runs on current data
+            var error = DepositService.SetHeldDeposit(db, t.Id, newDeposit, v[1]);
             if (error != null)
             {
-                Tell(error);
+                Say.Info(error);
                 Reload(t.Id);
                 return;
             }
         }
         catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
         {
-            Tell("The credit could not be saved because the data changed at the same moment. " +
+            Say.Info("The deposit could not be saved because the data changed at the same moment. " +
                  "Nothing was saved. Please try again.");
             return;
         }
@@ -712,18 +634,18 @@ public partial class TenantsPage : Page
         Reload(t.Id);
     }
 
-    private void UndoRefund_Click(object sender, RoutedEventArgs e)
+    internal void UndoRefund_Click(object sender, RoutedEventArgs e)
     {
         var t = Current;
         if (t == null) return;
 
         DepositSummary summary;
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
             summary = DepositService.Summary(db, t.Id);
 
         if (summary.Refunded <= 0)
         {
-            Tell("No credit has been refunded, so there is nothing to undo.");
+            Say.Info("No deposit has been refunded, so there is nothing to undo.");
             return;
         }
 
@@ -739,13 +661,13 @@ public partial class TenantsPage : Page
         }
 
         var note = $"Refunded so far: {Fmt.Peso(summary.Refunded)}. Use this only if a refund was recorded by mistake " +
-                   "or the money was not really handed back. The amount goes back into the tenant's credit, " +
+                   "or the money was not really handed back. The amount goes back into the tenant's deposit, " +
                    "and the change is saved in Change history.";
 
         var v = FormDialog.Ask(Owner, $"Undo refund: {t.FullName}", "Undo refund",
             new[]
             {
-            ("Amount to put back into credit", summary.Refunded.ToString("0.##", CultureInfo.CurrentCulture)),
+            ("Amount to put back into deposit", summary.Refunded.ToString("0.##", CultureInfo.CurrentCulture)),
             ("Reason", "")
             },
             Validate, note);
@@ -759,18 +681,18 @@ public partial class TenantsPage : Page
 
         try
         {
-            using var db = new AppDbContext();   // a fresh context, so the check runs on current data
+            using var db = AppDb.Create();   // a fresh context, so the check runs on current data
             var error = DepositService.UndoRefund(db, t.Id, putBack, v[1]);
             if (error != null)
             {
-                Tell(error);
+                Say.Info(error);
                 Reload(t.Id);
                 return;
             }
         }
         catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
         {
-            Tell("The refund could not be undone because the data changed at the same moment. " +
+            Say.Info("The refund could not be undone because the data changed at the same moment. " +
                  "Nothing was saved. Please try again.");
             return;
         }
@@ -778,23 +700,23 @@ public partial class TenantsPage : Page
         Reload(t.Id);
     }
 
-    private void ApplyDeposit_Click(object sender, RoutedEventArgs e)
+    internal void ApplyDeposit_Click(object sender, RoutedEventArgs e)
     {
         var t = Current;
         if (t == null) return;
 
         DepositSummary summary;
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
             summary = DepositService.Summary(db, t.Id);
 
         if (summary.Held <= 0)
         {
-            Tell("There is no credit left to use.");
+            Say.Info("There is no deposit left to use.");
             return;
         }
         if (t.Balance <= 0)
         {
-            Tell("This tenant has no unpaid charges, so there is nothing to apply the credit to.");
+            Say.Info("This tenant has no unpaid charges, so there is nothing to apply the deposit to.");
             return;
         }
 
@@ -806,7 +728,7 @@ public partial class TenantsPage : Page
             if (!TryMoney(vals[0], out var amount) || amount <= 0)
                 return "Enter the amount to apply as a number greater than zero.";
             if (amount > summary.Held)
-                return $"That is more than the credit still held ({Fmt.Peso(summary.Held)}).";
+                return $"That is more than the deposit still held ({Fmt.Peso(summary.Held)}).";
             if (amount > t.Balance)
                 return $"That is more than the unpaid balance ({Fmt.Peso(t.Balance)}).";
             if (!DateOnly.TryParse(vals[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var date))
@@ -816,39 +738,39 @@ public partial class TenantsPage : Page
             return null;
         }
 
-        var note = $"Credit still held: {Fmt.Peso(summary.Held)}. Unpaid balance: {Fmt.Peso(t.Balance)}.\n" +
-                   "It is paid against the oldest unpaid charges first, and recorded as a payment with the method \"Credit\".";
+        var note = $"Deposit still held: {Fmt.Peso(summary.Held)}. Unpaid balance: {Fmt.Peso(t.Balance)}.\n" +
+                   "It is paid against the oldest unpaid charges first, and recorded as a payment with the method \"Deposit\".";
 
-        var v = FormDialog.Ask(Owner, $"Apply credit: {t.FullName}", "Apply",
+        var v = FormDialog.Ask(Owner, $"Apply deposit: {t.FullName}", "Apply",
             new[]
             {
             ("Amount to apply", suggested.ToString("0.##", CultureInfo.CurrentCulture)),
             ("Date (e.g. 2026-10-14)", today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-            ("Note (optional)", "")
+            ("Note", "")
             },
             Validate, note);
         if (v == null) return;
 
         TryMoney(v[0], out var applyAmount);
         DateOnly.TryParse(v[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var applyDate);
-        var remarks = string.IsNullOrWhiteSpace(v[2]) ? "Credit applied" : "Credit applied - " + v[2].Trim();
+        var remarks = string.IsNullOrWhiteSpace(v[2]) ? "Deposit applied" : "Deposit applied - " + v[2].Trim();
 
-        if (!ConfirmActionDialog.Ask(Owner, "Apply credit",
-                ConfirmWording.ApplyCredit(t.FullName, Math.Round(applyAmount, 2), summary.Held, t.Balance), "Apply credit")) return;
+        if (!ConfirmActionDialog.Ask(Owner, "Apply deposit",
+                ConfirmWording.ApplyDeposit(t.FullName, Math.Round(applyAmount, 2), summary.Held, t.Balance), "Apply deposit")) return;
 
         try
         {
-            using var db = new AppDbContext();   // a fresh context, so the check runs on current data
+            using var db = AppDb.Create();   // a fresh context, so the check runs on current data
             var error = DepositService.Apply(db, t.Id, Math.Round(applyAmount, 2), applyDate, remarks);
             if (error != null)
             {
-                Tell(error);
+                Say.Info(error);
                 return;
             }
         }
         catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
         {
-            Tell("The credit could not be applied because the data changed at the same moment. " +
+            Say.Info("The deposit could not be applied because the data changed at the same moment. " +
                  "Nothing was saved. Please try again.");
             return;
         }
@@ -856,12 +778,12 @@ public partial class TenantsPage : Page
         Reload(t.Id);
     }
 
-    private void MoveIn_Click(object sender, RoutedEventArgs e)
+    internal void MoveIn_Click(object sender, RoutedEventArgs e)
     {
         var t = Current;
         if (t == null) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         var today = StayQueries.Today;
 
@@ -898,13 +820,13 @@ public partial class TenantsPage : Page
 
         if (beds.Count == 0)
         {
-            Tell("There are no beds to move into. Add a bed, or end maintenance on one, on the Rooms & Beds page.");
+            Say.Info("There are no beds to move into. Add a bed, or end maintenance on one, on the Rooms & Beds page.");
             return;
         }
 
         var result = StayDialog.AskMoveIn(Owner, t.FullName, beds, r =>
         {
-            using var check = new AppDbContext();
+            using var check = AppDb.Create();
             var proposed = new StayRange(0, r.Date, r.MoveOut);
 
             var bedConflicts = StayConflicts.ForBed(check, r.BedId, proposed);
@@ -929,17 +851,22 @@ public partial class TenantsPage : Page
             AgreedRent = result.Rent,
             Deposit = result.Deposit
         };
-        db.Occupancies.Add(occupancy);
-        db.SaveChanges();
+        // The stay and its history entry are saved as one unit: if anything fails in between, neither is kept.
+        using (var transaction = db.Database.CurrentTransaction == null ? db.Database.BeginTransaction() : null)
+        {
+            db.Occupancies.Add(occupancy);
+            db.SaveChanges();   // gives the stay its id for the history entry
 
-        AuditService.Record(db, "Stay", occupancy.Id, t.Id, "Created", null,
-                            StayEditService.Summary(db, occupancy), "New move-in");
-        db.SaveChanges();
+            AuditService.Record(db, "Stay", occupancy.Id, t.Id, "Created", null,
+                                StayEditService.Summary(db, occupancy), "New move-in");
+            db.SaveChanges();
+            transaction?.Commit();
+        }
 
         Reload(t.Id);
     }
 
-    private void MoveOut_Click(object sender, RoutedEventArgs e)
+    internal void MoveOut_Click(object sender, RoutedEventArgs e)
     {
         var t = Current;
         if (t?.OccupancyId == null || t.ActiveMoveIn == null) return;
@@ -955,7 +882,7 @@ public partial class TenantsPage : Page
         // Every stay of this tenant that has started and has not ended before today.
         // Usually one. More only when overlapping stays were recorded.
         List<Occupancy> current;
-        using (var load = new AppDbContext())
+        using (var load = AppDb.Create())
         {
             current = load.Occupancies.AsNoTracking()
                 .Where(o => o.TenantId == t.Id && o.MoveInDate <= today
@@ -988,7 +915,7 @@ public partial class TenantsPage : Page
     // Ends one stay on the given date. Returns false if the administrator should stop (cancelled or blocked).
     private bool EndStay(int occupancyId, DateOnly date, string tenantName)
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var occupancy = db.Occupancies.Find(occupancyId);
         if (occupancy == null) return true;
         var today = StayQueries.Today;
@@ -1047,12 +974,12 @@ public partial class TenantsPage : Page
         db.SaveChanges();
 
         if (billingDone.Count > 0)
-            Tell("The move-out was saved. Billing changes and notes:\n\n" + string.Join("\n\n", billingDone));
+            Say.Info("The move-out was saved. Billing changes and notes:\n\n" + string.Join("\n\n", billingDone));
         return true;
     }
 
     // Removes a stay that was entered by mistake. The rules live in StayActions, shared with Rooms & Beds.
-    private void RemoveStay(int stayId)
+    internal void RemoveStay(int stayId)
     {
         var t = Current;
         if (t == null || t.Stays.All(s => s.Id != stayId)) return;
@@ -1062,7 +989,7 @@ public partial class TenantsPage : Page
 
     private void CancelReservation(TenantRow t)
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var occupancy = db.Occupancies.Find(t.OccupancyId!.Value)!;
 
         var message = $"Cancel the reservation of {t.FullName}?\n\n" +
@@ -1087,7 +1014,7 @@ public partial class TenantsPage : Page
                                 "Reservation cancelled (billing records exist)");
             occupancy.MoveOutDate = occupancy.MoveInDate;
             db.SaveChanges();
-            Tell("This reservation already has billing records, so it was kept and ended on its move-in date. " +
+            Say.Info("This reservation already has billing records, so it was kept and ended on its move-in date. " +
                  "Void its charges in Billing Charges so the tenant is not billed.");
         }
         else

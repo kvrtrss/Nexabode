@@ -1,6 +1,5 @@
 ﻿using Nexabode.Data;
 using Nexabode.Models;
-using static Nexabode.Models.PaymentAllocation;
 
 namespace Nexabode.Services;
 
@@ -14,7 +13,7 @@ public static class AuditService
     {
         db.AuditLog.Add(new AuditLogEntry
         {
-            ChangedAt = DateTime.Now,
+            ChangedAt = Clock.Now,
             Administrator = administrator ?? Session.Administrator,
             EntityType = entityType,
             EntityId = entityId,

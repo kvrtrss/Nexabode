@@ -15,10 +15,15 @@ public static class DbInitializer
 
     public static int SafetyRuleCount => SafetyRuleNames.Length;
 
+    // The version of the database layout this build expects, stored inside the database (PRAGMA user_version).
+    // When a new column or table is added to UpgradeSchema, raise this number by one.
+    // Version 1: first versioned layout. Version 2: payments made from a deposit have the method "Deposit" (they used to say "Credit").
+    public const int SchemaVersion = 2;
+
     // Returns warnings about safety rules that could not be turned on (normally an empty list).
     public static List<string> Initialize()
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         // Only create the database on a first run. An existing database is opened as it is.
         var path = DatabaseKeyProvider.DbPath;
@@ -26,25 +31,45 @@ public static class DbInitializer
         if (!hasData)
             db.Database.EnsureCreated();   // creates the encrypted DB and all tables
 
-        if (hasData) BackupBeforeUpgrade(db);
-        UpgradeSchema(db);
+        UpgradeIfNeeded(db, hasData);
         ReceiptNumbers.BackfillMissing(db);   // payments from before receipt numbers get one too
 
         var warnings = AddSafetyRules(db);
 
-        if (!db.AdminUsers.Any())
-        {
-            db.AdminUsers.Add(new AdminUser
-            {
-                // temporary default login, to be changed on first use
-                Username = "admin",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123")
-            });
-            db.SaveChanges();
-        }
+        // No default account is made: on a first run the first Owner account is created on the setup screen.
 
         return warnings;
     }
+
+    // Upgrades the database only when its stored version is older than this build expects.
+    // The safety copy is made once per upgrade (not on every start), and the upgrade runs in one
+    // transaction, so a failure part-way leaves the database exactly as it was.
+    private static void UpgradeIfNeeded(AppDbContext db, bool hasData)
+    {
+        var current = GetSchemaVersion(db);
+
+        if (current > SchemaVersion)
+            throw new InvalidOperationException(
+                $"This data was made by a newer version of Nexabode (data version {current}; this copy supports up to {SchemaVersion}). " +
+                "Install the latest Nexabode, or restore an older backup.");
+
+        if (current == SchemaVersion) return;
+
+        if (hasData) BackupBeforeUpgrade(db);
+
+        using var transaction = db.Database.BeginTransaction();
+        UpgradeSchema(db);
+#pragma warning disable EF1003   // SchemaVersion is a fixed number in this file, never user input
+        db.Database.ExecuteSqlRaw("PRAGMA user_version = " + SchemaVersion);
+#pragma warning restore EF1003
+        transaction.Commit();
+    }
+
+    private static int GetSchemaVersion(AppDbContext db) =>
+        db.Database
+            .SqlQueryRaw<int>("SELECT user_version AS Value FROM pragma_user_version")
+            .AsEnumerable()
+            .First();
 
     // Adds columns introduced after the database was first created (existing data is kept).
     private static void UpgradeSchema(AppDbContext db)
@@ -110,6 +135,9 @@ public static class DbInitializer
         "Note TEXT NULL, " +
         "DueDate TEXT NOT NULL, " +
         "IsDone INTEGER NOT NULL DEFAULT 0)");
+
+        // Version 2: money paid out of a tenant's deposit is called "Deposit" everywhere. Older payments said "Credit".
+        db.Database.ExecuteSqlRaw("UPDATE Payments SET Method = 'Deposit' WHERE Method = 'Credit'");
     }
 
     // Rules the database itself enforces, so even two writers at once can't create duplicates.
@@ -151,36 +179,16 @@ public static class DbInitializer
 
     public static int CountActiveSafetyRules(AppDbContext db) => SafetyRuleNames.Count(name => IndexExists(db, name));
 
-    private static bool TableExists(AppDbContext db, string name) =>
-    db.Database
-        .SqlQuery<int>($"SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'table' AND name = '{name}'")
-        .AsEnumerable()
-        .First() > 0;
-
-    // Copies the encrypted database before its first upgrade. If the copy fails, the upgrade is stopped.
+    // Copies the encrypted database before an upgrade. If the copy fails, the upgrade is stopped.
+    // Only the newest few copies are kept, so the folder can't grow without limit.
     private static void BackupBeforeUpgrade(AppDbContext db)
     {
-        if (TableExists(db, "AuditLog") &&
-            TableExists(db, "Reminders") &&
-            ColumnExists(db, "Charges", "AdjustsChargeId") &&
-            ColumnExists(db, "UtilityBills", "PeriodStart") &&
-            ColumnExists(db, "Payments", "AmountReceived") &&
-            ColumnExists(db, "Charges", "RefundedAmount") &&
-            ColumnExists(db, "Occupancies", "MovedOutOn") &&
-            ColumnExists(db, "AdminUsers", "Role") &&
-            ColumnExists(db, "AdminUsers", "RecoveryCodeHash") &&
-            ColumnExists(db, "Payments", "ReceiptNo") &&
-            ColumnExists(db, "Tenants", "Gender") &&
-            ColumnExists(db, "Occupancies", "IsCancelled") &&
-            TableExists(db, "SignInGuards") &&
-            ColumnExists(db, "SignInGuards", "EmergencyKeyHash") &&
-            ColumnExists(db, "SignInGuards", "ResetPhraseHash")) return;
+        var folder = Path.Combine(DatabaseKeyProvider.AppFolder, "SafetyCopies");
 
         try
         {
             db.Database.ExecuteSqlRaw("PRAGMA wal_checkpoint(TRUNCATE);");
 
-            var folder = Path.Combine(DatabaseKeyProvider.AppFolder, "SafetyCopies");
             Directory.CreateDirectory(folder);
             var target = Path.Combine(folder, $"before-upgrade-{DateTime.Now:yyyyMMdd-HHmmss}.db");
 
@@ -194,6 +202,24 @@ public static class DbInitializer
             throw new IOException("A safety copy of your data could not be saved, so the upgrade was stopped. Details: " +
                                   ex.Message, ex);
         }
+
+        PruneSafetyCopies(folder, keep: 5);
+    }
+
+    // Deletes the oldest automatic copies. Not critical, so a failure here never stops the app.
+    private static void PruneSafetyCopies(string folder, int keep)
+    {
+        try
+        {
+            var old = new DirectoryInfo(folder).GetFiles("before-upgrade-*.db")
+                .OrderByDescending(f => f.Name)   // the name holds the date and time, so this is newest first
+                .Skip(keep);
+
+            foreach (var file in old) file.Delete();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
 #pragma warning disable EF1002   // the table, column, and index names below are fixed constants, never user input
@@ -202,12 +228,6 @@ public static class DbInitializer
             .SqlQueryRaw<int>($"SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'index' AND name = '{name}'")
             .AsEnumerable()
             .First() > 0;
-
-    private static bool ColumnExists(AppDbContext db, string table, string column) =>
-    db.Database
-        .SqlQueryRaw<int>($"SELECT COUNT(*) AS Value FROM pragma_table_info('{table}') WHERE name = '{column}'")
-        .AsEnumerable()
-        .First() > 0;
 
     // Creates the index unless it exists, or unless the data already breaks the rule (then it returns a warning).
     private static string? CreateIndexIfSafe(AppDbContext db, string indexName, string createSql,

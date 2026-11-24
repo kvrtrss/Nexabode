@@ -1,11 +1,11 @@
-using Nexabode.Services;
+﻿using Nexabode.Services;
 using Xunit;
 
 public class RecoverySheetTextTests
 {
     [Theory]
     [InlineData(RecoverySheetKind.RecoveryCode, "Forgot password?")]
-    [InlineData(RecoverySheetKind.EmergencyKey, "Locked out of every account?")]
+    [InlineData(RecoverySheetKind.EmergencyKey, "Forgot password?")]
     public void TheSteps_NameTheRightButtonOnTheSignInScreen(RecoverySheetKind kind, string button) =>
         Assert.Contains(RecoverySheetText.Steps(kind), step => step.Contains(button));
 
@@ -22,12 +22,12 @@ public class RecoverySheetTextTests
     }
 
     [Fact]
-    public void TheEmergencyKeySheet_MentionsTheResetPhrase_ButTheRecoveryCodeSheetDoesNot()
+    public void TheRecoveryKeySheet_NoLongerMentionsTheRemovedResetPhrase()
     {
-        Assert.Contains(RecoverySheetText.Steps(RecoverySheetKind.EmergencyKey),
-                        step => step.Contains("reset phrase", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain(RecoverySheetText.Steps(RecoverySheetKind.RecoveryCode),
+        Assert.DoesNotContain(RecoverySheetText.Steps(RecoverySheetKind.EmergencyKey),
                               step => step.Contains("reset phrase", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(RecoverySheetText.Steps(RecoverySheetKind.EmergencyKey),
+                              step => step.Contains("Locked out of every account", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

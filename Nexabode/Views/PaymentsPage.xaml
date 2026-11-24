@@ -3,10 +3,46 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
+      xmlns:svc="clr-namespace:Nexabode.Services"
       Title="Payments">
+    <Page.Resources>
+        <svc:SubtractConverter x:Key="Minus" />
+        <!-- Rows keep their usual height, and grow only when a payment is selected and its details open. -->
+        <Style x:Key="TallCell" TargetType="DataGridCell" BasedOn="{StaticResource AppCellStyle}">
+            <Setter Property="MinHeight" Value="58" />
+        </Style>
+        <!-- Second line of a row. On a narrow table (the table sets its Tag to "Compact") the date joins it, because the date column is hidden. -->
+        <Style x:Key="LineTwoFull" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="Compact">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="LineTwoCompact" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="Compact">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <!-- Long text is cut with "..." and the full text shows when the mouse rests on it. -->
+        <Style x:Key="TrimWithTip" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+        </Style>
+    </Page.Resources>
     <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Auto" Background="Transparent">
-    <Border Padding="32,24" MinWidth="900" MinHeight="600"
+    <Border Padding="32,24" MinWidth="640" MinHeight="600"
             Width="{Binding ViewportWidth, ElementName=PageScroll}"
             Height="{Binding ViewportHeight, ElementName=PageScroll}">
     <Grid>
@@ -17,7 +53,9 @@
         </Grid.RowDefinitions>
 
         <controls:PageHeader Title="Payments"
-                             Subtitle="Record payments, review history, and correct mistakes." />
+                             Subtitle="Record payments, review history, and correct mistakes."
+                             ActionText="Record payment"
+                             ActionClick="OpenForm_Click" />
 
         <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,16">
             <controls:StatCard x:Name="MonthCard" Label="Collected this month" Margin="0,0,12,0" />
@@ -27,70 +65,9 @@
         </UniformGrid>
 
         <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="354" />
-                <ColumnDefinition Width="20" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <!-- Record a payment -->
-            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Background="Transparent">
-                <!-- The right 14px is kept free for the scroll bar, so it never sits on top of the content. -->
-                <ui:Card VerticalAlignment="Top" Margin="0,0,14,0">
-                    <StackPanel>
-                        <TextBlock Text="Record a payment" Style="{StaticResource SectionTitle}" Margin="0,0,0,12" />
-
-                        <!-- Filled in by Nexabode: shows the number this payment will get. Nobody types it. -->
-                        <TextBlock Text="Receipt no." Style="{StaticResource MutedText}" Margin="0,0,0,4" />
-                        <ui:TextBox x:Name="ReceiptNoBox" IsReadOnly="True" IsTabStop="False" FontWeight="SemiBold"
-                                    Margin="0,0,0,4" AutomationProperties.Name="Receipt number, assigned automatically"
-                                    ToolTip="Assigned automatically when you record the payment. It can't be changed." />
-                        <TextBlock Text="Assigned automatically." Style="{StaticResource MutedText}"
-                                   FontSize="11" Margin="0,0,0,12" />
-
-                        <TextBlock Text="Tenant" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
-                        <ComboBox x:Name="TenantCombo" DisplayMemberPath="Name" Margin="0,0,0,6"
-                                  SelectionChanged="TenantCombo_SelectionChanged" />
-                        <TextBlock x:Name="SummaryText" Style="{StaticResource MutedText}"
-                                   TextWrapping="Wrap" Margin="0,0,0,12" Text="Select a tenant to begin." />
-
-                        <TextBlock Text="Payment date" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
-                        <DatePicker x:Name="PayDatePicker" Margin="0,0,0,10" SelectedDateChanged="PayDate_Changed" />
-                        <TextBlock Text="Amount received" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
-                        <ui:TextBox x:Name="AmountBox" Margin="0,0,0,4" TextChanged="AmountBox_TextChanged" />
-                        <TextBlock x:Name="ChangeHint" TextWrapping="Wrap" FontWeight="SemiBold"
-                                   Visibility="Collapsed" Margin="0,0,0,10" />
-                        <TextBlock Text="Method" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
-                        <ComboBox x:Name="MethodCombo" IsEditable="True" Margin="0,0,0,10">
-                            <ComboBoxItem Content="Cash" />
-                            <ComboBoxItem Content="GCash" />
-                            <ComboBoxItem Content="Bank transfer" />
-                            <ComboBoxItem Content="Other" />
-                        </ComboBox>
-                        <!-- Only for payments that come with a reference from outside (GCash, bank, check). Cash has none, so it is switched off. -->
-                        <ui:TextBox x:Name="ReferenceBox" PlaceholderText="GCash, bank or check ref. no."
-                                    Margin="0,0,0,10"
-                                    ToolTip="Enter the reference number from GCash, the bank or the check. It is not needed for cash payments." />
-                        <ui:TextBox x:Name="RemarksBox" PlaceholderText="Remarks (optional)" Margin="0,0,0,14" />
-
-                        <TextBlock Text="What is the tenant paying for?" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
-                        <ComboBox x:Name="PayForCombo" DisplayMemberPath="Display" Margin="0,0,0,6"
-          SelectionChanged="PayFor_SelectionChanged" />
-                        <TextBlock x:Name="PayForHint" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,14" />
-
-                        <ui:Button Content="Record payment" Appearance="Primary"
-                                   HorizontalAlignment="Stretch" Click="RecordPayment_Click" />
-
-                        <Border x:Name="ReceiptBanner" Style="{StaticResource BannerSuccess}" Visibility="Collapsed" Margin="0,12,0,0">
-                            <TextBlock x:Name="ReceiptText" TextWrapping="Wrap" Foreground="{DynamicResource AppTextBrush}"
-                                       AutomationProperties.LiveSetting="Polite" />
-                        </Border>
-                    </StackPanel>
-                </ui:Card>
-            </ScrollViewer>
 
             <!-- Tabs -->
-            <TabControl x:Name="Tabs" Grid.Column="2">
+            <TabControl x:Name="Tabs">
                 <TabItem Header="Payment history">
                     <Grid Margin="0,10,0,0">
                         <Grid.RowDefinitions>
@@ -98,10 +75,10 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <StackPanel Margin="0,0,0,4">
+                        <StackPanel Margin="0,0,0,10">
                             <!-- Search and view options -->
                             <WrapPanel>
-                                <ui:TextBox x:Name="SearchBox" Width="240" Margin="0,0,16,8"
+                                <ui:TextBox x:Name="SearchBox" Width="300" Margin="0,0,16,8"
                                             PlaceholderText="Search tenant, method, or reference"
                                             TextChanged="SearchBox_TextChanged" />
                                 <CheckBox x:Name="ShowVoidedCheck" Content="Show voided"
@@ -121,36 +98,77 @@
                                 <ui:Button x:Name="VoidButton" Content="Void payment" Click="VoidPayment_Click" IsEnabled="False"
                                            Style="{StaticResource DangerToolbarButton}" />
                                 <ui:Button x:Name="PrintReceiptButton" Content="Print receipt" Click="PrintReceipt_Click" IsEnabled="False" />
-                                <Border Style="{StaticResource ToolbarDivider}" />
-                                <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click" IsEnabled="False" />
-                                <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
+                                <ui:Button x:Name="MoreButton" Content="More" Click="More_Click"
+                                           ToolTip="Archive or unarchive payments you no longer need in the list.">
+                                    <ui:Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem x:Name="ArchiveButton" Header="Archive" Click="Archive_Click" IsEnabled="False" />
+                                            <MenuItem x:Name="UnarchiveButton" Header="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
+                                        </ContextMenu>
+                                    </ui:Button.ContextMenu>
+                                </ui:Button>
                             </WrapPanel>
 
-                            <!-- The reference no., remarks and void reason of the selected payment. They are not table columns, so the table stays easy to read. -->
-                            <TextBlock x:Name="SelectedInfo" Style="{StaticResource MutedText}" FontSize="12.5"
-                                       Margin="2,8,0,0" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
 
+                        <!-- Shown on top of the empty table, so a blank area explains itself and says what to do. -->
+                        <TextBlock x:Name="EmptyText" Grid.Row="1" Panel.ZIndex="1" Style="{StaticResource MutedText}"
+                                   Text="No payments to show. Select Record payment at the top of the page and the payment will appear here."
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                                   TextWrapping="Wrap" MaxWidth="380" IsHitTestVisible="False" Visibility="Collapsed" />
                         <DataGrid x:Name="PaymentGrid" Grid.Row="1" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended"
+                                  RowHeight="NaN" CellStyle="{StaticResource TallCell}"
+                                  RowDetailsVisibilityMode="VisibleWhenSelected"
+                                  SizeChanged="PaymentGrid_SizeChanged"
                                   SelectionChanged="PaymentGrid_SelectionChanged">
+                            <!-- Select a payment and its details open under it: only what the table has no column for.
+                                 Nothing takes room on the page while no payment is selected. -->
+                            <DataGrid.RowDetailsTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="14,0,14,12"
+                                                Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=DataGrid}, Converter={StaticResource Minus}, ConverterParameter=70}">
+                                        <TextBlock Text="{Binding DetailsMain}" Style="{StaticResource MutedText}"
+                                                   FontSize="13" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding PaidForFull}" Style="{StaticResource MutedText}"
+                                                   FontSize="13" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGrid.RowDetailsTemplate>
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Receipt no." Binding="{Binding ReceiptNo}" Width="125" />
-                                <DataGridTextColumn Header="Date" Binding="{Binding DateText}" Width="105" />
-                                <DataGridTextColumn Header="Tenant" Binding="{Binding Tenant}" Width="*" MinWidth="140" />
-                                <DataGridTextColumn Header="Received" Binding="{Binding Received, StringFormat='₱{0:N2}'}"
-                        ElementStyle="{StaticResource RightCell}" Width="105" />
-                                <DataGridTextColumn Header="Applied" Binding="{Binding Amount, StringFormat='₱{0:N2}'}"
-                        ElementStyle="{StaticResource RightCell}" Width="105" />
-                                <DataGridTextColumn Header="Change" Binding="{Binding Change, StringFormat='₱{0:N2}'}"
-                        ElementStyle="{StaticResource RightCell}" Width="95" />
-                                <DataGridTextColumn Header="Paid for" Binding="{Binding PaidFor}" Width="140" />
-                                <DataGridTextColumn Header="Method" Binding="{Binding Method}" Width="110" />
-                                <DataGridTemplateColumn Header="Status" Width="100">
+                                <!-- Three columns with two lines each, so nothing is cut off and nothing needs a side scroll bar:
+                                     who and what for / receipt and date / amount and status. Change, the reference and the full
+                                     breakdown are in the details that open under a selected row. -->
+                                <DataGridTemplateColumn Header="Payment" SortMemberPath="Tenant" Width="2.4*" MinWidth="200">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <ContentPresenter Content="{Binding Status}"
-                                  ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                                            <StackPanel VerticalAlignment="Center" Margin="0,6">
+                                                <TextBlock Text="{Binding Tenant}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding LineTwo}" Style="{StaticResource LineTwoFull}" />
+                                                <TextBlock Text="{Binding LineTwoCompact}" Style="{StaticResource LineTwoCompact}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn x:Name="ReceiptColumn" Header="Receipt" SortMemberPath="ReceiptNo" Width="1.4*" MinWidth="160">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center" Margin="0,6">
+                                                <TextBlock Text="{Binding ReceiptNo}" FontSize="14" />
+                                                <TextBlock Text="{Binding DateText}" Style="{StaticResource MutedText}" FontSize="13" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Amount" HeaderStyle="{StaticResource RightColumnHeaderStyle}" SortMemberPath="Received" Width="1.2*" MinWidth="130">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding Received, StringFormat='₱{0:N2}'}" FontWeight="SemiBold"
+                                                           FontSize="15" HorizontalAlignment="Right" />
+                                                <ContentPresenter Content="{Binding Status}" HorizontalAlignment="Right" Margin="0,4,0,0"
+                                                                  ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                                            </StackPanel>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
@@ -160,34 +178,71 @@
                 </TabItem>
 
                 <TabItem Header="Unpaid charges">
-                    <DataGrid x:Name="ChargeGrid" AutoGenerateColumns="False" IsReadOnly="True"
-                              CanUserAddRows="False" SelectionMode="Single" Margin="0,10,0,0"
-                              SelectionChanged="ChargeGrid_SelectionChanged">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Month" Binding="{Binding BillingMonth}" Width="90" />
-                            <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*" />
-                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat='₱{0:N2}'}"
-                                                ElementStyle="{StaticResource RightCell}" Width="105" />
-                            <DataGridTextColumn Header="Paid" Binding="{Binding Paid, StringFormat='₱{0:N2}'}"
-                                                ElementStyle="{StaticResource RightCell}" Width="105" />
-                            <DataGridTextColumn Header="Balance" Binding="{Binding Balance, StringFormat='₱{0:N2}'}"
-                                                ElementStyle="{StaticResource RightCell}" Width="105" />
-                            <DataGridTextColumn Header="Due" Binding="{Binding DueText}" Width="110" />
-                            <DataGridTemplateColumn Header="Status" Width="100">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <ContentPresenter Content="{Binding Status}"
-                                                          ContentTemplate="{StaticResource StatusBadgeTemplate}" />
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
+                    <Grid Margin="0,10,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <WrapPanel Margin="0,0,0,10">
+                            <WrapPanel.Resources>
+                                <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+                            </WrapPanel.Resources>
+                            <ui:Button x:Name="RecordForChargeButton" Content="Record payment for this charge"
+                                       Click="RecordForCharge_Click" IsEnabled="False"
+                                       ToolTip="Opens the Record payment window with this tenant and charge already chosen." />
+                        </WrapPanel>
+
+                        <!-- Every tenant's unpaid charges, oldest due date first. Two lines per row, like the payment history. -->
+                        <DataGrid x:Name="ChargeGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" SelectionMode="Single"
+                                  RowHeight="NaN" CellStyle="{StaticResource TallCell}"
+                                  SelectionChanged="ChargeGrid_SelectionChanged">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="Tenant and charge" SortMemberPath="Tenant" Width="2.4*" MinWidth="200">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center" Margin="0,6">
+                                                <TextBlock Text="{Binding Tenant}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding LineTwo}" Style="{StaticResource MutedText}"
+                                                           FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Due" SortMemberPath="DueDate" Width="1.3*" MinWidth="130">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Left">
+                                                <TextBlock Text="{Binding DueText}" FontSize="14" />
+                                                <ContentPresenter Content="{Binding Status}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                                                  ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Balance" HeaderStyle="{StaticResource RightColumnHeaderStyle}" SortMemberPath="Balance" Width="1.2*" MinWidth="130">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding Balance, StringFormat='₱{0:N2}'}" FontWeight="SemiBold"
+                                                           FontSize="15" HorizontalAlignment="Right" />
+                                                <TextBlock Text="{Binding Amount, StringFormat='of ₱{0:N2}'}" Style="{StaticResource MutedText}"
+                                                           FontSize="13" HorizontalAlignment="Right" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
                 </TabItem>
 
                 <TabItem Header="All balances">
                     <DataGrid x:Name="BalanceGrid" AutoGenerateColumns="False" IsReadOnly="True"
-                              CanUserAddRows="False" Margin="0,10,0,0">
+                              CanUserAddRows="False" Margin="0,10,0,0"
+                              ToolTip="Double-click a tenant to open their account."
+                              MouseDoubleClick="BalanceGrid_MouseDoubleClick">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Tenant" Binding="{Binding Tenant}" Width="*" />
                             <DataGridTextColumn Header="Total billed" Binding="{Binding Billed, StringFormat='₱{0:N2}'}"

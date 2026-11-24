@@ -10,8 +10,26 @@ public partial class App : Application
     private Mutex? _singleInstance;
     private EventWaitHandle? _showSignal;
 
+    // Gives every Nexabode window the app icon, so the taskbar, Alt+Tab and every dialog show it
+    // instead of the generic Windows one. One place, so a new window needs nothing extra.
+    private static void RegisterWindowIcon()
+    {
+        System.Windows.Media.ImageSource? icon = null;
+        try { icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/Assets/Nexabode.ico")); }
+        catch { /* no icon is better than no app */ }
+        if (icon == null) return;
+
+        EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent,
+            new RoutedEventHandler((sender, _) =>
+            {
+                if (sender is Window window && window.Icon == null) window.Icon = icon;
+            }));
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        RegisterWindowIcon();
+
         // Only one copy of Nexabode may run at a time, so two windows can't write to the same database.
         _singleInstance = new Mutex(true, @"Local\Nexabode.SingleInstance", out var isFirstCopy);
         if (!isFirstCopy)
@@ -49,6 +67,7 @@ public partial class App : Application
         ThemeService.Initialize();
         ScrollForwarding.Register();   // one scroll area at a time; a table with nothing to scroll lets the page have the wheel
         WindowFit.Register();          // dialogs never run off a small screen
+        GridColumnFix.Register();      // tables keep their column widths correct after a theme change or resize
 
         if (warnings.Count > 0)
             MessageBox.Show(
@@ -56,6 +75,13 @@ public partial class App : Application
                 string.Join("\n\n", warnings.Select(w => "- " + w)) +
                 "\n\nNexabode can still be used as normal. Please report this on the project's GitHub page so that it can be investigated.",
                 "Nexabode", MessageBoxButton.OK, MessageBoxImage.Warning);
+
+        // A brand-new install has no accounts yet, so the first Owner account is created before anything else.
+        if (!AuthService.HasAnyAccount())
+        {
+            new FirstRunSetupWindow().Show();
+            return;
+        }
 
         new LoginWindow().Show();
     }

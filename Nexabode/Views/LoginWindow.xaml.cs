@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Threading;
 using Nexabode.Services;
 using Wpf.Ui.Controls;
@@ -83,7 +83,6 @@ public partial class LoginWindow : FluentWindow
         PasswordInput.IsEnabled = !locked;
         LoginButton.IsEnabled = !locked;
         ForgotButton.IsEnabled = !locked;
-        EmergencyButton.IsEnabled = !locked;
         if (!locked) _lockTimer.Stop();
     }
 
@@ -144,9 +143,8 @@ public partial class LoginWindow : FluentWindow
         Session.IsOwner = user.Role == AccountRoles.Owner;
         Session.UserId = user.Id;
 
-        // One gentle pop-up for a new account: the recovery code (and, for an Owner, the emergency key) together.
-        // "Not now" is fine: the Dashboard keeps a reminder until it is done.
-        SetupCodesDialog.RunFirstTime(this);
+        // An Owner who has no recovery key yet is offered one now. "Not now" is fine: the Dashboard keeps a reminder.
+        RecoveryCodeDialog.OfferIfMissing(this);
 
         new MainWindow().Show();   // show the main window first, then close login
         Close();
@@ -154,37 +152,28 @@ public partial class LoginWindow : FluentWindow
 
     // ---------- forgot password ----------
 
-    private void ForgotButton_Click(object sender, RoutedEventArgs e)
+    // Used by the first-run setup window: shows the new Owner's username and a short welcome.
+    public void Prefill(string username, string notice)
     {
-        var changed = ForgotPasswordDialog.Ask(this, UsernameBox.Text.Trim(), out var newCode,
-                                               out var accountName, out var lockedOut);
-
-        if (changed)
-        {
-            RecoveryCodeDialog.ShowIssued(this, newCode, accountName);
-            PasswordInput.Password = string.Empty;
-            ShowNotice("Your password has been changed. Sign in with your new password.");
-        }
-
-        if (lockedOut) ApplyLockState();
+        UsernameBox.Text = username;
+        ShowNotice(notice);
+        Loaded += (_, _) => PasswordInput.Focus();
     }
 
-    // ---------- emergency access ----------
-
-    private void EmergencyButton_Click(object sender, RoutedEventArgs e)
+    private void ForgotButton_Click(object sender, RoutedEventArgs e)
     {
-        var created = EmergencyAccessDialog.Ask(this, out var username, out var newKey, out var usedPhrase,
-                                                out var lockedOut);
+        var done = EmergencyAccessDialog.Ask(this, UsernameBox.Text.Trim(), out var username, out var newKey,
+                                             out var wasReset, out var lockedOut);
 
-        if (created)
+        if (done)
         {
-            // The emergency key is replaced when used, so the new one is shown now. The reset phrase has no
-            // replacement: it is gone, and the new Owner sets a new one in Settings.
-            if (newKey.Length > 0) RecoveryCodeDialog.ShowEmergencyIssued(this, newKey);
+            // The key is replaced when used, so the new one is shown now.
+            RecoveryCodeDialog.ShowKeyIssued(this, newKey);
             UsernameBox.Text = username;
             PasswordInput.Password = string.Empty;
-            ShowNotice($"The Owner account \"{username}\" has been created. Sign in with it to continue." +
-                       (usedPhrase ? " The reset phrase has now been used and removed. Set a new one in Settings." : ""));
+            ShowNotice(wasReset
+                ? "Your password has been changed. Sign in with your new password."
+                : $"The Owner account \"{username}\" has been created. Sign in with it to continue.");
             PasswordInput.Focus();
         }
 

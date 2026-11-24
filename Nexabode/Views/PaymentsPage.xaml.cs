@@ -19,6 +19,9 @@ public partial class PaymentsPage : Page
     public class OpenChargeRow
     {
         public int Id { get; set; }
+        public int TenantId { get; set; }
+        public string Tenant { get; set; } = "";
+        public string LineTwo => $"{Description}  ·  {BillingMonth}";
         public string BillingMonth { get; set; } = "";
         public string Description { get; set; } = "";
         public decimal Amount { get; set; }
@@ -48,11 +51,33 @@ public partial class PaymentsPage : Page
         public string PaidFor { get; set; } = "";
         public decimal Received { get; set; }
         public decimal Change { get; set; }
-        public bool FromCredit { get; set; }   // paid from the tenant's credit, so voiding it puts the money back in the credit
+        public bool FromDeposit { get; set; }   // paid from the tenant's deposit, so voiding it puts the money back in the deposit
+        public string? VoidReason { get; set; }
+        public List<string> Breakdown { get; set; } = new();   // one entry per charge it paid, e.g. "Rent ₱1,500.00 (Nov 2026)"
+
+        // Second line of the row: what it paid for and how. On a narrow table the date is added in front of it.
+        public string LineTwo => string.Join("  ·  ", new[] { PaidFor, Method }.Where(t => !string.IsNullOrWhiteSpace(t)));
+        public string LineTwoCompact => string.Join("  ·  ", new[] { DateText, PaidFor, Method }.Where(t => !string.IsNullOrWhiteSpace(t)));
+
+        // The two lines shown under the row when it is selected: what the row itself does not show.
+        public string DetailsMain
+        {
+            get
+            {
+                var parts = new List<string> { $"Receipt no. {ReceiptNo}", Reference.Length > 0 ? $"Reference no. {Reference}" : "No reference no." };
+                if (!string.IsNullOrWhiteSpace(Remarks)) parts.Add($"Remarks: {Remarks!.Trim()}");
+                if (IsVoided) parts.Add($"Voided because: {(string.IsNullOrWhiteSpace(VoidReason) ? "no reason given" : VoidReason!.Trim())}");
+                if (Change > 0) parts.Add($"Applied {Fmt.Peso(Amount)} of {Fmt.Peso(Received)} received ({Fmt.Peso(Change)} change)");
+                return string.Join("     ", parts);
+            }
+        }
+        public string PaidForFull =>
+            "Paid for: " + (Breakdown.Count > 0 ? string.Join(",  ", Breakdown) : "no charge (nothing was applied)");
     }
 
     public class BalanceRow
     {
+        public int TenantId { get; set; }
         public string Tenant { get; set; } = "";
         public decimal Billed { get; set; }
         public decimal Paid { get; set; }
@@ -69,67 +94,70 @@ public partial class PaymentsPage : Page
         public string Hint { get; set; } = "";
         public string? Item { get; set; }     // null = any item
         public bool Specific { get; set; }    // true = one charge picked in the Unpaid charges tab
+        public decimal? Suggested { get; set; }   // the full amount owed for this choice, offered as a one-click fill
     }
 
-    private bool _loadingPayFor;
+    // Set by the Dashboard so that its "Record payment" button opens the window as soon as this page is shown.
+    public static bool OpenFormOnLoad { get; set; }
+
     public PaymentsPage()
     {
         InitializeComponent();
-        PayDatePicker.SelectedDate = DateTime.Today;
-        MethodCombo.SelectedIndex = 0;
 
-        // The method box can be typed in, so watch its text (picking from the list changes it too).
-        MethodCombo.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,
-                               new TextChangedEventHandler((_, _) => UpdateReferenceBox()));
-        UpdateReferenceBox();
-
+        // Right-click on a row offers the same actions as the buttons.
+        GridMenu.Attach(PaymentGrid, EditButton, VoidButton, PrintReceiptButton, ArchiveButton, UnarchiveButton);
         Loaded += (_, _) =>
         {
             _ready = true;
-            LoadTenants();
             RefreshAll();
+
+            // Opened from the Dashboard's "Record payment": go straight to the window.
+            if (OpenFormOnLoad)
+            {
+                OpenFormOnLoad = false;
+                OpenRecordDialog(null, null);
+            }
         };
     }
 
-    // ---------- Receipt and reference numbers ----------
+    // ---------- Recording a payment: it has its own window ----------
 
-    // The receipt number is Nexabode's own: show the one the next payment will get, and don't let anyone type it.
-    private void RefreshReceiptNumber()
+    private void OpenForm_Click(object sender, RoutedEventArgs e) => OpenRecordDialog(null, null);
+
+    // 'tenantId' and 'chargeId' are filled in when the window is opened from an unpaid charge.
+    private void OpenRecordDialog(int? tenantId, int? chargeId)
     {
-        var date = DateOnly.FromDateTime(PayDatePicker.SelectedDate ?? DateTime.Today);
-        using var db = new AppDbContext();
-        ReceiptNoBox.Text = ReceiptNumbers.Peek(db, date);
+        var dialog = new RecordPaymentDialog(tenantId, chargeId);
+        if (Owner != null) dialog.Owner = Owner;
+        if (dialog.ShowDialog() != true) return;
+
+        Tabs.SelectedIndex = 0;
+        RefreshAll();
+
+        // Always shown, so a receipt can be printed right away. It also tells the cashier about any change to return.
+        PaymentRecordedDialog.Show(Owner, dialog.SavedPaymentId,
+            ReceiptWording.PaymentRecordedMessage(dialog.SavedReceipt, dialog.SavedTenantName, dialog.SavedReceived, dialog.SavedApplied));
     }
 
-    // A reference number comes from outside (GCash, a bank, a check). Cash has none, so the box is switched off.
-    private void UpdateReferenceBox()
+    // A narrow table (small screen) drops the Receipt column and puts the date under the tenant's name instead,
+    // so the information stays in one look.
+    private void PaymentGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var method = MethodCombo.Text?.Trim() ?? "";
-        var needsReference = method.Length > 0 && !method.Equals("Cash", StringComparison.OrdinalIgnoreCase);
+        if (!e.WidthChanged) return;
+        var compact = PaymentGrid.ActualWidth < 560;
+        if ((PaymentGrid.Tag as string == "Compact") == compact) return;
 
-        if (!needsReference) ReferenceBox.Text = "";
-        ReferenceBox.IsEnabled = needsReference;
-        ReferenceBox.PlaceholderText = needsReference
-            ? "GCash, bank or check ref. no."
-            : "Not needed for cash";
-    }
-
-    // The receipt number starts again each year, so the payment date can change which number is next.
-    private void PayDate_Changed(object sender, SelectionChangedEventArgs e)
-    {
-        if (_ready) RefreshReceiptNumber();
+        PaymentGrid.Tag = compact ? "Compact" : null;
+        ReceiptColumn.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        GridColumnFix.Refresh(PaymentGrid);
     }
 
     // ---------- Helpers ----------
 
-    private static void Tell(string message) =>
-        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
     private Window? Owner => Window.GetWindow(this);
 
     private static string? Blank(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-
-    private int? SelectedTenantId => (TenantCombo.SelectedItem as TenantOption)?.Id;
 
     private PaymentRow? SelectedPayment =>
     PaymentGrid.SelectedItems.Count == 1 ? PaymentGrid.SelectedItem as PaymentRow : null;
@@ -139,37 +167,10 @@ public partial class PaymentsPage : Page
 
     private void RefreshAll()
     {
-        RefreshReceiptNumber();
         LoadStats();
         LoadHistory();
+        LoadUnpaid();
         LoadAllBalances();
-        LoadTenantData();
-    }
-
-    private void LoadTenants()
-    {
-        var keep = SelectedTenantId;
-
-        using var db = new AppDbContext();
-        var tenants = db.Tenants.OrderBy(t => t.FullName).ToList()
-            .Select(t => new TenantOption { Id = t.Id, Name = t.FullName })
-            .ToList();
-
-        TenantCombo.ItemsSource = tenants;
-        if (keep != null)
-            TenantCombo.SelectedItem = tenants.FirstOrDefault(t => t.Id == keep);
-    }
-
-    private void TenantCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_ready) return;
-        LoadTenantData();
-        UpdateChangeHint();
-    }
-
-    private void SelectedRadio_Checked(object sender, RoutedEventArgs e)
-    {
-        if (_ready) Tabs.SelectedIndex = 1;   // jump to the Unpaid charges tab so a charge can be chosen
     }
 
     // ---------- Stat cards ----------
@@ -179,18 +180,18 @@ public partial class PaymentsPage : Page
         var today = DateOnly.FromDateTime(DateTime.Today);
         var monthStart = new DateOnly(today.Year, today.Month, 1);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         var payments = db.Payments.ToList().Where(p => !p.IsVoided).ToList();
         var thisMonth = payments.Where(p => p.PaymentDate >= monthStart).ToList();
         var todays = payments.Where(p => p.PaymentDate == today).ToList();
 
         MonthCard.Value = Fmt.Peso(thisMonth.Sum(p => p.Amount));
-        MonthCard.Caption = $"{thisMonth.Count} payment(s)";
-        MonthCard.Tone = "Success";
+        MonthCard.Caption = Fmt.Count(thisMonth.Count, "payment");
+        MonthCard.Tone = thisMonth.Count > 0 ? "Success" : "Neutral";
 
         TodayCard.Value = Fmt.Peso(todays.Sum(p => p.Amount));
-        TodayCard.Caption = todays.Count == 0 ? "No payments today" : $"{todays.Count} payment(s)";
+        TodayCard.Caption = todays.Count == 0 ? "No payments today" : Fmt.Count(todays.Count, "payment");
         TodayCard.Tone = "Info";
 
         var open = db.Charges
@@ -211,13 +212,13 @@ public partial class PaymentsPage : Page
         OutstandingCard.Value = Fmt.Peso(open.Sum(x => x.Balance));
         OutstandingCard.Caption = open.Count == 0
             ? "No outstanding balances"
-            : $"{open.Select(x => x.TenantId).Distinct().Count()} tenant(s) with a balance";
+            : $"{Fmt.Count(open.Select(x => x.TenantId).Distinct().Count(), "tenant")} with a balance";
         OutstandingCard.Tone = open.Count == 0 ? "Success" : "Warning";
 
         OverdueCard.Value = Fmt.Peso(overdue.Sum(x => x.Balance));
         OverdueCard.Caption = overdue.Count == 0
             ? "Nothing overdue"
-            : $"{overdue.Select(x => x.TenantId).Distinct().Count()} tenant(s) overdue";
+            : $"{Fmt.Count(overdue.Select(x => x.TenantId).Distinct().Count(), "tenant")} overdue";
         OverdueCard.Tone = overdue.Count == 0 ? "Success" : "Danger";
     }
 
@@ -247,7 +248,7 @@ public partial class PaymentsPage : Page
         var ids = SelectedPayments.Where(r => r.IsArchived != archived).Select(r => r.Id).ToList();
         if (ids.Count == 0) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         foreach (var payment in db.Payments.Where(p => ids.Contains(p.Id)).ToList())
             payment.IsArchived = archived;
         db.SaveChanges();
@@ -260,7 +261,7 @@ public partial class PaymentsPage : Page
         var query = SearchBox.Text.Trim();
         var showVoided = ShowVoidedCheck.IsChecked == true;
         var showArchived = ShowArchivedCheck.IsChecked == true;
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var rows = db.Payments
             .Include(p => p.Tenant)
             .Include(p => p.Allocations).ThenInclude(a => a.Charge).ThenInclude(c => c.UtilityBill)
@@ -280,12 +281,17 @@ public partial class PaymentsPage : Page
                 Remarks = p.Remarks,
                 IsVoided = p.IsVoided,
                 IsArchived = p.IsArchived,
-                FromCredit = p.Source == DepositService.PaymentSource,
+                FromDeposit = p.Source == DepositService.PaymentSource,
                 PaidFor = string.Join(", ", p.Allocations
                     .Select(a => BillingHelpers.ItemOf(a.Charge))
                     .Distinct()
                     .OrderBy(i => i == "Rent" ? 0 : 1).ThenBy(i => i)),
-                Details = p.IsVoided ? $"Voided: {p.VoidReason}" : p.Remarks ?? ""
+                Details = p.IsVoided ? $"Voided: {p.VoidReason}" : p.Remarks ?? "",
+                VoidReason = p.IsVoided ? p.VoidReason : null,
+                Breakdown = p.Allocations
+                    .OrderBy(a => a.Charge.DueDate).ThenBy(a => a.ChargeId)
+                    .Select(a => $"{BillingHelpers.ItemOf(a.Charge)} {Fmt.Peso(a.AmountApplied)} ({MonthText(a.Charge.BillingMonth)})")
+                    .ToList()
             })
             .Where(r => query == ""
                 || r.Tenant.Contains(query, StringComparison.OrdinalIgnoreCase)
@@ -297,7 +303,16 @@ public partial class PaymentsPage : Page
             .ToList();
 
         PaymentGrid.ItemsSource = rows;
+        EmptyText.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateHistoryButtons();
+    }
+
+    private void More_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { ContextMenu: { } menu } button) return;
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
     }
 
     private void PaymentGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateHistoryButtons();
@@ -313,32 +328,10 @@ public partial class PaymentsPage : Page
         ArchiveButton.IsEnabled = rows.Any(r => !r.IsArchived);
         UnarchiveButton.IsEnabled = rows.Any(r => r.IsArchived);
 
-        ShowSelectedInfo(selected, rows.Count);
     }
 
-    // One line under the buttons that always takes the same space, so the table never jumps when a row is picked.
-    private void ShowSelectedInfo(PaymentRow? selected, int selectedCount)
-    {
-        string text;
-        if (selectedCount > 1)
-        {
-            text = $"{selectedCount} payments selected.";
-        }
-        else if (selected == null)
-        {
-            text = "Select a payment to see its reference no. and remarks.";
-        }
-        else
-        {
-            var parts = new List<string> { selected.ReceiptNo };
-            parts.Add(selected.Reference.Length > 0 ? $"Ref. no. {selected.Reference}" : "No reference no.");
-            if (selected.Details.Length > 0) parts.Add(selected.Details);
-            text = string.Join("   |   ", parts.Where(p => p.Length > 0));
-        }
-
-        SelectedInfo.Text = text;
-        SelectedInfo.ToolTip = text;
-    }
+    private static string MonthText(string billingMonth) =>
+        DateOnly.TryParseExact(billingMonth + "-01", "yyyy-MM-dd", out var month) ? month.ToString("MMM yyyy") : billingMonth;
 
     // Prints the receipt of the selected payment. A reprint is marked as a duplicate copy.
     private void PrintReceipt_Click(object sender, RoutedEventArgs e)
@@ -358,8 +351,8 @@ public partial class PaymentsPage : Page
             {
                 ("Payment date (e.g. 2026-10-14)", row.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
                 ("Method", row.Method),
-                ("GCash, bank or check ref. no. (optional)", row.Reference),
-                ("Remarks (optional)", row.Remarks ?? "")
+                ("GCash, bank or check ref. no.", row.Reference),
+                ("Remarks", row.Remarks ?? "")
             },
             vals =>
             {
@@ -383,7 +376,7 @@ public partial class PaymentsPage : Page
         if (!ConfirmActionDialog.Ask(Owner, "Edit payment",
                 ConfirmWording.EditRecord($"receipt {row.ReceiptNo} ({row.Tenant})", reviewList), "Save changes")) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var payment = db.Payments.Find(row.Id)!;
         payment.PaymentDate = newDate;
         payment.Method = Blank(v[1]);
@@ -403,10 +396,10 @@ public partial class PaymentsPage : Page
                    "and the payment remains in the history marked Voided (tick Show voided to see it). This cannot be undone." +
                    (row.Change > 0 ? $"\n\nThe tenant handed over {Fmt.Peso(row.Received)} and {Fmt.Peso(row.Change)} was returned as change." : "");
 
-        // A payment made from the tenant's credit gives its money back to the credit, so there is nothing to hand back.
+        // A payment made from the tenant's deposit gives its money back to the deposit, so there is nothing to hand back.
         var fields = new List<(string Label, string Value)> { ("Reason for voiding", "") };
-        if (row.FromCredit)
-            note += "\n\nThis payment was made from the tenant's credit. Voiding it puts the money back into their credit balance.";
+        if (row.FromDeposit)
+            note += "\n\nThis payment was made from the tenant's deposit. Voiding it puts the money back into their deposit balance.";
         else
         {
             fields.Add(("Amount given back to the tenant (0 if none)", "0"));
@@ -434,7 +427,7 @@ public partial class PaymentsPage : Page
         if (v.Length > 1 && decimal.TryParse(v[1], NumberStyles.Number, CultureInfo.CurrentCulture, out var typedBack))
             givenBack = Math.Round(typedBack, 2);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var payment = db.Payments
             .Include(p => p.Allocations).ThenInclude(a => a.Charge)
             .First(p => p.Id == row.Id);
@@ -469,100 +462,59 @@ public partial class PaymentsPage : Page
         RefreshAll();
     }
 
-    // ---------- Selected tenant: summary and unpaid charges ----------
+    // ---------- Unpaid charges (every tenant) ----------
 
-    // Charges of one tenant that still have a balance, oldest due date first.
-
-    private void LoadTenantData()
+    private void LoadUnpaid()
     {
-        if (SelectedTenantId is not int tenantId)
-        {
-            ChargeGrid.ItemsSource = null;
-            _loadingPayFor = true;
-            PayForCombo.ItemsSource = null;
-            _loadingPayFor = false;
-            PayForHint.Text = "";
-            SummaryText.Text = "Select a tenant to begin.";
-            return;
-        }
+        var today = DateOnly.FromDateTime(DateTime.Today);
 
-        using var db = new AppDbContext();
-
-        var open = GetOpenCharges(db, tenantId);
-        ChargeGrid.ItemsSource = open;
-        LoadPayFor(open);
-
-        var allCharges = db.Charges
+        using var db = AppDb.Create();
+        ChargeGrid.ItemsSource = db.Charges
+            .Include(c => c.UtilityBill)
             .Include(c => c.Allocations)
-            .Where(c => c.Occupancy.TenantId == tenantId)
-            .ToList();
-        var billed = allCharges.Sum(c => c.Amount);
-        var paid = allCharges.Sum(c => c.Allocations.Sum(a => a.AmountApplied));
-        var overdue = open.Where(r => r.Status == "Overdue").Sum(r => r.Balance);
-
-        SummaryText.Text = $"Balance {Fmt.Peso(billed - paid)}  -  Overdue {Fmt.Peso(overdue)}";
-    }
-
-    // The "paying for" choices: any item, one item (Rent, Electricity, ...), or one specific charge.
-    private void LoadPayFor(List<OpenChargeRow> open)
-    {
-        var keep = (PayForCombo.SelectedItem as PayForOption)?.Key;
-
-        var options = new List<PayForOption>
-    {
-        new() { Key = "oldest", Display = "Oldest charges first (any item)",
-                Hint = "Pays the oldest unpaid charge first, then the next one. Any extra is shown as change to return." }
-    };
-
-        foreach (var group in open.GroupBy(r => r.Item)
-                                  .OrderBy(g => g.Key == "Rent" ? 0 : 1).ThenBy(g => g.Key))
-        {
-            var due = group.Sum(r => r.Balance);
-            options.Add(new PayForOption
+            .Include(c => c.Occupancy).ThenInclude(o => o.Tenant)
+            .ToList()
+            .Select(c =>
             {
-                Key = "item:" + group.Key,
-                Item = group.Key,
-                Display = $"{group.Key}  -  {Fmt.Peso(due)} unpaid",
-                Hint = $"Pays only {group.Key} charges, oldest first. Up to {Fmt.Peso(due)}. Any extra is change to return."
-            });
-        }
-
-        options.Add(new PayForOption
-        {
-            Key = "specific",
-            Specific = true,
-            Display = "One specific charge (pick it in Unpaid charges)",
-            Hint = "Select a charge in the Unpaid charges tab, then record the payment."
-        });
-
-        _loadingPayFor = true;
-        PayForCombo.ItemsSource = options;
-        PayForCombo.SelectedItem = options.FirstOrDefault(o => o.Key == keep) ?? options[0];
-        _loadingPayFor = false;
-
-        PayForHint.Text = (PayForCombo.SelectedItem as PayForOption)?.Hint ?? "";
+                var paid = c.Allocations.Sum(a => a.AmountApplied);
+                return new OpenChargeRow
+                {
+                    Id = c.Id,
+                    TenantId = c.Occupancy.TenantId,
+                    Tenant = c.Occupancy.Tenant.FullName,
+                    BillingMonth = c.BillingMonth,
+                    Item = BillingHelpers.ItemOf(c),
+                    Description = c.Description ?? c.ChargeType.ToString(),
+                    Amount = c.Amount,
+                    Paid = paid,
+                    Balance = c.Amount - paid,
+                    DueDate = c.DueDate,
+                    Status = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today)
+                };
+            })
+            .Where(r => r.Balance > 0)
+            .OrderBy(r => r.DueDate).ThenBy(r => r.Tenant)
+            .ToList();
+        UpdateUnpaidButtons();
     }
 
-    private void PayFor_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private OpenChargeRow? SelectedCharge => ChargeGrid.SelectedItem as OpenChargeRow;
+
+    private void ChargeGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateUnpaidButtons();
+
+    private void UpdateUnpaidButtons() => RecordForChargeButton.IsEnabled = SelectedCharge != null;
+
+    // Opens the Record payment window with this tenant and this charge already chosen.
+    private void RecordForCharge_Click(object sender, RoutedEventArgs e)
     {
-        if (!_ready || _loadingPayFor) return;
-
-        if (PayForCombo.SelectedItem is not PayForOption option)
-        {
-            PayForHint.Text = "";
-            return;
-        }
-
-        PayForHint.Text = option.Hint;
-        if (option.Specific) Tabs.SelectedIndex = 1;   // jump to Unpaid charges so a charge can be picked
-        UpdateChangeHint();
+        if (SelectedCharge is { } charge) OpenRecordDialog(charge.TenantId, charge.Id);
     }
 
     private void LoadAllBalances()
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var charges = db.Charges
             .Include(c => c.Allocations)
             .Include(c => c.Occupancy).ThenInclude(o => o.Tenant)
@@ -572,6 +524,7 @@ public partial class PaymentsPage : Page
             .GroupBy(c => c.Occupancy.Tenant)
             .Select(g => new BalanceRow
             {
+                TenantId = g.Key.Id,
                 Tenant = g.Key.FullName,
                 Billed = g.Sum(c => c.Amount),
                 Paid = g.Sum(c => c.Allocations.Sum(a => a.AmountApplied)),
@@ -584,11 +537,28 @@ public partial class PaymentsPage : Page
             .ToList();
     }
 
+    // Double-click a tenant in All balances to open their account.
+    private void BalanceGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        for (var element = e.OriginalSource as DependencyObject; element != null; element = System.Windows.Media.VisualTreeHelper.GetParent(element))
+        {
+            if (element is DataGridRow { Item: BalanceRow row })
+            {
+                var window = new TenantAccountWindow(row.TenantId);
+                if (Owner != null) window.Owner = Owner;
+                window.ShowDialog();
+                RefreshAll();   // a payment may have been recorded in the window
+                return;
+            }
+            if (element is DataGrid) return;
+        }
+    }
+
     // ---------- Record a payment ----------
 
     // Works out how a payment would be applied, using the balances in the database right now.
     // Charges of one tenant that still have a balance, oldest due date first.
-    private static List<OpenChargeRow> GetOpenCharges(AppDbContext db, int tenantId)
+    internal static List<OpenChargeRow> GetOpenCharges(AppDbContext db, int tenantId)
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
 
@@ -620,7 +590,7 @@ public partial class PaymentsPage : Page
 
     // Works out how a payment would be applied, using the balances in the database right now.
     // Paying more than is owed is not an error: the extra is returned as change.
-    private static (List<PaymentAllocation>? Allocations, decimal Applied, decimal Change, string? Error) PlanAllocations(
+    internal static (List<PaymentAllocation>? Allocations, decimal Applied, decimal Change, string? Error) PlanAllocations(
         AppDbContext db, int tenantId, decimal amount, int? chosenChargeId, string? item)
     {
         var open = GetOpenCharges(db, tenantId);
@@ -647,179 +617,5 @@ public partial class PaymentsPage : Page
             .ToList();
 
         return (allocations, settlement.Applied, settlement.Change, null);
-    }
-
-    private void AmountBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateChangeHint();
-
-    private void ChargeGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateChangeHint();
-
-    // Shows, while typing, how much of the amount will be applied and how much is change to return.
-    private void UpdateChangeHint()
-    {
-        if (!_ready) return;
-        ChangeHint.Visibility = Visibility.Collapsed;
-
-        if (SelectedTenantId is not int tenantId) return;
-        if (PayForCombo.SelectedItem is not PayForOption option) return;
-        if (!decimal.TryParse(AmountBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var typed) || typed <= 0)
-            return;
-
-        int? chosenChargeId = null;
-        string? item = null;
-        if (option.Specific)
-        {
-            if (ChargeGrid.SelectedItem is not OpenChargeRow chosen) return;
-            chosenChargeId = chosen.Id;
-        }
-        else
-        {
-            item = option.Item;
-        }
-
-        using var db = new AppDbContext();
-        var plan = PlanAllocations(db, tenantId, Math.Round(typed, 2), chosenChargeId, item);
-        if (plan.Allocations == null) return;
-
-        ChangeHint.Text = plan.Change > 0
-            ? $"Applies {Fmt.Peso(plan.Applied)}.  Change to return: {Fmt.Peso(plan.Change)}."
-            : $"Applies {Fmt.Peso(plan.Applied)}.";
-        ChangeHint.Foreground = (System.Windows.Media.Brush)Application.Current.FindResource(
-            plan.Change > 0 ? "WarningBrush" : "AppSecondaryBrush");
-        ChangeHint.Visibility = Visibility.Visible;
-    }
-
-    private void RecordPayment_Click(object sender, RoutedEventArgs e)
-    {
-        if (TenantCombo.SelectedItem is not TenantOption tenant)
-        {
-            Tell("Select a tenant first.");
-            return;
-        }
-        if (PayDatePicker.SelectedDate is not DateTime payDate)
-        {
-            Tell("Select the payment date.");
-            return;
-        }
-        if (DateOnly.FromDateTime(payDate) > DateOnly.FromDateTime(DateTime.Today))
-        {
-            Tell("The payment date cannot be in the future. Select today's date or an earlier date.");
-            return;
-        }
-        if (!decimal.TryParse(AmountBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var amount) || amount <= 0)
-        {
-            Tell("Enter the payment amount as a number greater than zero.");
-            return;
-        }
-        amount = Math.Round(amount, 2);
-
-        if (PayForCombo.SelectedItem is not PayForOption option)
-        {
-            Tell("Choose what the tenant is paying for.");
-            return;
-        }
-
-        int? chosenChargeId = null;
-        string? item = null;
-
-        if (option.Specific)
-        {
-            if (ChargeGrid.SelectedItem is not OpenChargeRow chosen)
-            {
-                Tell("Select a charge in the Unpaid charges tab first, or choose a different option.");
-                Tabs.SelectedIndex = 1;
-                return;
-            }
-            chosenChargeId = chosen.Id;
-        }
-        else
-        {
-            item = option.Item;
-        }
-
-        // A first look, only to describe the payment in the confirmation.
-        int chargeCount;
-        decimal plannedApplied;
-        decimal plannedChange;
-        using (var preview = new AppDbContext())
-        {
-            var plan = PlanAllocations(preview, tenant.Id, amount, chosenChargeId, item);
-            if (plan.Allocations == null)
-            {
-                Tell(plan.Error!);
-                LoadTenantData();
-                return;
-            }
-            chargeCount = plan.Allocations.Count;
-            plannedApplied = plan.Applied;
-            plannedChange = plan.Change;
-        }
-
-        var purpose = option.Specific ? "one specific charge" : item ?? "oldest charges first";
-        var confirm = ConfirmActionDialog.YesNo(
-            $"Record a payment from {tenant.Name}?\n\n" +
-            $"Amount received:   {Fmt.Peso(amount)}\n" +
-            $"Applied to {chargeCount} charge(s):   {Fmt.Peso(plannedApplied)}\n" +
-            (plannedChange > 0 ? $"Change to return:   {Fmt.Peso(plannedChange)}\n" : "") +
-            $"\nPaying for: {purpose}\n\nA recorded payment can be voided later if it was entered by mistake.",
-            "Confirm payment", confirmText: "Record payment");
-        if (confirm != MessageBoxResult.Yes) return;
-
-        decimal savedApplied = 0;
-        var savedReceipt = "";
-        var savedPaymentId = 0;
-        try
-        {
-            using var db = new AppDbContext();
-            using var transaction = db.Database.BeginTransaction();
-
-            // Check again inside the transaction, in case the balances changed while the confirmation was open.
-            var plan = PlanAllocations(db, tenant.Id, amount, chosenChargeId, item);
-            if (plan.Allocations == null || plan.Applied != plannedApplied)
-            {
-                transaction.Rollback();
-                Tell((plan.Error ?? $"The change to return would now be {Fmt.Peso(plan.Change)} instead of {Fmt.Peso(plannedChange)}.") +
-                     "\n\nThe balances changed while you were confirming this payment. Nothing was saved. Review the updated amounts and record the payment again.");
-                RefreshAll();
-                return;
-            }
-
-            var newPayment = new Payment
-            {
-                TenantId = tenant.Id,
-                PaymentDate = DateOnly.FromDateTime(payDate),
-                Amount = plan.Applied,        // what counts toward the charges
-                AmountReceived = amount,      // what the tenant handed over
-                Method = Blank(MethodCombo.Text),
-                ReferenceNo = Blank(ReferenceBox.Text),
-                Remarks = Blank(RemarksBox.Text),
-                Allocations = plan.Allocations
-            };
-            db.Payments.Add(newPayment);
-            db.SaveChanges();       // also gives the payment its receipt number
-            transaction.Commit();   // the payment and its allocations are saved together or not at all
-
-            savedReceipt = newPayment.ReceiptNo ?? "";
-            savedPaymentId = newPayment.Id;
-
-            savedApplied = plan.Applied;
-        }
-        catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
-        {
-            Tell("The payment could not be saved because the data changed at the same moment. " +
-                 "Nothing was saved. Please try again.");
-            RefreshAll();
-            return;
-        }
-
-        AmountBox.Text = ReferenceBox.Text = RemarksBox.Text = "";
-        ReceiptText.Text = $"Payment recorded. Receipt no. {savedReceipt}";
-        ReceiptBanner.Visibility = Visibility.Visible;
-        PayForCombo.SelectedIndex = 0;   // back to "oldest charges first"
-        Tabs.SelectedIndex = 0;
-        RefreshAll();
-
-        // Always shown, so a receipt can be printed right away. It also tells the cashier about any change to return.
-        PaymentRecordedDialog.Show(Window.GetWindow(this), savedPaymentId,
-            ReceiptWording.PaymentRecordedMessage(savedReceipt, tenant.Name, amount, savedApplied));
     }
 }

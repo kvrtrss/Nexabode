@@ -33,7 +33,7 @@ public partial class SettingsPage : Page
 
     private void Load()
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         _username = Session.Administrator;   // the account that is signed in now, not simply the first one
 
         AccountText.Text = $"Signed in as {_username} ({(Session.IsOwner ? "Owner" : "Staff")}). Keep your password private.";
@@ -45,7 +45,49 @@ public partial class SettingsPage : Page
         DataPathText.Text = DatabaseKeyProvider.AppFolder;
         VersionText.Text = $"Version {typeof(SettingsPage).Assembly.GetName().Version?.ToString(3)}";
         ShowLastBackup();
-        RulesText.Text = $"Data safety rules active: {DbInitializer.CountActiveSafetyRules(db)} of {DbInitializer.SafetyRuleCount}";
+        LoadAppearance();
+        LoadBilling();
+        var rulesOn = DbInitializer.CountActiveSafetyRules(db);
+        RulesText.Text = rulesOn == DbInitializer.SafetyRuleCount
+            ? $"All {DbInitializer.SafetyRuleCount} data safety checks are on."
+            : $"Only {rulesOn} of {DbInitializer.SafetyRuleCount} data safety checks are on, so please make a backup soon.";
+    }
+
+    private bool _loadingAppearance;
+
+    private void LoadAppearance()
+    {
+        _loadingAppearance = true;
+        foreach (var item in AppearanceCombo.Items.OfType<ComboBoxItem>())
+            if ((string?)item.Tag == ThemeService.Choice) AppearanceCombo.SelectedItem = item;
+        _loadingAppearance = false;
+    }
+
+    private void Appearance_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingAppearance || AppearanceCombo.SelectedItem is not ComboBoxItem { Tag: string choice }) return;
+        if (choice == ThemeService.Choice) return;
+
+        // Only rebuild the window when the colors really change. "Follow Windows" while Windows already matches just saves the choice.
+        if (ThemeService.WouldBeDark(choice) == ThemeService.IsDark) ThemeService.SetChoice(choice);
+        else (Window.GetWindow(this) as MainWindow)?.SwitchTheme(choice);
+    }
+
+    private bool _loadingDueDay;
+
+    private void LoadBilling()
+    {
+        _loadingDueDay = true;
+        if (RentDueDayCombo.Items.Count == 0)
+            for (var day = 1; day <= 28; day++) RentDueDayCombo.Items.Add(day);
+        RentDueDayCombo.SelectedItem = Math.Clamp(AppSettings.Load().RentDueDay, 1, 28);
+        _loadingDueDay = false;
+    }
+
+    private void RentDueDay_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingDueDay || RentDueDayCombo.SelectedItem is not int day) return;
+        AppSettings.Update(s => s.RentDueDay = day);   // saved at once; the Rent Billing page reads it each time
     }
 
     private void ShowLastBackup()
@@ -66,7 +108,7 @@ public partial class SettingsPage : Page
         else
         {
             var days = BackupReminder.DaysSinceBackup();
-            var age = days == 0 ? "today" : $"{days} day(s) ago";
+            var age = days == 0 ? "today" : $"{Fmt.Count(days ?? 0, "day")} ago";
             LastBackupText.Text = $"Last backup: {last.Value.ToString("MMM d, yyyy h:mm tt", CultureInfo.CurrentCulture)} ({age})";
             LastBackupText.Foreground = (System.Windows.Media.Brush)FindResource(
                 BackupReminder.IsDue ? "WarningBrush" : "SuccessBrush");
@@ -78,50 +120,19 @@ public partial class SettingsPage : Page
     private void ChangePassword_Click(object sender, RoutedEventArgs e)
     {
         if (ChangePasswordDialog.Ask(Owner, _username, forced: false))
-            MessageBox.Show("Your password has been changed.", "Nexabode",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            Say.Info("Your password has been changed.");
     }
 
-    // Makes a fresh emergency access key (Owners only: this whole card is hidden from Staff).
+    // Makes a fresh Owner recovery key (Owners only: this whole card is hidden from Staff).
     private void EmergencyKey_Click(object sender, RoutedEventArgs e)
     {
         if (!Session.IsOwner) return;
         if (!ConfirmPasswordDialog.Ask(Owner, _username,
-                "Enter your password to create a new emergency access key. The current key will stop working."))
+                "Enter your password to create a new recovery key. The current key will stop working."))
             return;
 
-        RecoveryCodeDialog.IssueEmergencyKey(Owner, "New emergency access key created in Settings");
+        RecoveryCodeDialog.IssueKey(Owner, "New recovery key created in Settings");
         ShowRecoveryStatus();
-    }
-
-    // Sets, changes or removes the reset phrase (Owners only: this whole card is hidden from Staff).
-    private void ResetPhrase_Click(object sender, RoutedEventArgs e)
-    {
-        if (!Session.IsOwner) return;
-        if (!ConfirmPasswordDialog.Ask(Owner, _username,
-                "Enter your password to set the reset phrase. The phrase can be used to regain access when nobody can sign in."))
-            return;
-
-        if (ResetPhraseDialog.Ask(Owner, _username)) ShowRecoveryStatus();
-    }
-
-    // Makes a fresh recovery code. The old one stops working once the new one is saved.
-    private void RecoveryCode_Click(object sender, RoutedEventArgs e)
-    {
-        if (!ConfirmPasswordDialog.Ask(Owner, _username,
-                "Enter your password to create a new recovery code. The current code will stop working."))
-            return;
-
-        int userId;
-        using (var db = new AppDbContext())
-        {
-            var lower = _username.ToLower();
-            var user = db.AdminUsers.FirstOrDefault(u => u.Username.ToLower() == lower);
-            if (user == null) { Tell("The account could not be found."); return; }
-            userId = user.Id;
-        }
-
-        RecoveryCodeDialog.Issue(Owner, userId, "New recovery code created in Settings");
     }
 
     private void ChangeUsername_Click(object sender, RoutedEventArgs e)
@@ -133,14 +144,11 @@ public partial class SettingsPage : Page
         LoadAccounts();
         (Window.GetWindow(this) as MainWindow)?.RefreshAccount();
 
-        MessageBox.Show($"Your username is now {newName}. Use it the next time you sign in.", "Nexabode",
-            MessageBoxButton.OK, MessageBoxImage.Information);
+        Say.Info($"Your username is now {newName}. Use it the next time you sign in.");
     }
 
     // ---------- Accounts (Owners only) ----------
 
-    private static void Tell(string message) =>
-        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
     private void LoadAccounts()
     {
@@ -149,7 +157,7 @@ public partial class SettingsPage : Page
 
         var keep = SelectedAccount?.Id;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var rows = db.AdminUsers.ToList()
             .OrderBy(u => u.Username, StringComparer.OrdinalIgnoreCase)
             .Select(u => new AccountRow
@@ -171,13 +179,12 @@ public partial class SettingsPage : Page
         ShowRecoveryStatus();
     }
 
-    // Says which ways back in are ready, so nobody finds out on the day they are needed.
+    // Says whether the recovery key is ready, so nobody finds out on the day it is needed.
     private void ShowRecoveryStatus()
     {
-        var key = AuthService.HasEmergencyKey() ? "created" : "not created yet";
-        var hasPhrase = AuthService.HasResetPhrase();
-        RecoveryStatusText.Text = $"Emergency access key: {key}. Reset phrase: {(hasPhrase ? "set" : "not set")}." +
-            (hasPhrase ? "" : " Setting one gives you an easier-to-remember way back in if nobody can sign in.");
+        RecoveryStatusText.Text = AuthService.HasEmergencyKey()
+            ? "Owner recovery key: created."
+            : "Owner recovery key: not created yet. Select New recovery key to make one.";
     }
 
     private void UpdateAccountButtons()
@@ -202,7 +209,7 @@ public partial class SettingsPage : Page
             },
             vals =>
             {
-                using var db = new AppDbContext();
+                using var db = AppDb.Create();
                 var nameError = AccountService.NameError(db, vals[0]);
                 if (nameError != null) return nameError;
                 return AccountRoles.Normalize(vals[1]) == null ? "Choose a role." : null;
@@ -222,16 +229,16 @@ public partial class SettingsPage : Page
         if (password == null) return;
 
         string? error;
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
             error = AccountService.Add(db, username, role, password);
         if (error != null)
         {
-            Tell(error);
+            Say.Info(error);
             return;
         }
 
         LoadAccounts();
-        Tell($"The {role} account \"{username}\" was added.\n\n" +
+        Say.Info($"The {role} account \"{username}\" was added.\n\n" +
              "They can sign in with the temporary password and will then be asked to choose their own password.");
     }
 
@@ -246,16 +253,16 @@ public partial class SettingsPage : Page
         if (password == null) return;
 
         string? error;
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
             error = AccountService.ResetPassword(db, row.Id, password);
         if (error != null)
         {
-            Tell(error);
+            Say.Info(error);
             return;
         }
 
         LoadAccounts();
-        Tell($"The password for \"{row.Username}\" was reset. They will be asked to choose a new one the next time they sign in.");
+        Say.Info($"The password for \"{row.Username}\" was reset. They will be asked to choose a new one the next time they sign in.");
     }
 
     private void ChangeRole_Click(object sender, RoutedEventArgs e)
@@ -284,11 +291,11 @@ public partial class SettingsPage : Page
         if (confirm != MessageBoxResult.Yes) return;
 
         string? error;
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
             error = AccountService.SetRole(db, row.Id, newRole);
         if (error != null)
         {
-            Tell(error);
+            Say.Info(error);
             return;
         }
 
@@ -307,11 +314,11 @@ public partial class SettingsPage : Page
         if (confirm != MessageBoxResult.Yes) return;
 
         string? error;
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
             error = AccountService.Remove(db, row.Id);
         if (error != null)
         {
-            Tell(error);
+            Say.Info(error);
             return;
         }
 
@@ -347,8 +354,7 @@ public partial class SettingsPage : Page
         catch (Exception ex)
         {
             Mouse.OverrideCursor = null;
-            MessageBox.Show("The backup could not be created.\n\nDetails: " + ex.Message, "Nexabode",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            Say.Error("The backup could not be created.\n\nDetails: " + ex.Message);
             return;
         }
         finally
@@ -362,9 +368,8 @@ public partial class SettingsPage : Page
         settings.Save();
         ShowLastBackup();
 
-        MessageBox.Show($"The backup was created and verified:\n{save.FileName}\n\n" +
-                        "Keep a copy on a USB drive or cloud storage, and keep the backup password in a safe place.",
-                        "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
+        Say.Info($"The backup was created and verified:\n{save.FileName}\n\n" +
+                        "Keep a copy on a USB drive or cloud storage, and keep the backup password in a safe place.");
     }
 
     // ---------- Restore ----------
@@ -373,8 +378,7 @@ public partial class SettingsPage : Page
     {
         if (!Session.IsOwner)
         {
-            MessageBox.Show("Only an Owner can restore a backup.", "Nexabode",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            Say.Info("Only an Owner can restore a backup.");
             return;
         }
 
@@ -407,8 +411,7 @@ public partial class SettingsPage : Page
         catch (Exception ex)
         {
             Mouse.OverrideCursor = null;
-            MessageBox.Show(ex.Message + "\n\nNothing was changed.", "Nexabode",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            Say.Error(ex.Message + "\n\nNothing was changed.");
             return;
         }
         finally
@@ -416,11 +419,9 @@ public partial class SettingsPage : Page
             Mouse.OverrideCursor = null;
         }
 
-        MessageBox.Show(
-            "The backup was restored.\n\n" +
+        Say.Info("The backup was restored.\n\n" +
             "Nexabode will now close. Open it again and sign in with the password that was in use when the backup was created.\n\n" +
-            $"Your previous data was saved here:\n{safety}",
-            "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
+            $"Your previous data was saved here:\n{safety}");
 
         MainWindow.SkipBackupPrompt = true;   // no "back up?" prompt right after a restore
         Application.Current.Shutdown();
@@ -431,17 +432,15 @@ public partial class SettingsPage : Page
         var problems = StayConflicts.ScanExisting();
         if (problems.Count == 0)
         {
-            MessageBox.Show("No overlapping or invalid stays were found.", "Nexabode",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            Say.Info("No overlapping or invalid stays were found.");
             return;
         }
 
         var more = problems.Count > 15 ? $"\n\n...and {problems.Count - 15} more." : "";
-        MessageBox.Show($"{problems.Count} problem(s) found. Nothing was changed.\n\n" +
+        Say.Info($"{Fmt.Count(problems.Count, "problem")} found. Nothing was changed.\n\n" +
                         string.Join("\n\n", problems.Take(15)) + more +
                         "\n\nTo correct a problem, open the tenant, select Edit this stay on one of the stays concerned, and correct its dates. " +
-                        "A correction that reduces an overlap never needs an exception.",
-            "Nexabode", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        "A correction that reduces an overlap never needs an exception.");
     }
     private void ViewHistory_Click(object sender, RoutedEventArgs e) =>
     AuditHistoryWindow.ShowFor(Owner);

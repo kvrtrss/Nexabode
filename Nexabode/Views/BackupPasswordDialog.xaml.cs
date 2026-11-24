@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using Nexabode.Services;
 
 namespace Nexabode.Views;
 
@@ -60,6 +61,10 @@ public partial class BackupPasswordDialog : Window
         {
             if (password.Length < 8) { Fail($"The {_noun} must be at least 8 characters."); return; }
             if (password != ConfirmInput.Password) { Fail("The two passwords do not match."); return; }
+
+            // A backup file can end up on a USB drive or in the cloud, so a guessable password is refused here too.
+            var refusal = PasswordStrengthRules.Refusal(password);
+            if (refusal != null) { Fail(refusal); return; }
         }
 
         _result = password;

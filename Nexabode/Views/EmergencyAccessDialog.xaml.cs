@@ -1,84 +1,69 @@
-using System.Windows;
+﻿using System.Windows;
 using Nexabode.Services;
 
 namespace Nexabode.Views;
 
+// "Forgot password?" on the sign-in screen: the Owner recovery key sets a new password for an Owner account,
+// or creates a new Owner account when the username is new.
 public partial class EmergencyAccessDialog : Window
 {
     private string _newKey = "";
     private string _username = "";
+    private bool _wasReset;
     private bool _lockedOut;
-    private bool _ready;
 
-    private EmergencyAccessDialog()
+    private EmergencyAccessDialog(string usernameHint)
     {
         InitializeComponent();
-        _ready = true;
+        UsernameBox.Text = usernameHint;
         StrengthMeter.Attach(NewBox, () => UsernameBox.Text);
         Loaded += (_, _) => KeyBox.Focus();
     }
 
-    // Returns true when the Owner account was created. newKey is the replacement emergency key, to be shown once
-    // (empty when the reset phrase was used instead: it has no replacement). usedPhrase says which way was used.
-    // lockedOut is true when sign-in is now locked, so the sign-in screen can show it.
-    public static bool Ask(Window? owner, out string username, out string newKey, out bool usedPhrase, out bool lockedOut)
+    // Returns true when the password was reset or the Owner account was created. newKey is the replacement key,
+    // to be shown once. wasReset says which of the two happened. lockedOut is true when sign-in is now locked,
+    // so the sign-in screen can show it.
+    public static bool Ask(Window? owner, string usernameHint, out string username, out string newKey,
+                           out bool wasReset, out bool lockedOut)
     {
-        var dialog = new EmergencyAccessDialog();
+        var dialog = new EmergencyAccessDialog(usernameHint);
         if (owner != null) dialog.Owner = owner;
 
-        var created = dialog.ShowDialog() == true;
-        username = created ? dialog._username : "";
-        newKey = created ? dialog._newKey : "";
-        usedPhrase = created && dialog.PhraseMode.IsChecked == true;
+        var done = dialog.ShowDialog() == true;
+        username = done ? dialog._username : "";
+        newKey = done ? dialog._newKey : "";
+        wasReset = done && dialog._wasReset;
         lockedOut = dialog._lockedOut;
-        return created;
+        return done;
     }
 
-    private bool UsingPhrase => PhraseMode.IsChecked == true;
-
-    // Switches the box between the emergency key and the reset phrase.
-    private void Way_Changed(object sender, RoutedEventArgs e)
+    private void Fail(string message)
     {
-        if (!_ready) return;   // the radio buttons are set up while the window is still being built
-
-        var phrase = UsingPhrase;
-        KeyBox.Visibility = phrase ? Visibility.Collapsed : Visibility.Visible;
-        PhraseBox.Visibility = phrase ? Visibility.Visible : Visibility.Collapsed;
-        SecretLabel.Text = phrase ? "Reset phrase" : "Emergency access key";
-        IntroText.Text = phrase
-            ? "Enter the reset phrase that an Owner set in Settings, then choose a username and password for a new Owner account. The phrase can be used only once."
-            : "Enter the emergency access key that was saved when Nexabode was set up, then choose a username and password for a new Owner account.";
-        ErrorText.Visibility = Visibility.Collapsed;
-        (phrase ? (UIElement)PhraseBox : KeyBox).Focus();
+        ErrorText.Text = message;
+        ErrorText.Visibility = Visibility.Visible;
     }
-    private void Create_Click(object sender, RoutedEventArgs e)
+
+    private void Continue_Click(object sender, RoutedEventArgs e)
     {
-        // Quick checks first, so nobody is asked to confirm something that cannot work.
-        var secret = UsingPhrase ? PhraseBox.Password : KeyBox.Text;
-        if (string.IsNullOrWhiteSpace(secret) || string.IsNullOrWhiteSpace(UsernameBox.Text))
+        // Quick checks first, so nothing is sent that cannot work.
+        if (string.IsNullOrWhiteSpace(KeyBox.Text) || string.IsNullOrWhiteSpace(UsernameBox.Text))
         {
-            ErrorText.Text = $"Enter the {(UsingPhrase ? "reset phrase" : "emergency access key")} " +
-                             "and a username for the new Owner account.";
-            ErrorText.Visibility = Visibility.Visible;
+            Fail("Enter the Owner recovery key and your username.");
             return;
         }
         if (NewBox.Password != ConfirmBox.Password)
         {
-            ErrorText.Text = "The new passwords do not match.";
-            ErrorText.Visibility = Visibility.Visible;
+            Fail("The new passwords do not match.");
             return;
         }
-        if (!ConfirmActionDialog.Ask(this, "Create Owner account", ConfirmWording.CreateOwner(UsernameBox.Text.Trim())))
-            return;
 
-        var result = UsingPhrase
-            ? AuthService.ResetPhraseAccess(PhraseBox.Password, UsernameBox.Text, NewBox.Password, ConfirmBox.Password)
-            : AuthService.EmergencyAccess(KeyBox.Text, UsernameBox.Text, NewBox.Password, ConfirmBox.Password);
+        var result = AuthService.RecoverAccess(KeyBox.Text, UsernameBox.Text, NewBox.Password, ConfirmBox.Password);
 
         if (result.Success)
         {
             _username = result.Username ?? "";
             _newKey = result.NewEmergencyKey ?? "";
+            _wasReset = result.WasReset;
             DialogResult = true;
             return;
         }
@@ -86,13 +71,12 @@ public partial class EmergencyAccessDialog : Window
         if (result.Locked)
         {
             _lockedOut = true;
-            MessageBox.Show(this, result.Error, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Say.Info(result.Error ?? "Too many unsuccessful attempts.", this);
             DialogResult = false;
             return;
         }
 
-        ErrorText.Text = result.Error ?? "The account could not be created.";
-        ErrorText.Visibility = Visibility.Visible;
+        Fail(result.Error ?? "The password could not be reset.");
         NewBox.Password = string.Empty;
         ConfirmBox.Password = string.Empty;
     }

@@ -41,7 +41,7 @@ public partial class AuditHistoryWindow : Window
         CategoryBox.ItemsSource = AuditWording.Categories;
         CategoryBox.SelectedIndex = 0;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var query = db.AuditLog.AsQueryable();
         if (tenantId != null) query = query.Where(a => a.TenantId == tenantId);
 
@@ -193,7 +193,7 @@ public partial class AuditHistoryWindow : Window
             Child = new TextBlock
             {
                 Text = e.Category,
-                FontSize = 11.5,
+                FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Foreground = Cat(e.Category, "Text")
@@ -215,7 +215,7 @@ public partial class AuditHistoryWindow : Window
             text.Children.Add(new TextBlock
             {
                 Text = "\u2022  " + detail,
-                FontSize = 12.5,
+                FontSize = 13,
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = Res("AppSecondaryBrush"),
                 Margin = new Thickness(0, 3, 0, 0)
@@ -224,7 +224,7 @@ public partial class AuditHistoryWindow : Window
         text.Children.Add(new TextBlock
         {
             Text = "Reason: " + e.Reason,
-            FontSize = 12.5,
+            FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
             Foreground = Res("AppSecondaryBrush"),
             Margin = new Thickness(0, 5, 0, 0)
@@ -234,7 +234,7 @@ public partial class AuditHistoryWindow : Window
             text.Children.Add(new TextBlock
             {
                 Text = "Saved although it overlaps another stay (accepted by the person who made the change).",
-                FontSize = 12.5,
+                FontSize = 13,
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = Res("DangerBrush"),
                 Margin = new Thickness(0, 5, 0, 0)
@@ -254,7 +254,7 @@ public partial class AuditHistoryWindow : Window
         meta.Children.Add(new TextBlock
         {
             Text = "by " + e.Administrator,
-            FontSize = 12.5,
+            FontSize = 13,
             HorizontalAlignment = HorizontalAlignment.Right,
             Foreground = Res("AppSecondaryBrush")
         });
@@ -263,7 +263,7 @@ public partial class AuditHistoryWindow : Window
             meta.Children.Add(new TextBlock
             {
                 Text = tenant,
-                FontSize = 12.5,
+                FontSize = 13,
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Foreground = Res("AppSecondaryBrush")
             });

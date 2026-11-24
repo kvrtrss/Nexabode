@@ -4,9 +4,37 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Tenants">
+    <Page.Resources>
+        <!-- Rows keep a steady height: two lines (a name, then a detail line). -->
+        <Style x:Key="TallCell" TargetType="DataGridCell" BasedOn="{StaticResource AppCellStyle}">
+            <Setter Property="MinHeight" Value="58" />
+        </Style>
+        <!-- Second line of a row. On a narrow list (the list sets its Tag to "Compact") the bed joins it, because the Bed column is hidden. -->
+        <Style x:Key="LineTwoFull" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="Compact">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="LineTwoCompact" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="Compact">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Page.Resources>
     <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Auto" Background="Transparent">
-    <Border Padding="32,24" MinWidth="980" MinHeight="640"
+    <Border Padding="32,24" MinWidth="640" MinHeight="640"
             Width="{Binding ViewportWidth, ElementName=PageScroll}"
             Height="{Binding ViewportHeight, ElementName=PageScroll}">
     <Grid>
@@ -30,8 +58,11 @@
         </UniformGrid>
 
         <ui:Card Grid.Row="2" Margin="0,0,0,16" Padding="12,10">
-            <StackPanel Orientation="Horizontal">
-                <ComboBox x:Name="FilterCombo" Width="170" Margin="0,0,12,0"
+            <WrapPanel>
+                <WrapPanel.Resources>
+                    <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+                </WrapPanel.Resources>
+                <ComboBox x:Name="FilterCombo" Width="170" Margin="0,2,12,2"
                           SelectionChanged="FilterCombo_SelectionChanged">
                     <ComboBoxItem Content="All tenants" IsSelected="True" />
                     <ComboBoxItem Content="Moving out" />
@@ -41,101 +72,72 @@
                     <ComboBoxItem Content="No stay yet" />
                     <ComboBoxItem Content="Has balance" />
                 </ComboBox>
-                <CheckBox x:Name="ShowArchivedCheck" Content="Show moved-out tenants" Margin="0,0,12,0"
+                <CheckBox x:Name="ShowArchivedCheck" Content="Show moved-out tenants" Margin="0,2,12,2"
                           VerticalAlignment="Center"
-                          ToolTip="Moved-out tenants who still owe money, or still have credit left, are always shown."
+                          ToolTip="Moved-out tenants who still owe money, or still have deposit left, are always shown."
                           Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
-                <ui:TextBox x:Name="SearchBox" Width="280"
+                <ui:TextBox x:Name="SearchBox" Width="280" Margin="0,2,16,2"
                             PlaceholderText="Search by name, contact, or bed"
                             TextChanged="SearchBox_TextChanged" />
-            </StackPanel>
+
+                <!-- For the selected tenant. Everything else (deposit, stay history, ...) is in the details window. -->
+                <ui:Button x:Name="ViewButton" Content="View details" Appearance="Primary" IsEnabled="False"
+                           Click="ViewDetails_Click" Margin="0,2,8,2"
+                           ToolTip="Opens everything about the selected tenant. Double-click a row to open it too." />
+                <ui:Button x:Name="AccountToolbarButton" Content="Tenant account" IsEnabled="False" Click="ViewAccount_Click" Margin="0,2,8,2"
+                           ToolTip="Everything this tenant owes and has paid." />
+                <ui:Button x:Name="EditTenantButton" Content="Edit tenant" IsEnabled="False" Click="EditTenant_Click" Margin="0,2,8,2" />
+                <ui:Button x:Name="MoveInToolbarButton" Content="Move in" IsEnabled="False" Click="MoveIn_Click" Margin="0,2,8,2" />
+                <ui:Button x:Name="MoveOutToolbarButton" Content="Move out" IsEnabled="False" Click="MoveOut_Click" Margin="0,2,0,2" />
+            </WrapPanel>
         </ui:Card>
 
         <Grid Grid.Row="3">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="20" />
-                <ColumnDefinition Width="394" />
-            </Grid.ColumnDefinitions>
-
             <DataGrid x:Name="TenantGrid" AutoGenerateColumns="False" IsReadOnly="True"
                       CanUserAddRows="False" SelectionMode="Single"
+                      RowHeight="NaN" CellStyle="{StaticResource TallCell}"
+                      SizeChanged="TenantGrid_SizeChanged"
+                      MouseDoubleClick="TenantGrid_MouseDoubleClick"
                       SelectionChanged="TenantGrid_SelectionChanged">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Name" Binding="{Binding NameText}" SortMemberPath="FullName" Width="*" />
-                    <DataGridTextColumn Header="Gender" Binding="{Binding GenderText}" Width="80" />
-                    <DataGridTextColumn Header="Contact" Binding="{Binding Contact}" Width="130" />
-                    <DataGridTextColumn Header="Current bed" Binding="{Binding CurrentBed}" Width="150" />
-                    <DataGridTextColumn Header="Move-in" Binding="{Binding MoveInText}" Width="110" />
-                    <DataGridTextColumn Header="Balance" Binding="{Binding Balance, StringFormat='₱{0:N2}'}"
-                                        ElementStyle="{StaticResource RightCell}" Width="110" />
-                    <DataGridTemplateColumn Header="Status" Width="115">
+                    <!-- Three columns with two lines each, using the whole page width, so nothing is cut off and nothing needs a
+                         side scroll bar: who / where they stay / what they owe. Everything else is in the details window. -->
+                    <DataGridTemplateColumn Header="Tenant" SortMemberPath="FullName" Width="2.2*" MinWidth="200">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <ContentPresenter Content="{Binding Status}"
-                                                  ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                                <StackPanel VerticalAlignment="Center" Margin="0,6">
+                                    <TextBlock Text="{Binding NameText}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding LineTwo}" Style="{StaticResource LineTwoFull}" />
+                                    <TextBlock Text="{Binding LineTwoCompact}" Style="{StaticResource LineTwoCompact}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn x:Name="BedColumn" Header="Bed" SortMemberPath="CurrentBed" Width="2*" MinWidth="190">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel VerticalAlignment="Center" Margin="0,6">
+                                    <TextBlock Text="{Binding BedText}" FontSize="14" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding BedLineTwo}" Style="{StaticResource MutedText}"
+                                               FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Balance" HeaderStyle="{StaticResource RightColumnHeaderStyle}" SortMemberPath="Balance" Width="1.2*" MinWidth="130">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding Balance, StringFormat='₱{0:N2}'}" FontWeight="SemiBold"
+                                               FontSize="15" HorizontalAlignment="Right" />
+                                    <ContentPresenter Content="{Binding Status}" HorizontalAlignment="Right" Margin="0,4,0,0"
+                                                      ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                                </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
-
-            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" Background="Transparent">
-            <!-- The right 14px is kept free for the scroll bar, so it never sits on top of the content. -->
-            <ui:Card VerticalAlignment="Top" Margin="0,0,14,0">
-                <Grid>
-                    <TextBlock x:Name="DetailEmpty" Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                               Text="Select a tenant to view their details, stay history and available actions." />
-
-                    <StackPanel x:Name="DetailBody" Visibility="Collapsed">
-                        <TextBlock x:Name="DetailName" Style="{StaticResource SectionTitle}" FontSize="18" />
-                        <ContentPresenter x:Name="DetailBadge" HorizontalAlignment="Left" Margin="0,6,0,12"
-                                          ContentTemplate="{StaticResource StatusBadgeTemplate}" />
-
-                        <StackPanel x:Name="InfoPanel" Margin="0,0,0,12" />
-
-                        <StackPanel Margin="0,0,0,8">
-                            <TextBlock Text="TENANT" Style="{StaticResource GroupLabel}" />
-                            <UniformGrid Columns="2" Margin="-3,0,-3,12">
-                                <UniformGrid.Resources>
-                                    <Style TargetType="ui:Button" BasedOn="{StaticResource ActionButton}" />
-                                </UniformGrid.Resources>
-                                <ui:Button x:Name="EditButton" Content="Edit tenant" Click="EditTenant_Click" />
-                                <ui:Button x:Name="HistoryButton" Content="Change history" Click="StayHistory_Click" />
-                            </UniformGrid>
-
-                            <TextBlock Text="STAY" Style="{StaticResource GroupLabel}" />
-                            <UniformGrid Columns="2" Margin="-3,0,-3,12">
-                                <UniformGrid.Resources>
-                                    <Style TargetType="ui:Button" BasedOn="{StaticResource ActionButton}" />
-                                </UniformGrid.Resources>
-                                <ui:Button x:Name="MoveInButton" Content="Move in" Appearance="Primary" Click="MoveIn_Click" />
-                                <ui:Button x:Name="MoveOutButton" Content="Move out" Click="MoveOut_Click" />
-                                <ui:Button x:Name="EditStayButton" Content="Edit stay" Click="EditStay_Click" />
-                            </UniformGrid>
-
-                            <TextBlock Text="CREDIT" Style="{StaticResource GroupLabel}" />
-                            <UniformGrid Columns="2" Margin="-3,0,-3,0">
-                                <UniformGrid.Resources>
-                                    <Style TargetType="ui:Button" BasedOn="{StaticResource ActionButton}" />
-                                </UniformGrid.Resources>
-                                <ui:Button x:Name="ApplyDepositButton" Content="Apply credit" Click="ApplyDeposit_Click" />
-                                <ui:Button x:Name="RefundDepositButton" Content="Refund credit" Click="RefundDeposit_Click" />
-                                <ui:Button x:Name="EditCreditButton" Content="Edit credit" Click="EditCredit_Click" />
-                                <ui:Button x:Name="UndoRefundButton" Content="Undo refund" Click="UndoRefund_Click" />
-                            </UniformGrid>
-                        </StackPanel>
-
-                        <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="0,12,0,0">
-                            <StackPanel>
-                                <TextBlock Text="Stay history" Style="{StaticResource SectionTitle}" Margin="0,0,0,8" />
-                                <StackPanel x:Name="HistoryPanel" />
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </Grid>
-            </ui:Card>
-            </ScrollViewer>
         </Grid>
     </Grid>
     </Border>

@@ -1,0 +1,33 @@
+﻿<Window x:Class="Nexabode.Views.MessageDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="Nexabode" Width="460" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        KeyDown="Window_KeyDown">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="24,24,24,22">
+            <TextBlock x:Name="HeadingText" Style="{StaticResource SectionTitle}" FontSize="18"
+                       Margin="0,0,0,10" Visibility="Collapsed" />
+
+            <!-- A long message scrolls instead of making the window taller than the screen -->
+            <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
+                <TextBlock x:Name="MessageText" TextWrapping="Wrap" Foreground="{DynamicResource AppTextBrush}" />
+            </ScrollViewer>
+        </StackPanel>
+
+        <!-- The same command area as the confirmation window, so every message looks like part of Nexabode. -->
+        <Border Grid.Row="1" Background="{DynamicResource AppBackgroundBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="24,14">
+            <ui:Button Content="OK" Appearance="Primary" IsDefault="True" MinWidth="120" MinHeight="34"
+                       HorizontalAlignment="Right" HorizontalContentAlignment="Center" Click="Ok_Click" />
+        </Border>
+    </Grid>
+</Window>

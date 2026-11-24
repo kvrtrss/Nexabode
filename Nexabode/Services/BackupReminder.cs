@@ -23,7 +23,7 @@ public static class BackupReminder
     }
 
     public static int? DaysSinceBackup() =>
-        LastBackupTime() is DateTime last ? (int?)Math.Max(0, (DateTime.Today - last.Date).Days) : null;
+        LastBackupTime() is DateTime last ? (int?)Math.Max(0, (Clock.Today - last.Date).Days) : null;
 
     // True when there has never been a backup, or the last one is 7 or more days old.
     public static bool IsDue => DaysSinceBackup() is not int days || days >= DaysBeforeReminder;

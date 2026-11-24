@@ -3,10 +3,19 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
+      xmlns:svc="clr-namespace:Nexabode.Services"
       Title="Billing Charges">
+    <Page.Resources>
+        <svc:SubtractConverter x:Key="Minus" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <!-- Rows keep a steady height: two lines (a name, then a detail line). -->
+        <Style x:Key="TallCell" TargetType="DataGridCell" BasedOn="{StaticResource AppCellStyle}">
+            <Setter Property="MinHeight" Value="58" />
+        </Style>
+    </Page.Resources>
     <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Auto" Background="Transparent">
-    <Border Padding="32,24" MinWidth="900" MinHeight="640"
+    <Border Padding="32,24" MinWidth="640" MinHeight="640"
             Width="{Binding ViewportWidth, ElementName=PageScroll}"
             Height="{Binding ViewportHeight, ElementName=PageScroll}">
     <Grid>
@@ -22,122 +31,244 @@
         <controls:PageHeader Title="Billing Charges"
                              Subtitle="Every charge, who has paid it, and what is still owed." />
 
-        <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,16">
-            <controls:StatCard x:Name="BilledCard" Label="Billed" Margin="0,0,12,0" />
-            <controls:StatCard x:Name="PaidCard" Label="Paid" Margin="0,0,12,0" />
-            <controls:StatCard x:Name="BalanceCard" Label="Balance" Margin="0,0,12,0" />
-            <controls:StatCard x:Name="OverdueCard" Label="Overdue" />
+        <UniformGrid x:Name="StatsGrid" Grid.Row="1" Columns="4" Margin="0,0,0,12">
+            <!-- Click a card to show only those charges; click it again to show everything. -->
+            <controls:StatCard x:Name="BilledCard" Label="Billed" ValueSize="22" Margin="0,0,12,0" Cursor="Hand"
+                               ToolTip="Show all statuses" MouseLeftButtonUp="BilledCard_Click" />
+            <controls:StatCard x:Name="PaidCard" Label="Paid" ValueSize="22" Margin="0,0,12,0" Cursor="Hand"
+                               ToolTip="Show only fully paid charges. Click again to show all." MouseLeftButtonUp="PaidCard_Click" />
+            <controls:StatCard x:Name="BalanceCard" Label="Balance" ValueSize="22" Margin="0,0,12,0" Cursor="Hand"
+                               ToolTip="Show only charges that are not fully paid. Click again to show all." MouseLeftButtonUp="BalanceCard_Click" />
+            <controls:StatCard x:Name="OverdueCard" Label="Overdue" ValueSize="22" Cursor="Hand"
+                               ToolTip="Show only overdue charges. Click again to show all." MouseLeftButtonUp="OverdueCard_Click" />
         </UniformGrid>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock Text="Month" VerticalAlignment="Center" Margin="0,0,8,0"
-                       Style="{StaticResource MutedText}" />
-            <ComboBox x:Name="MonthCombo" Width="190" DisplayMemberPath="Display" Margin="0,0,20,0"
+        <!-- Filters: one row. -->
+        <WrapPanel Grid.Row="2" Margin="0,0,0,6">
+            <TextBlock Text="Month" VerticalAlignment="Center" Margin="0,0,8,8" Style="{StaticResource MutedText}" />
+            <ui:Button x:Name="PrevMonthButton" Content="‹" Width="34" Padding="0,5" Margin="0,0,4,8"
+                       ToolTip="Previous month" AutomationProperties.Name="Previous month" Click="PrevMonth_Click" />
+            <ComboBox x:Name="MonthCombo" Width="180" DisplayMemberPath="Display" Margin="0,0,4,8"
                       SelectionChanged="MonthCombo_SelectionChanged" />
-            <CheckBox x:Name="ShowVoidedCheck" Content="Show voided"
+            <ui:Button x:Name="NextMonthButton" Content="›" Width="34" Padding="0,5" Margin="0,0,12,8"
+                       ToolTip="Next month" AutomationProperties.Name="Next month" Click="NextMonth_Click" />
+            <ComboBox x:Name="ItemFilter" Width="140" Margin="0,0,8,8" SelectionChanged="Filter_Changed" />
+            <ComboBox x:Name="StatusFilter" Width="150" Margin="0,0,8,8" SelectionChanged="Filter_Changed">
+                <ComboBoxItem Content="All statuses" IsSelected="True" />
+                <ComboBoxItem Content="Not fully paid" />
+                <ComboBoxItem Content="Fully paid" />
+                <ComboBoxItem Content="Overdue" />
+                <ComboBoxItem Content="Refunded" />
+            </ComboBox>
+            <ui:TextBox x:Name="SearchBox" Width="200" Margin="0,0,8,8"
+                        PlaceholderText="Search by tenant" TextChanged="SearchBox_TextChanged" />
+            <ui:Button x:Name="ClearFiltersButton" Content="Clear filters" Appearance="Transparent" Padding="10,5" Margin="0,0,8,8"
+                       Visibility="Collapsed" Click="ClearFilters_Click" ToolTip="Show every charge again" />
+            <CheckBox x:Name="ShowVoidedCheck" Content="Show voided" Margin="0,0,12,8" VerticalAlignment="Center"
                       Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
-            <CheckBox x:Name="ShowArchivedCheck" Content="Show archived" Margin="16,0,0,0"
-          Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
-        </StackPanel>
+            <CheckBox x:Name="ShowArchivedCheck" Content="Show archived" Margin="0,0,0,8" VerticalAlignment="Center"
+                      Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
+        </WrapPanel>
 
-        <StackPanel Grid.Row="3" Margin="0,0,0,6">
-            <!-- Filters -->
-            <WrapPanel>
-                <ComboBox x:Name="ItemFilter" Width="150" Margin="0,0,8,8"
-                          SelectionChanged="Filter_Changed" />
-                <ComboBox x:Name="StatusFilter" Width="160" Margin="0,0,8,8"
-                          SelectionChanged="Filter_Changed">
-                    <ComboBoxItem Content="All statuses" IsSelected="True" />
-                    <ComboBoxItem Content="Not fully paid" />
-                    <ComboBoxItem Content="Fully paid" />
-                    <ComboBoxItem Content="Overdue" />
-                    <ComboBoxItem Content="Refunded" />
-                </ComboBox>
-                <ui:TextBox x:Name="SearchBox" Width="220" Margin="0,0,0,8"
-                            PlaceholderText="Search by tenant" TextChanged="SearchBox_TextChanged" />
-            </WrapPanel>
-
-            <!-- Actions: change a charge | tidy up -->
-            <WrapPanel>
-                <WrapPanel.Resources>
+        <!-- Actions for the selected charge. Void, archive and the rarely used actions are under More.
+             Opening a tenant's account: the button on the tenant's heading, or double-click a charge. -->
+        <WrapPanel Grid.Row="3" Margin="0,0,0,10">
+            <WrapPanel.Resources>
                 <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
             </WrapPanel.Resources>
-                <ui:Button x:Name="EditButton" Content="Edit charge" Click="EditCharge_Click" IsEnabled="False" />
-                <ui:Button x:Name="VoidButton" Content="Void charge" Click="VoidCharge_Click" IsEnabled="False"
-                           Style="{StaticResource DangerToolbarButton}" />
-                <Border Style="{StaticResource ToolbarDivider}" />
-                <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click" IsEnabled="False" />
-                <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
-                <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled" Click="ArchiveSettled_Click" />
-            </WrapPanel>
-        </StackPanel>
+            <ui:Button x:Name="EditButton" Content="Edit charge" Click="EditCharge_Click" IsEnabled="False" />
+            <ui:Button x:Name="MoreButton" Content="More" Click="More_Click"
+                       ToolTip="Void a charge, or archive and unarchive charges you no longer need in the list.">
+                <ui:Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem x:Name="ArchiveButton" Header="Archive" Click="Archive_Click" IsEnabled="False" />
+                        <MenuItem x:Name="UnarchiveButton" Header="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
+                        <MenuItem x:Name="ArchiveSettledButton" Header="Archive all settled" Click="ArchiveSettled_Click" />
+                        <Separator />
+                        <MenuItem x:Name="VoidButton" Header="Void charge" Click="VoidCharge_Click" IsEnabled="False"
+                                  Foreground="{DynamicResource DangerBrush}" />
+                    </ContextMenu>
+                </ui:Button.ContextMenu>
+            </ui:Button>
+            <ui:Button x:Name="ExpandAllButton" Content="Expand all" Appearance="Transparent" Margin="16,0,0,8"
+                       Click="ExpandAll_Click" ToolTip="Open every tenant's charges" />
+            <ui:Button x:Name="CollapseAllButton" Content="Collapse all" Appearance="Transparent" Margin="0,0,8,8"
+                       Click="CollapseAll_Click" ToolTip="Close every tenant's charges" />
+        </WrapPanel>
 
+        <!-- Shown on top of the empty table, so a blank area explains itself and says what to do. -->
+        <TextBlock x:Name="EmptyText" Grid.Row="4" Panel.ZIndex="1" Style="{StaticResource MutedText}"
+                   Text="Nothing to show for this month and these filters. Generate rent in Rent Billing, or add a utility bill, and the charges will appear here."
+                   HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                   TextWrapping="Wrap" MaxWidth="380" IsHitTestVisible="False" Visibility="Collapsed" />
         <DataGrid x:Name="ChargeGrid" Grid.Row="4" AutoGenerateColumns="False"
                   IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended"
+                  RowHeight="NaN" CellStyle="{StaticResource TallCell}"
+                  RowDetailsVisibilityMode="VisibleWhenSelected"
+                  MouseDoubleClick="ChargeGrid_MouseDoubleClick"
                   SelectionChanged="ChargeGrid_SelectionChanged">
+            <!-- The charges of one tenant are together under that tenant's name, with what they owe on the name line.
+                 The tenant's name is no longer repeated on every row. -->
+            <DataGrid.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.ContainerStyle>
+                        <Style TargetType="GroupItem">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="GroupItem">
+                                        <StackPanel>
+                                            <!-- The heading looks like any other row of the app's tables: no fill, a thin line under it,
+                                                 the same tint when the pointer is over it. The whole row opens and closes the group. -->
+                                            <Border HorizontalAlignment="Left" MinHeight="52"
+                                                    Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ScrollContentPresenter}, FallbackValue=700}"
+                                                    BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="Transparent" />
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource NeutralSoftBrush}" />
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <ToggleButton x:Name="HeaderToggle" Grid.Column="0" Grid.ColumnSpan="2" Cursor="Hand"
+                                                                  IsChecked="{Binding Name.IsExpanded, Mode=TwoWay}" Unchecked="GroupToggle_Unchecked"
+                                                                  ToolTip="Click to show or hide the charges">
+                                                        <ToggleButton.Template>
+                                                            <ControlTemplate TargetType="ToggleButton">
+                                                                <Border Background="Transparent" Padding="12,0,190,0">
+                                                                    <ContentPresenter VerticalAlignment="Center" />
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </ToggleButton.Template>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <!-- Arrow: points right when closed, down when open. -->
+                                                            <Path Data="M 0,0 L 5,5 L 10,0" Width="10" Height="6" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                                  Stroke="{DynamicResource AppSecondaryBrush}" StrokeThickness="1.8"
+                                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                                                  RenderTransformOrigin="0.5,0.5">
+                                                                <Path.Style>
+                                                                    <Style TargetType="Path">
+                                                                        <Setter Property="RenderTransform">
+                                                                            <Setter.Value><RotateTransform Angle="-90" /></Setter.Value>
+                                                                        </Setter>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Value="True">
+                                                                                <Setter Property="RenderTransform">
+                                                                                    <Setter.Value><RotateTransform Angle="0" /></Setter.Value>
+                                                                                </Setter>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Path.Style>
+                                                            </Path>
+                                                            <TextBlock Grid.Column="1" Text="{Binding Name.Name}" FontWeight="SemiBold" FontSize="15"
+                                                                       VerticalAlignment="Center" Margin="0,0,16,0" />
+                                                            <TextBlock Grid.Column="2" Text="{Binding Name.Summary}" Style="{StaticResource MutedText}"
+                                                                       FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                        </Grid>
+                                                    </ToggleButton>
+                                                <!-- On top of the clickable heading: a click here opens the account, a click anywhere else on the row opens or closes the charges. -->
+                                                <Button Grid.Column="1" Content="Tenant account" Style="{StaticResource AccountLinkButton}" Margin="8,0,12,0"
+                                                        VerticalAlignment="Center" Tag="{Binding Name.Id}" Click="GroupAccount_Click"
+                                                        ToolTip="Open everything this tenant owes and has paid." />
+                                                </Grid>
+                                            </Border>
+                                            <ItemsPresenter Visibility="{Binding IsChecked, ElementName=HeaderToggle, Converter={StaticResource BoolToVis}}" />
+                                        </StackPanel>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </GroupStyle.ContainerStyle>
+                </GroupStyle>
+            </DataGrid.GroupStyle>
+
+            <!-- Select a charge and its details open under it: what was paid, when and how.
+                 Nothing takes room on the page while no charge is selected. -->
+            <DataGrid.RowDetailsTemplate>
+                <DataTemplate>
+                    <StackPanel Margin="14,0,14,12"
+                                Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=DataGrid}, Converter={StaticResource Minus}, ConverterParameter=90}">
+                        <TextBlock Text="{Binding DetailsMain}" Style="{StaticResource MutedText}" FontSize="13" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding PaymentsText}" Style="{StaticResource MutedText}" FontSize="13"
+                                   TextWrapping="Wrap" Margin="0,6,0,0" />
+                    </StackPanel>
+                </DataTemplate>
+            </DataGrid.RowDetailsTemplate>
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Tenant" Binding="{Binding Tenant}" Width="*" />
-                <DataGridTextColumn Header="Item" Binding="{Binding Item}" Width="95" />
-                <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="140" />
-                <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat='₱{0:N2}'}"
-                                    ElementStyle="{StaticResource RightCell}" Width="105" />
-                <DataGridTextColumn Header="Paid" Binding="{Binding Paid, StringFormat='₱{0:N2}'}"
-                                    ElementStyle="{StaticResource RightCell}" Width="105" />
-                <DataGridTextColumn Header="Balance" Binding="{Binding Balance, StringFormat='₱{0:N2}'}"
-                                    ElementStyle="{StaticResource RightCell}" Width="105" />
-                <DataGridTextColumn Header="Due" Binding="{Binding DueText}" Width="100" />
-                <DataGridTextColumn Header="Paid on" Binding="{Binding LastPaidText}" Width="100" />
-                <DataGridTemplateColumn Header="Status" Width="100">
+                <!-- Three columns with two lines each: the charge / the amount and what is left / the due date and status. -->
+                <DataGridTemplateColumn Header="Charge" SortMemberPath="Item" Width="*" MinWidth="200">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <ContentPresenter Content="{Binding Status}"
-                                              ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                            <StackPanel VerticalAlignment="Center" Margin="0,6">
+                                <TextBlock Text="{Binding ChargeText}" FontSize="15" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding LineTwoGrouped}" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0">
+                                    <TextBlock.Style>
+                                        <!-- Nothing to say (no payment, no note): the line is left out instead of repeating "No payment yet". -->
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                                            <Style.Triggers>
+                                                <Trigger Property="Text" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Archived" Binding="{Binding ArchivedText}" Width="80" />
-                <DataGridTextColumn Header="Note" Binding="{Binding NoteText}" Width="140" />
+                <DataGridTemplateColumn Header="Amount" HeaderStyle="{StaticResource RightColumnHeaderStyle}" SortMemberPath="Amount" Width="150">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Right">
+                                <TextBlock Text="{Binding Amount, StringFormat='₱{0:N2}'}" FontWeight="SemiBold"
+                                           FontSize="15" HorizontalAlignment="Right" />
+                                <TextBlock Text="{Binding BalanceLine}" Style="{StaticResource MutedText}" FontSize="13"
+                                           HorizontalAlignment="Right" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Due" HeaderStyle="{StaticResource RightColumnHeaderStyle}" SortMemberPath="DueDate" Width="210">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Right">
+                                <TextBlock Text="{Binding DueText}" FontSize="14" HorizontalAlignment="Right" />
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding LateText}" FontSize="12" Margin="0,0,8,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource DangerBrush}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <Trigger Property="Text" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <ContentPresenter Content="{Binding Status}" HorizontalAlignment="Right"
+                                                      ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
-
-        <ui:Card Grid.Row="5" Margin="0,12,0,0">
-            <ScrollViewer MaxHeight="230" VerticalScrollBarVisibility="Auto">
-                <Grid Margin="0,0,14,0">
-                    <TextBlock x:Name="DetailEmpty" Style="{StaticResource MutedText}"
-                               Text="Select a charge to see who paid it, when and how." />
-
-                    <Grid x:Name="DetailBody" Visibility="Collapsed">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="28" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="28" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0">
-                            <TextBlock x:Name="DetailTitle" Style="{StaticResource SectionTitle}" />
-                            <TextBlock x:Name="DetailSub" Style="{StaticResource MutedText}" Margin="0,2,0,6" />
-                            <ContentPresenter x:Name="DetailBadge" HorizontalAlignment="Left" Margin="0,0,0,8"
-                                              ContentTemplate="{StaticResource StatusBadgeTemplate}" />
-                            <StackPanel x:Name="InfoPanel" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="Payments on this charge" Style="{StaticResource SectionTitle}"
-                                       Margin="0,0,0,8" />
-                            <StackPanel x:Name="PaymentList" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="4">
-                            <TextBlock x:Name="SummaryTitle" Style="{StaticResource SectionTitle}"
-                                       Margin="0,0,0,8" />
-                            <StackPanel x:Name="SummaryPanel" />
-                        </StackPanel>
-                    </Grid>
-                </Grid>
-            </ScrollViewer>
-        </ui:Card>
     </Grid>
     </Border>
     </ScrollViewer>

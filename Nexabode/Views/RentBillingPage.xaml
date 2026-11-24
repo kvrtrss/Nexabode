@@ -4,9 +4,15 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
       Title="Rent Billing">
+    <Page.Resources>
+        <!-- Rows keep a steady height: two lines (a name, then a detail line). -->
+        <Style x:Key="TallCell" TargetType="DataGridCell" BasedOn="{StaticResource AppCellStyle}">
+            <Setter Property="MinHeight" Value="58" />
+        </Style>
+    </Page.Resources>
     <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Auto" Background="Transparent">
-    <Border Padding="32,24" MinWidth="900" MinHeight="660"
+    <Border Padding="32,24" MinWidth="640" MinHeight="660"
             Width="{Binding ViewportWidth, ElementName=PageScroll}"
             Height="{Binding ViewportHeight, ElementName=PageScroll}">
     <Grid>
@@ -19,7 +25,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <controls:PageHeader Title="Rent Billing"
+        <controls:PageHeader x:Name="PageHeaderControl" Title="Rent Billing"
                              Subtitle="Generate and manage monthly rent charges."
                              ActionText="Generate rent"
                              ActionClick="GenerateAll_Click" />
@@ -37,13 +43,10 @@
                    Style="{StaticResource MutedText}" />
                 <ComboBox x:Name="MonthCombo" Width="190" DisplayMemberPath="Display" Margin="0,0,20,8"
                   SelectionChanged="MonthCombo_SelectionChanged" />
-                <TextBlock Text="Rent due date" VerticalAlignment="Center" Margin="0,0,8,8"
-                   Style="{StaticResource MutedText}" />
-                <DatePicker x:Name="RentDuePicker" Width="170" Margin="0,0,20,8" />
-                <CheckBox x:Name="FullRentCheck" Content="Charge full rent for partial months"
-                  VerticalAlignment="Center" Margin="0,0,20,8"
-                  ToolTip="By default, a stay that does not cover the whole month is charged by the number of days. Tick this to charge the full monthly rent instead."
-                  Checked="FullRent_Changed" Unchecked="FullRent_Changed" />
+                <ui:TextBox x:Name="SearchBox" Width="280" Margin="0,0,20,8"
+                            PlaceholderText="Search tenant, bed, or status"
+                            AutomationProperties.Name="Search rent charges"
+                            TextChanged="SearchBox_TextChanged" />
                 <CheckBox x:Name="ShowVoidedCheck" Content="Show voided"
                   VerticalAlignment="Center" Margin="0,0,20,8"
                   Checked="ShowVoided_Changed" Unchecked="ShowVoided_Changed" />
@@ -54,37 +57,72 @@
 
             <WrapPanel Orientation="Horizontal">
                 <WrapPanel.Resources>
-                <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
-            </WrapPanel.Resources>
-                <ui:Button x:Name="GenerateSelectedButton" Content="Generate for selected tenant"
-                           IsEnabled="False" Click="GenerateSelected_Click" />
+                    <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+                </WrapPanel.Resources>
                 <ui:Button x:Name="EditRentButton" Content="Edit rent" Click="EditRent_Click" IsEnabled="False"
                            ToolTip="Change the details or due date of a generated rent charge. The amount can be changed only while no payment has been applied." />
-                <ui:Button x:Name="RestoreRentButton" Content="Restore charge" Click="RestoreRent_Click" IsEnabled="False"
-                           ToolTip="Bring back a voided rent charge, updated to the stay as it is now. Tick Show voided to see voided charges." />
-                <Border Style="{StaticResource ToolbarDivider}" />
-                <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click" IsEnabled="False" />
-                <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
-                <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled" Click="ArchiveSettled_Click" />
+                <ui:Button x:Name="MoreButton" Content="More" Click="More_Click"
+                           ToolTip="Restore a voided charge, or archive and unarchive settled rent.">
+                    <ui:Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem x:Name="RestoreRentButton" Header="Restore charge" Click="RestoreRent_Click" IsEnabled="False"
+                                      ToolTip="Bring back a voided rent charge, updated to the stay as it is now. Tick Show voided to see voided charges." />
+                            <Separator />
+                            <MenuItem x:Name="ArchiveButton" Header="Archive" Click="Archive_Click" IsEnabled="False" />
+                            <MenuItem x:Name="UnarchiveButton" Header="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
+                            <MenuItem x:Name="ArchiveSettledButton" Header="Archive all settled" Click="ArchiveSettled_Click" />
+                        </ContextMenu>
+                    </ui:Button.ContextMenu>
+                </ui:Button>
             </WrapPanel>
+
+            <TextBlock x:Name="DueInfoText" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,8,0,0" />
         </StackPanel>
 
         <TextBlock Grid.Row="3" Text="Rent charges" Style="{StaticResource SectionTitle}" Margin="0,0,0,8" />
 
+        <!-- Shown on top of the empty table, so a blank area explains itself and says what to do. -->
+        <TextBlock x:Name="EmptyText" Grid.Row="4" Panel.ZIndex="1" Style="{StaticResource MutedText}"
+                   Text="No tenants stayed in this month, so there is no rent to show. Choose another month, or move a tenant in from the Tenants page."
+                   HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                   TextWrapping="Wrap" MaxWidth="380" IsHitTestVisible="False" Visibility="Collapsed" />
         <DataGrid x:Name="RentGrid" Grid.Row="4" AutoGenerateColumns="False"
                   IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended"
+                  RowHeight="NaN" CellStyle="{StaticResource TallCell}"
                   SelectionChanged="RentGrid_SelectionChanged">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Tenant" Binding="{Binding Tenant}" Width="*" />
-                <DataGridTextColumn Header="Bed" Binding="{Binding Bed}" Width="170" />
-                <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="190" />
-                <DataGridTextColumn Header="Rent" Binding="{Binding Amount, StringFormat='₱{0:N2}'}"
-                                    ElementStyle="{StaticResource RightCell}" Width="120" />
-                <DataGridTemplateColumn Header="Status" Width="140">
+                <!-- Three columns with two lines each: who and where / rent and what is left / due date and status. -->
+                <DataGridTemplateColumn Header="Tenant" SortMemberPath="Tenant" Width="*" MinWidth="200">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <ContentPresenter Content="{Binding Status}"
-                                              ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                            <StackPanel VerticalAlignment="Center" Margin="0,6">
+                                <TextBlock Text="{Binding Tenant}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding LineTwo}" Style="{StaticResource MutedText}" FontSize="13"
+                                           TextWrapping="Wrap" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Rent" HeaderStyle="{StaticResource RightColumnHeaderStyle}" SortMemberPath="Amount" Width="150">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Right">
+                                <TextBlock Text="{Binding Amount, StringFormat='₱{0:N2}'}" FontWeight="SemiBold"
+                                           FontSize="15" HorizontalAlignment="Right" />
+                                <TextBlock Text="{Binding BalanceLine}" Style="{StaticResource MutedText}" FontSize="13"
+                                           HorizontalAlignment="Right" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Due" HeaderStyle="{StaticResource RightColumnHeaderStyle}" SortMemberPath="DueDate" Width="160">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Right">
+                                <TextBlock Text="{Binding DueText}" FontSize="14" HorizontalAlignment="Right" />
+                                <ContentPresenter Content="{Binding Status}" HorizontalAlignment="Right" Margin="0,4,0,0"
+                                                  ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                            </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -92,7 +130,7 @@
         </DataGrid>
 
         <TextBlock Grid.Row="5" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,10,0,0"
-                   Text="A voided rent charge counts as already generated and is not created again. To bring one back, tick Show voided, select it and use Restore charge. To void a charge or see who has paid, open Billing Charges." />
+                   Text="Voided rent counts as already generated and is not created again. To bring one back, tick Show voided, select it and choose More, then Restore charge. To void a charge, open Billing Charges." />
     </Grid>
     </Border>
     </ScrollViewer>

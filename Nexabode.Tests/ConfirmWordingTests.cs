@@ -1,4 +1,4 @@
-using Nexabode.Services;
+﻿using Nexabode.Services;
 using Xunit;
 
 public class ConfirmWordingTests
@@ -62,27 +62,27 @@ public class ConfirmWordingTests
     }
 
     [Fact]
-    public void ApplyingCredit_ShowsTheCreditAndTheBalanceBeforeAndAfter()
+    public void ApplyingDeposit_ShowsTheDepositAndTheBalanceBeforeAndAfter()
     {
-        var text = ConfirmWording.ApplyCredit("Joseph", 500m, 1000m, 1500m);
-        Assert.StartsWith("Use \u20B1500.00 of Joseph's credit", text);
-        Assert.Contains("Credit: \u20B11,000.00 to \u20B1500.00", text);
+        var text = ConfirmWording.ApplyDeposit("Joseph", 500m, 1000m, 1500m);
+        Assert.StartsWith("Use \u20B1500.00 of Joseph's deposit", text);
+        Assert.Contains("Deposit: \u20B11,000.00 to \u20B1500.00", text);
         Assert.Contains("Unpaid balance: \u20B11,500.00 to \u20B11,000.00", text);
         Assert.Contains("oldest unpaid charges first", text);
     }
 
     [Fact]
-    public void RefundingAndUndoingARefund_MoveTheCreditInOppositeDirections()
+    public void RefundingAndUndoingARefund_MoveTheDepositInOppositeDirections()
     {
-        Assert.Contains("Credit: \u20B11,000.00 to \u20B1700.00", ConfirmWording.RefundCredit("Joseph", 300m, 1000m));
-        Assert.Contains("use Undo refund", ConfirmWording.RefundCredit("Joseph", 300m, 1000m));
-        Assert.Contains("Credit: \u20B1700.00 to \u20B11,000.00", ConfirmWording.UndoRefund("Joseph", 300m, 700m));
+        Assert.Contains("Deposit: \u20B11,000.00 to \u20B1700.00", ConfirmWording.RefundDeposit("Joseph", 300m, 1000m));
+        Assert.Contains("use Undo refund", ConfirmWording.RefundDeposit("Joseph", 300m, 1000m));
+        Assert.Contains("Deposit: \u20B1700.00 to \u20B11,000.00", ConfirmWording.UndoRefund("Joseph", 300m, 700m));
     }
 
     [Fact]
-    public void EditingCredit_ShowsTheChangeAndTheReason()
+    public void EditingDeposit_ShowsTheChangeAndTheReason()
     {
-        var text = ConfirmWording.EditCredit("Joseph", 1500m, 1000m, " Entered twice ");
+        var text = ConfirmWording.EditDeposit("Joseph", 1500m, 1000m, " Entered twice ");
         Assert.Contains("from \u20B11,500.00 to \u20B11,000.00", text);
         Assert.Contains("Reason: Entered twice", text);
         Assert.Contains("change history", text);

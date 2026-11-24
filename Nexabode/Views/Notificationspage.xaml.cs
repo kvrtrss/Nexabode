@@ -39,8 +39,6 @@ public partial class NotificationsPage : Page
 
     private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
 
-    private static void Tell(string message) =>
-        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
     private int LeadDays =>
         (LeadCombo.SelectedItem as ComboBoxItem)?.Tag is int days ? days : NotificationService.DefaultLeadDays;
@@ -55,22 +53,26 @@ public partial class NotificationsPage : Page
 
         List<Notice> notices;
         List<Reminder> reminders;
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
         {
             notices = NotificationService.Build(db, today, LeadDays);
             reminders = NotificationService.OpenReminders(db);
         }
 
-        _notices = notices;
+        // Real alerts drive the bell. Optional tips are listed separately and never counted.
+        var alerts = notices.Where(n => !n.IsTip).ToList();
+        var tips = notices.Where(n => n.IsTip).ToList();
+
+        _notices = alerts;
         var read = NotificationService.ReadKeys();
-        var unread = notices.Count(n => !read.Contains(n.Key));
+        var unread = alerts.Count(n => !read.Contains(n.Key));
 
         NoticeList.Children.Clear();
-        NoticeTitle.Text = notices.Count == 0 ? "Needs your attention"
-            : unread == 0 ? $"Needs your attention ({notices.Count}, all read)"
-            : $"Needs your attention ({notices.Count}, {unread} new)";
+        NoticeTitle.Text = alerts.Count == 0 ? "Needs your attention"
+            : "Needs your attention: " + Fmt.Count(alerts.Count, "item")
+              + (unread == 0 ? ", all read" : unread == alerts.Count ? "" : $", {unread} new");
 
-        if (notices.Count == 0)
+        if (alerts.Count == 0)
         {
             NoticeList.Children.Add(new TextBlock
             {
@@ -79,7 +81,7 @@ public partial class NotificationsPage : Page
                 Margin = new Thickness(0, 0, 0, 8)
             });
         }
-        foreach (var n in notices)
+        foreach (var n in alerts)
             NoticeList.Children.Add(MakeNoticeRow(n, read.Contains(n.Key)));
 
         ReminderList.Children.Clear();
@@ -95,8 +97,25 @@ public partial class NotificationsPage : Page
         foreach (var r in reminders)
             ReminderList.Children.Add(MakeReminderRow(r, today));
 
+        TipList.Children.Clear();
+        TipTitle.Visibility = tips.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var tip in tips)
+            TipList.Children.Add(MakeNoticeRow(tip, false));
+
         (Window.GetWindow(this) as MainWindow)?.RefreshNotifications();
     }
+
+    // What the Open button says, so it is clear where it leads.
+    public static string OpenLabel(Notice n) => n.OpenLabel != "" ? n.OpenLabel : n.Target switch
+    {
+        NoticeTarget.Tenants => "View tenants",
+        NoticeTarget.RentBilling => "Open Rent Billing",
+        NoticeTarget.UtilityBills => "Open Utility Bills",
+        NoticeTarget.BillingCharges => "View charges",
+        NoticeTarget.Payments => "Open Payments",
+        NoticeTarget.Settings => "Open Settings",
+        _ => "Open"
+    };
 
     // ---------- Rows ----------
 
@@ -133,7 +152,7 @@ public partial class NotificationsPage : Page
         text.Children.Add(new TextBlock
         {
             Text = category,
-            FontSize = 11,
+            FontSize = 12,
             FontWeight = FontWeights.SemiBold,
             Foreground = Res(tone + "Brush")
         });
@@ -186,8 +205,11 @@ public partial class NotificationsPage : Page
         }
         else if (PageFor(n.Target) is Type page)
         {
-            buttons.Add(MakeButton("Open", (_, _) => (Window.GetWindow(this) as MainWindow)?.NavigateTo(page)));
+            buttons.Add(MakeButton(OpenLabel(n), (_, _) => (Window.GetWindow(this) as MainWindow)?.NavigateTo(page)));
         }
+
+        if (n.Dismiss is { } dismiss)
+            buttons.Add(MakeButton("Hide tip", (_, _) => { dismiss(); LoadAll(); }));
 
         return MakeRow(n.Tone, n.Category, n.Title, n.Detail, isRead, buttons.ToArray());
     }
@@ -200,7 +222,7 @@ public partial class NotificationsPage : Page
             : $"Due {Fmt.Date(r.DueDate)}";
         var detail = string.IsNullOrWhiteSpace(r.Note) ? when : $"{when}. {r.Note!.Trim()}";
 
-        return MakeRow(tone, "REMINDER", r.Title, detail, false,
+        return MakeRow(tone, "Reminder", r.Title, detail, false,
             MakeButton("Done", (_, _) => MarkDone(r.Id)),
             MakeButton("Delete", (_, _) => DeleteReminder(r.Id, r.Title)));
     }
@@ -216,7 +238,7 @@ public partial class NotificationsPage : Page
             {
                 ("What should Nexabode remind you about?", ""),
                 ("Remind me on (e.g. 2026-10-30)", today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-                ("Note (optional)", "")
+                ("Note", "")
             },
             vals =>
             {
@@ -230,7 +252,7 @@ public partial class NotificationsPage : Page
 
         DateOnly.TryParse(v[1].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var due);
 
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
         {
             db.Reminders.Add(new Reminder
             {
@@ -246,7 +268,7 @@ public partial class NotificationsPage : Page
 
     private void MarkDone(int reminderId)
     {
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
         {
             var reminder = db.Reminders.Find(reminderId);
             if (reminder != null)
@@ -264,7 +286,7 @@ public partial class NotificationsPage : Page
         var confirm = ConfirmActionDialog.YesNo($"Delete the reminder \"{title}\"?", "Delete reminder", confirmText: "Delete");
         if (confirm != MessageBoxResult.Yes) return;
 
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
         {
             var reminder = db.Reminders.Find(reminderId);
             if (reminder != null)

@@ -1,13 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <Version>1.4.0</Version>
+	  <Version>1.5.0</Version>
 	  <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets\Nexabode.ico</ApplicationIcon>
   </PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)' == 'Release'">
@@ -18,8 +19,17 @@
 	</PropertyGroup>
 
   <ItemGroup>
+    <Resource Include="Assets\Nexabode.ico" />
+    <Resource Include="Assets\logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lets the test project see the app's internal helpers too. -->
+    <InternalsVisibleTo Include="Nexabode.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" Version="10.0.14" />
     <PackageReference Include="SQLite3MC.PCLRaw.bundle" Version="2.6.1" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />

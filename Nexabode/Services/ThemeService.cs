@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using Microsoft.Win32;
+using System.Windows;
 using System.Windows.Media;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
@@ -15,7 +16,7 @@ public static class ThemeService
         ["AppBackground"] = "#F5F7FB",
         ["AppSurface"] = "#FFFFFF",
         ["AppText"] = "#1E293B",
-        ["AppSecondary"] = "#64748B",
+        ["AppSecondary"] = "#617187",
         ["AppPrimary"] = "#4F46E5",
         ["AppBorder"] = "#E2E8F0",
 
@@ -70,19 +71,79 @@ public static class ThemeService
         ["CatOtherBar"] = "#64748B",
     };
 
-    private static readonly Dictionary<string, string> Status = new()
+    // Status colours on a light background. Every one is at least 4.5 to 1 against white and against its own soft fill, so it can be read as text.
+    private static readonly Dictionary<string, string> StatusLight = new()
     {
-        ["Success"] = "#16A34A",   // Paid, Available
-        ["Warning"] = "#D97706",   // Pending, Reserved
-        ["Danger"] = "#DC2626",   // Overdue, Maintenance
-        ["Info"] = "#0284C7",   // Information
-        ["Neutral"] = "#64748B",   // Inactive
-        ["Occupied"] = "#4F46E5",  // Occupied beds
+        ["Success"] = "#107535",
+        ["Warning"] = "#9A5404",
+        ["Danger"] = "#C22121",
+        ["Info"] = "#026BA1",
+        ["Neutral"] = "#5A687D",
+        ["Occupied"] = "#4F46E5",
     };
 
-    public static void Initialize() => Apply(AppSettings.Load().DarkMode, save: false);
+    // The same colours lightened for the dark background, with the same contrast.
+    private static readonly Dictionary<string, string> StatusDark = new()
+    {
+        ["Success"] = "#4EB975",
+        ["Warning"] = "#E1943A",
+        ["Danger"] = "#EC8888",
+        ["Info"] = "#5DB0DB",
+        ["Neutral"] = "#9FA9B7",
+        ["Occupied"] = "#A29DF1",
+    };
 
-    public static void Toggle() => Apply(!IsDark, save: true);
+    // What the person picked: "System" (follow Windows), "Light" or "Dark".
+    public static string Choice { get; private set; } = "System";
+
+    public static void Initialize()
+    {
+        var settings = AppSettings.Load();
+        // Nobody has chosen yet: follow Windows. An older saved "dark mode" counts as an explicit choice of Dark.
+        Choice = settings.ThemeChoice ?? (settings.DarkMode ? "Dark" : "System");
+        Apply(WouldBeDark(Choice), save: false);
+    }
+
+    // Would this choice look dark right now? "System" asks Windows.
+    public static bool WouldBeDark(string choice) => choice switch
+    {
+        "Dark" => true,
+        "Light" => false,
+        _ => WindowsPrefersDark()
+    };
+
+    // Remembers the choice and applies it. The Windows setting is read when the app starts and when the choice is made.
+    public static void SetChoice(string choice)
+    {
+        Choice = choice is "Light" or "Dark" ? choice : "System";
+
+        // Only switch when the colors really change. Applying the same theme again swaps WPF-UI's styles under the
+        // windows that are already open and leaves a blank white screen (for example "Follow Windows" while Windows
+        // and the app are both dark). Then only the choice is saved.
+        var dark = WouldBeDark(Choice);
+        if (dark != IsDark) Apply(dark, save: false);
+        AppSettings.Update(s =>
+        {
+            s.ThemeChoice = Choice;
+            s.DarkMode = IsDark;   // kept in step for older settings files
+        });
+    }
+
+    public static void Toggle() => SetChoice(IsDark ? "Light" : "Dark");
+
+    // Windows keeps "apps use the light theme" as 1 or 0 for the signed-in person.
+    private static bool WindowsPrefersDark()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            return key?.GetValue("AppsUseLightTheme") is int light && light == 0;
+        }
+        catch
+        {
+            return false;   // if it can't be read, stay with the light theme
+        }
+    }
 
     public static void Apply(bool dark, bool save)
     {
@@ -99,13 +160,13 @@ public static class ThemeService
             foreach (var (name, hex) in palette)
                 SetBrush(name + "Brush", hex);
 
-            foreach (var (name, hex) in Status)
+            foreach (var (name, hex) in dark ? StatusDark : StatusLight)
             {
                 SetBrush(name + "Brush", hex);
                 SetBrush(name + "SoftBrush", hex, alpha: 0x26);
             }
 
-            if (save) AppSettings.Update(s => s.DarkMode = dark);   // keeps the other saved settings
+            if (save) AppSettings.Update(s => s.DarkMode = dark);   // (not used any more: SetChoice saves)
             ThemeChanged?.Invoke();
         }
         catch (Exception ex)

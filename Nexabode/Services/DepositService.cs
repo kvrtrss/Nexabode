@@ -37,7 +37,7 @@ public static class DepositService
 
         var summary = Summary(db, tenantId);
         if (amount > summary.Held)
-            return $"The amount is more than the credit still held ({Fmt.Peso(summary.Held)}).";
+            return $"The amount is more than the deposit still held ({Fmt.Peso(summary.Held)}).";
 
         var open = db.Charges
             .Include(c => c.Allocations)
@@ -64,7 +64,7 @@ public static class DepositService
             TenantId = tenantId,
             PaymentDate = date,
             Amount = amount,
-            Method = "Credit",
+            Method = "Deposit",
             Source = PaymentSource,
             Remarks = remarks,
             Allocations = allocations
@@ -74,9 +74,9 @@ public static class DepositService
         return null;
     }
 
-    // Gives back part of the credit still held. Only what is left can be refunded.
+    // Gives back part of the deposit still held. Only what is left can be refunded.
     // Returns an error message, or null when the refund was saved.
-    // The credit is kept per stay, so the refund is taken from the newest stay first.
+    // The deposit is kept per stay, so the refund is taken from the newest stay first.
     public static string? Refund(AppDbContext db, int tenantId, decimal amount, DateOnly date, string? note)
     {
         if (amount <= 0)
@@ -86,7 +86,7 @@ public static class DepositService
 
         var summary = Summary(db, tenantId);
         if (amount > summary.Held)
-            return $"The amount is more than the credit still held ({Fmt.Peso(summary.Held)}).";
+            return $"The amount is more than the deposit still held ({Fmt.Peso(summary.Held)}).";
 
         var stays = db.Occupancies
             .Where(o => o.TenantId == tenantId)
@@ -108,22 +108,22 @@ public static class DepositService
         }
 
         if (left > 0)
-            return "The credit changed while this was being saved. Nothing was saved.";
+            return "The deposit changed while this was being saved. Nothing was saved.";
 
         db.SaveChanges();
         transaction.Commit();   // all the stays are updated together or not at all
         return null;
     }
 
-    // Corrects the credit still held, by changing the deposit recorded on the tenant's stays.
-    // More credit is added to the newest stay. Less credit is taken from the newest stays first,
+    // Corrects the deposit still held, by changing the deposit recorded on the tenant's stays.
+    // More deposit is added to the newest stay. Less deposit is taken from the newest stays first,
     // and never below what was already refunded. Every change is written to the change history.
-    // Returns an error message, or null when the credit was saved.
-    public static string? SetCredit(AppDbContext db, int tenantId, decimal newHeld, string reason)
+    // Returns an error message, or null when the deposit was saved.
+    public static string? SetHeldDeposit(AppDbContext db, int tenantId, decimal newHeld, string reason)
     {
         newHeld = Math.Round(newHeld, 2);
         if (newHeld < 0)
-            return "The credit can't be less than zero.";
+            return "The deposit can't be less than zero.";
         if (!ReasonRules.IsReal(reason))
             return "Please enter a reason (at least 3 letters or digits).";
 
@@ -132,7 +132,7 @@ public static class DepositService
         var summary = Summary(db, tenantId);
         var change = newHeld - summary.Held;
         if (change == 0)
-            return "The credit is already that amount, so nothing was changed.";
+            return "The deposit is already that amount, so nothing was changed.";
 
         var stays = db.Occupancies
             .Where(o => o.TenantId == tenantId)
@@ -140,13 +140,13 @@ public static class DepositService
             .OrderByDescending(o => o.MoveInDate).ThenByDescending(o => o.Id)
             .ToList();
         if (stays.Count == 0)
-            return "Credit is kept on a stay, and this tenant has no stay yet.";
+            return "Deposit is kept on a stay, and this tenant has no stay yet.";
 
         void SetDeposit(Occupancy stay, decimal newDeposit)
         {
             AuditService.Record(db, "Stay", stay.Id, tenantId, "Deposit",
                 StayEditService.MoneyText(stay.Deposit), StayEditService.MoneyText(newDeposit),
-                $"Credit edited: {reason.Trim()}");
+                $"Deposit edited: {reason.Trim()}");
             stay.Deposit = newDeposit;
         }
 
@@ -170,15 +170,15 @@ public static class DepositService
             }
 
             if (left > 0)
-                return "The credit changed while this was being saved. Nothing was saved.";
+                return "The deposit changed while this was being saved. Nothing was saved.";
         }
 
         db.SaveChanges();
-        transaction.Commit();   // the new credit and its history entries are saved together or not at all
+        transaction.Commit();   // the new deposit and its history entries are saved together or not at all
         return null;
     }
 
-    // Puts refunded money back into the credit (for a refund that was recorded by mistake).
+    // Puts refunded money back into the deposit (for a refund that was recorded by mistake).
     // Refunds are taken back from the oldest refunded stay first, the reverse of how a refund is taken.
     // Returns an error message, or null when the refund was undone.
     public static string? UndoRefund(AppDbContext db, int tenantId, decimal amount, string reason)

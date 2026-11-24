@@ -42,12 +42,10 @@ public partial class ReportsPage : Page
 
     // ---------- Helpers ----------
 
-    private static void Tell(string message) =>
-        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
     private void LoadTenants()
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         TenantCombo.ItemsSource = db.Tenants.OrderBy(t => t.FullName).ToList()
             .Select(t => new TenantOption { Id = t.Id, Name = t.FullName })
             .ToList();
@@ -85,7 +83,7 @@ public partial class ReportsPage : Page
             new[]
             {
                 ("Boarding house name", settings.HouseName),
-                ("Address (optional)", settings.HouseAddress)
+                ("Address", settings.HouseAddress)
             },
             note: "These appear at the top of every printed report.");
         if (v == null) return;
@@ -106,7 +104,7 @@ public partial class ReportsPage : Page
         var monthStart = BillingHelpers.CurrentMonthStart();
         var key = BillingHelpers.MonthKey(monthStart);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         // Voided payments and charges are excluded (charges by the global filter).
         var payments = db.Payments.ToList().Where(p => !p.IsVoided).ToList();
@@ -122,19 +120,19 @@ public partial class ReportsPage : Page
         var overdue = open.Where(x => x.DueDate < today).ToList();
 
         CollectedCard.Value = Fmt.Peso(collected.Sum(p => p.Amount));
-        CollectedCard.Caption = $"{collected.Count} payment(s)";
-        CollectedCard.Tone = "Success";
+        CollectedCard.Caption = Fmt.Count(collected.Count, "payment");
+        CollectedCard.Tone = collected.Count > 0 ? "Success" : "Neutral";
 
         BilledCard.Value = Fmt.Peso(billed);
         BilledCard.Caption = billed == 0 ? "Nothing billed yet" : $"{BillingHelpers.CurrentMonthStart():MMMM} charges";
         BilledCard.Tone = "Info";
 
         OutstandingCard.Value = Fmt.Peso(open.Sum(x => x.Balance));
-        OutstandingCard.Caption = open.Count == 0 ? "Everyone is settled" : $"{open.Count} open charge(s)";
+        OutstandingCard.Caption = open.Count == 0 ? "Everyone is settled" : Fmt.Count(open.Count, "open charge");
         OutstandingCard.Tone = open.Count == 0 ? "Success" : "Warning";
 
         OverdueCard.Value = Fmt.Peso(overdue.Sum(x => x.Balance));
-        OverdueCard.Caption = overdue.Count == 0 ? "Nothing overdue" : $"{overdue.Count} overdue charge(s)";
+        OverdueCard.Caption = overdue.Count == 0 ? "Nothing overdue" : Fmt.Count(overdue.Count, "overdue charge");
         OverdueCard.Tone = overdue.Count == 0 ? "Success" : "Danger";
     }
 
@@ -147,7 +145,7 @@ public partial class ReportsPage : Page
             case 0:
                 if (TenantCombo.SelectedItem is not TenantOption tenant)
                 {
-                    Tell("Select a tenant first.");
+                    Say.Info("Select a tenant first.");
                     return;
                 }
                 var period = (PeriodCombo.SelectedItem as PeriodOption)?.Start;
@@ -163,12 +161,12 @@ public partial class ReportsPage : Page
             case 2:
                 if (FromPicker.SelectedDate is not DateTime from || ToPicker.SelectedDate is not DateTime to)
                 {
-                    Tell("Select both the From and To dates.");
+                    Say.Info("Select both the From and To dates.");
                     return;
                 }
                 if (to < from)
                 {
-                    Tell("The To date cannot be earlier than the From date.");
+                    Say.Info("The To date cannot be earlier than the From date.");
                     return;
                 }
                 var fromD = DateOnly.FromDateTime(from);
@@ -178,7 +176,7 @@ public partial class ReportsPage : Page
                 break;
 
             default:
-                Tell("Choose a report first.");
+                Say.Info("Choose a report first.");
                 return;
         }
 
@@ -190,20 +188,20 @@ public partial class ReportsPage : Page
     {
         if (_current == null)
         {
-            Tell("Generate a report first, then print it.");
+            Say.Info("Generate a report first, then print it.");
             return;
         }
 
-        var dialog = new PrintDialog();
-        if (dialog.ShowDialog() != true) return;
-
-        var doc = _current();   // fresh copy sized for the paper
-        doc.PagePadding = new Thickness(50);
-        doc.PageHeight = dialog.PrintableAreaHeight;
-        doc.PageWidth = dialog.PrintableAreaWidth;
-        doc.ColumnWidth = dialog.PrintableAreaWidth;
-
-        dialog.PrintDocument(((IDocumentPaginatorSource)doc).DocumentPaginator, _title);
+        // The report is shown page by page first; Print... (or Save as PDF through the Microsoft printer) is on the preview.
+        PrintPreview.Show(Window.GetWindow(this), _title, "report", (width, height) =>
+        {
+            var doc = _current();   // a fresh copy sized for the paper
+            doc.PagePadding = new Thickness(50);
+            doc.PageHeight = height;
+            doc.PageWidth = width;
+            doc.ColumnWidth = width;
+            return doc;
+        });
     }
 
     // ---------- Document helpers ----------
@@ -281,11 +279,11 @@ public partial class ReportsPage : Page
 
     // ---------- 1. Billing statement ----------
 
-    private FlowDocument BuildStatement(int tenantId, DateOnly? monthStart)
+    internal static FlowDocument BuildStatement(int tenantId, DateOnly? monthStart)
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var tenant = db.Tenants.Find(tenantId)!;
 
         var stay = db.Occupancies
@@ -350,7 +348,7 @@ public partial class ReportsPage : Page
                     var paid = c.Allocations.Sum(a => a.AmountApplied);
                     return new[]
                     {
-                        c.BillingMonth,
+                        BillingHelpers.MonthLabel(c.BillingMonth),
                         c.Description ?? c.ChargeType.ToString(),
                         D(c.DueDate),
                         Money(c.Amount),
@@ -406,12 +404,12 @@ public partial class ReportsPage : Page
         var deposit = DepositService.Summary(db, tenantId);
         if (deposit.Paid > 0)
         {
-            doc.Blocks.Add(P("Credit", 14, bold: true, bottom: 2));
+            doc.Blocks.Add(P("Deposit", 14, bold: true, bottom: 2));
             doc.Blocks.Add(P($"Deposit paid:   {Money(deposit.Paid)}", bottom: 0));
             if (deposit.Applied > 0)
                 doc.Blocks.Add(P($"Used for unpaid charges:   {Money(deposit.Applied)}", bottom: 0));
             doc.Blocks.Add(P($"Refunded:   {Money(deposit.Refunded)}", bottom: 0));
-            doc.Blocks.Add(P($"CREDIT BALANCE:   {Money(deposit.Held)}", 12, bold: true, bottom: 10));
+            doc.Blocks.Add(P($"DEPOSIT BALANCE:   {Money(deposit.Held)}", 12, bold: true, bottom: 10));
         }
 
         return doc;
@@ -424,7 +422,7 @@ public partial class ReportsPage : Page
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var beds = db.Beds.Include(b => b.Room).ToList()
             .OrderBy(b => b.Room.RoomName).ThenBy(b => b.BedLabel)
             .ToList();
@@ -492,7 +490,7 @@ public partial class ReportsPage : Page
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         var payments = db.Payments
             .Include(p => p.Tenant)

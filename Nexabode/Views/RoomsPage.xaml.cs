@@ -58,10 +58,9 @@ public partial class RoomsPage : Page
 
     // ---------- Helpers ----------
 
-    private static void Tell(string message) =>
-        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
-    private Window? Owner => Window.GetWindow(this);
+    // Windows opened from the details window belong to it, so they appear above it.
+    private Window? Owner => (Window?)_details ?? Window.GetWindow(this);
 
     private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
 
@@ -75,7 +74,7 @@ public partial class RoomsPage : Page
         "Available" => "Success",
         "Occupied" => "Occupied",
         "Reserved" => "Warning",
-        "Maintenance" => "Danger",
+        "Maintenance" => "Info",
         _ => "Neutral"
     };
 
@@ -88,9 +87,9 @@ public partial class RoomsPage : Page
     }
 
     private RoomInfo? CurrentRoom => _rooms.FirstOrDefault(r => r.Id == _roomId);
-    private BedInfo? SelectedBed => BedGrid.SelectedItem as BedInfo;
+    private BedInfo? SelectedBed => CurrentRoom?.Beds.FirstOrDefault(b => b.Id == _bedId);
 
-    private void Reload(int? selectRoom = null)
+    internal void Reload(int? selectRoom = null)
     {
         if (selectRoom != null && selectRoom != _roomId)
         {
@@ -100,7 +99,7 @@ public partial class RoomsPage : Page
 
         var today = DateOnly.FromDateTime(DateTime.Today);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         var openStays = db.Occupancies
             .Include(o => o.Tenant)
@@ -189,7 +188,35 @@ public partial class RoomsPage : Page
     {
         RenderChips();
         RenderRooms();
-        RenderDetail();
+        _details?.Refresh();   // keeps an open details window up to date after every action
+    }
+
+    // ---------- Room details: their own window ----------
+
+    private RoomDetailsWindow? _details;
+
+    internal RoomInfo? RoomFor(int id) => _rooms.FirstOrDefault(r => r.Id == id);
+
+    // The bed chosen in the details window. The bed actions below work on it.
+    internal int? BedId
+    {
+        get => _bedId;
+        set => _bedId = value;
+    }
+
+    private void OpenDetails(int roomId)
+    {
+        if (_details != null) return;
+
+        _roomId = roomId;
+        _bedId = null;
+        Render();   // highlights the room's card
+
+        var window = new RoomDetailsWindow(this, roomId);
+        if (Owner != null) window.Owner = Owner;
+        _details = window;
+        try { window.ShowDialog(); }
+        finally { _details = null; }
     }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -203,9 +230,15 @@ public partial class RoomsPage : Page
         ChipPanel.Children.Clear();
         var beds = _rooms.SelectMany(r => r.Beds).ToList();
 
-        ChipPanel.Children.Add(MakeChip("All", $"All rooms  {_rooms.Count}", null));
+        // The counts are beds, so the first chip says so. A status nobody has right now is left out,
+        // unless it is the one being filtered on.
+        ChipPanel.Children.Add(MakeChip("All", $"All beds  {beds.Count}", null));
         foreach (var status in new[] { "Available", "Occupied", "Reserved", "Maintenance", "Inactive" })
-            ChipPanel.Children.Add(MakeChip(status, $"{status}  {beds.Count(b => b.Status == status)}", status));
+        {
+            var count = beds.Count(b => b.Status == status);
+            if (count == 0 && _filter != status) continue;
+            ChipPanel.Children.Add(MakeChip(status, $"{status}  {count}", status));
+        }
     }
 
     private Border MakeChip(string key, string text, string? status)
@@ -224,7 +257,7 @@ public partial class RoomsPage : Page
             Child = new TextBlock
             {
                 Text = text,
-                FontSize = 12.5,
+                FontSize = 13,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = tone == null ? Res("AppTextBrush") : Res(tone + "Brush")
             }
@@ -324,7 +357,7 @@ public partial class RoomsPage : Page
         });
         var count = new TextBlock
         {
-            Text = room.IsActive ? $"{room.Beds.Count} bed(s)" : "Inactive",
+            Text = room.IsActive ? Fmt.Count(room.Beds.Count, "bed") : "Inactive",
             Style = (Style)FindResource("MutedText"),
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -342,19 +375,14 @@ public partial class RoomsPage : Page
         foreach (var bed in room.Beds)
             chips.Children.Add(MakeBedChip(bed));
 
-        var link = new TextBlock
-        {
-            Text = "View room details  →",
-            FontSize = 12.5,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Res("AppPrimaryBrush"),
-            Margin = new Thickness(0, 6, 0, 0)
-        };
-
         var stack = new StackPanel();
         stack.Children.Add(header);
+        if (room.Beds.Count > 0)
+        {
+            stack.Children.Add(MakeStatusBar(room));
+            stack.Children.Add(MakeStatusSummary(room));
+        }
         stack.Children.Add(chips);
-        stack.Children.Add(link);
 
         var card = new Border
         {
@@ -369,13 +397,44 @@ public partial class RoomsPage : Page
             BorderThickness = new Thickness(selected ? 2 : 1),
             Child = stack
         };
-        card.MouseLeftButtonUp += (_, _) =>
-        {
-            _roomId = room.Id;
-            _bedId = null;
-            Render();
-        };
+        card.MouseLeftButtonUp += (_, _) => OpenDetails(room.Id);
+        card.ToolTip = "Open this room: its beds, actions and who is staying here.";
         return card;
+    }
+
+    // One colored segment per bed, in the same colors as the bed chips below it, so a room's occupancy shows at a glance.
+    private static FrameworkElement MakeStatusBar(RoomInfo room)
+    {
+        var bar = new System.Windows.Controls.Primitives.UniformGrid { Rows = 1, Margin = new Thickness(0, 10, 0, 0), Height = 6 };
+        foreach (var bed in room.Beds)
+            bar.Children.Add(new Border
+            {
+                Margin = new Thickness(0, 0, 3, 0),
+                CornerRadius = new CornerRadius(3),
+                Background = Res(ToneOf(bed.Status) + "Brush"),
+                Opacity = bed.Status == "Inactive" ? 0.4 : 1.0,
+                ToolTip = $"{bed.Label}: {bed.Status}"
+            });
+        return bar;
+    }
+
+    // "2 Occupied  -  1 Available": the words come first, the color only supports them.
+    private static FrameworkElement MakeStatusSummary(RoomInfo room)
+    {
+        var text = new TextBlock { FontSize = 12, Margin = new Thickness(0, 7, 0, 0), TextWrapping = TextWrapping.Wrap };
+        foreach (var status in new[] { "Occupied", "Reserved", "Available", "Maintenance", "Inactive" })
+        {
+            var count = room.Beds.Count(b => b.Status == status);
+            if (count == 0) continue;
+            if (text.Inlines.Count > 0)
+                text.Inlines.Add(new System.Windows.Documents.Run("   ·   ") { Foreground = Res("AppSecondaryBrush") });
+            text.Inlines.Add(new System.Windows.Documents.Run($"{count} {status}")
+            {
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Res(ToneOf(status) + "Brush")
+            });
+        }
+        return text;
     }
 
     private static Border MakeBedChip(BedInfo bed)
@@ -391,188 +450,15 @@ public partial class RoomsPage : Page
             Child = new TextBlock
             {
                 Text = bed.HasOverlap ? "⚠ " + bed.Label : bed.Label,
-                FontSize = 12.5,
+                FontSize = 13,
                 FontWeight = FontWeights.SemiBold,
-                MaxWidth = 110,
+                MaxWidth = 170,   // long bed names ("Single Bed A - R103") need room to show in full
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 Foreground = Res(tone + "Brush"),
-                TextDecorations = bed.Status == "Inactive" ? System.Windows.TextDecorations.Strikethrough : null
+                // An inactive bed is dimmed, not struck through (a line through a name looks like a mistake).
+                Opacity = bed.Status == "Inactive" ? 0.6 : 1.0
             }
         };
-    }
-
-    private void RenderDetail()
-    {
-        var room = CurrentRoom;
-        DetailEmpty.Visibility = room == null ? Visibility.Visible : Visibility.Collapsed;
-        DetailBody.Visibility = room == null ? Visibility.Collapsed : Visibility.Visible;
-        if (room == null) return;
-
-        DetailTitle.Text = room.IsActive ? room.Name : $"{room.Name} (Inactive)";
-
-        var parts = new List<string>();
-        parts.Add(FloorRules.Label(room.Floor));
-        parts.Add($"{room.Beds.Count} bed(s)");
-        if (!string.IsNullOrWhiteSpace(room.Notes)) parts.Add(room.Notes!);
-        DetailSub.Text = string.Join("  -  ", parts);
-
-        RoomToggleButton.Content = room.IsActive ? "Deactivate room" : "Activate room";
-
-        ShowClashBanner(room);
-
-        var keep = _bedId;   // setting the list clears the selection, so remember it first
-        BedGrid.ItemsSource = room.Beds;
-        BedGrid.SelectedItem = room.Beds.FirstOrDefault(b => b.Id == keep);
-        _bedId = keep;
-
-        UpdateBedButtons();
-        RenderOccupants();
-    }
-
-    // A red banner when two stays share a bed on the same days: it names the beds and the tenants, and says
-    // what to do about it, so whoever manages the data does not have to work it out from the small red lines.
-    private void ShowClashBanner(RoomInfo room)
-    {
-        var clashing = room.Beds.Where(b => b.HasOverlap).ToList();
-        ClashBanner.Visibility = clashing.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        if (clashing.Count == 0) return;
-
-        ClashTitle.Text = ClashWarnings.RoomTitle(clashing.Count);
-        ClashLines.Text = string.Join("\n", clashing.Select(b => ClashWarnings.BedLine(
-            b.Label,
-            b.Occupants.Where(o => o.OverlapNote != "").Select(o => o.Name).Distinct().ToList())));
-        ClashAdvice.Text = ClashWarnings.RoomAdvice(Session.IsOwner);
-    }
-
-    // Under each "Overlaps with..." line: fix the stay, or remove it when it was entered by mistake. These are the
-    // same actions, with the same safety rules, as Edit this stay and Remove this stay on the Tenants page.
-    private StackPanel MakeClashButtons(OccupantInfo occupant)
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
-
-        var edit = new Wpf.Ui.Controls.Button
-        {
-            Content = "Edit this stay",
-            ToolTip = $"Correct the dates or the bed of {occupant.Name}'s stay"
-        };
-        edit.Click += (_, _) => StayActions.Edit(Window.GetWindow(this), occupant.StayId, () => Reload());
-        row.Children.Add(edit);
-
-        // Only an Owner can remove a stay, and only one that was never billed.
-        if (Session.IsOwner)
-        {
-            var remove = new Wpf.Ui.Controls.Button
-            {
-                Content = "Remove this stay",
-                Style = (Style)Application.Current.FindResource("DangerButton"),
-                Margin = new Thickness(8, 0, 0, 0),
-                ToolTip = "For a stay entered by mistake. Deleted if it was never billed, otherwise kept as Cancelled."
-            };
-            remove.Click += (_, _) => StayActions.Remove(Window.GetWindow(this), occupant.StayId, () => Reload());
-            row.Children.Add(remove);
-        }
-
-        return row;
-    }
-
-    private void OpenTenants_Click(object sender, RoutedEventArgs e) =>
-        (Window.GetWindow(this) as MainWindow)?.NavigateTo(typeof(TenantsPage));
-
-    // Shows who is staying in the selected bed, or in the whole room when no bed is selected.
-    private void RenderOccupants()
-    {
-        if (OccupantPanel == null) return;   // the page is still being built
-
-        var room = CurrentRoom;
-        if (room == null) return;
-
-        var bed = room.Beds.FirstOrDefault(b => b.Id == _bedId);
-
-        List<OccupantInfo> shown;
-        if (bed != null)
-        {
-            OccupantTitle.Text = $"Staying in {bed.Label}";
-            shown = bed.Occupants;
-        }
-        else
-        {
-            OccupantTitle.Text = $"Staying in {room.Name}";
-            shown = room.Beds.SelectMany(b => b.Occupants).ToList();
-        }
-
-        OccupantPanel.Children.Clear();
-
-        if (shown.Count == 0)
-        {
-            OccupantPanel.Children.Add(new TextBlock
-            {
-                Text = bed != null
-                    ? "No one is staying in this bed right now."
-                    : "No one is staying in this room right now.",
-                Style = (Style)FindResource("MutedText"),
-                TextWrapping = TextWrapping.Wrap
-            });
-            return;
-        }
-
-        foreach (var occupant in shown)
-        {
-            // With a bed selected the bed is already known, so only the dates are shown.
-            var detail = bed != null ? "" : occupant.BedLabel + "  -  ";
-            detail += occupant.IsReserved
-                ? $"Reserved, moves in {Fmt.Date(occupant.MoveIn)}"
-                : $"Since {Fmt.Date(occupant.MoveIn)}";
-            if (occupant.MoveOut is DateOnly leaving) detail += $", until {Fmt.Date(leaving)}";
-            if (occupant.Gender != null) detail += $"  -  {occupant.Gender}";
-
-            var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
-            stack.Children.Add(new TextBlock
-            {
-                Text = occupant.Name,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Res("AppTextBrush")
-            });
-            stack.Children.Add(new TextBlock
-            {
-                Text = detail,
-                Style = (Style)FindResource("MutedText"),
-                FontSize = 12.5
-            });
-            if (occupant.OverlapNote != "")
-            {
-                stack.Children.Add(new TextBlock
-                {
-                    Text = occupant.OverlapNote,
-                    FontSize = 12.5,
-                    TextWrapping = TextWrapping.Wrap,
-                    Foreground = Res("DangerBrush")
-                });
-                stack.Children.Add(MakeClashButtons(occupant));
-            }
-            OccupantPanel.Children.Add(stack);
-        }
-    }
-
-    private void BedGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        _bedId = SelectedBed?.Id;
-        UpdateBedButtons();
-        RenderOccupants();
-    }
-
-    // Each button is enabled only when it applies to the current selection.
-    private void UpdateBedButtons()
-    {
-        var room = CurrentRoom;
-        var bed = SelectedBed;
-        var roomOn = room?.IsActive == true;
-
-        AddBedButton.IsEnabled = roomOn;
-        EditBedButton.IsEnabled = bed != null;
-        DeactivateBedButton.IsEnabled = bed != null && roomOn && bed.IsActive;
-        ActivateBedButton.IsEnabled = bed != null && roomOn && !bed.IsActive;
-        StartMaintButton.IsEnabled = bed?.Status == "Available";
-        EndMaintButton.IsEnabled = bed?.Status == "Maintenance";
     }
 
     // ---------- Room actions ----------
@@ -580,7 +466,7 @@ public partial class RoomsPage : Page
     private void AddRoom_Click(object sender, RoutedEventArgs e)
     {
         var values = FormDialog.Ask(Owner, "Add room", "Add room",
-            new[] { ("Room name (e.g. Room 101)", ""), ("Floor (e.g. 1, 2 or Ground)", ""), ("Notes (optional)", "") },
+            new[] { ("Room name (e.g. Room 101)", ""), ("Floor (e.g. 1, 2 or Ground)", ""), ("Notes", "") },
             v =>
             {
                 var name = v[0].Trim();
@@ -588,12 +474,12 @@ public partial class RoomsPage : Page
                 var floorError = FloorRules.Validate(v[1]);
                 if (floorError != null) return floorError;
                 var lower = name.ToLower();
-                using var check = new AppDbContext();
+                using var check = AppDb.Create();
                 return check.Rooms.Any(r => r.RoomName.ToLower() == lower) ? "A room with that name already exists." : null;
             });
         if (values == null) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var room = new Room { RoomName = values[0].Trim(), Floor = FloorRules.Normalize(values[1]), Notes = Blank(values[2]) };
         db.Rooms.Add(room);
         db.SaveChanges();
@@ -601,13 +487,13 @@ public partial class RoomsPage : Page
         Reload(room.Id);
     }
 
-    private void EditRoom_Click(object sender, RoutedEventArgs e)
+    internal void EditRoom_Click(object sender, RoutedEventArgs e)
     {
         var room = CurrentRoom;
         if (room == null) return;
 
         var values = FormDialog.Ask(Owner, "Edit room", "Save changes",
-            new[] { ("Room name", room.Name), ("Floor (e.g. 1, 2 or Ground)", room.Floor ?? ""), ("Notes (optional)", room.Notes ?? "") },
+            new[] { ("Room name", room.Name), ("Floor (e.g. 1, 2 or Ground)", room.Floor ?? ""), ("Notes", room.Notes ?? "") },
             v =>
             {
                 var name = v[0].Trim();
@@ -615,7 +501,7 @@ public partial class RoomsPage : Page
                 var floorError = FloorRules.Validate(v[1]);
                 if (floorError != null) return floorError;
                 var lower = name.ToLower();
-                using var check = new AppDbContext();
+                using var check = AppDb.Create();
                 return check.Rooms.Any(r => r.RoomName.ToLower() == lower && r.Id != room.Id)
                                     ? "Another room already has that name." : null;
             });
@@ -626,9 +512,8 @@ public partial class RoomsPage : Page
             ("Floor", room.Floor, FloorRules.Normalize(values[1])),
             ("Notes", room.Notes, values[2]));
         if (changes.Count == 0) return;
-        if (!ConfirmActionDialog.Ask(Owner, "Edit room", ConfirmWording.EditRoom(room.Name, changes))) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var entity = db.Rooms.Find(room.Id)!;
         entity.RoomName = values[0].Trim();
         entity.Floor = FloorRules.Normalize(values[1]);
@@ -638,21 +523,19 @@ public partial class RoomsPage : Page
         Reload();
     }
 
-    private void ToggleRoom_Click(object sender, RoutedEventArgs e)
+    internal void ToggleRoom_Click(object sender, RoutedEventArgs e)
     {
         var room = CurrentRoom;
         if (room == null) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         if (room.IsActive && db.Occupancies.CurrentOrUpcoming().Any(o => o.Bed.RoomId == room.Id))
         {
-            Tell("This room cannot be deactivated because it still has tenants or upcoming move-ins. Move them out first.");
+            Say.Info("This room cannot be deactivated because it still has tenants or upcoming move-ins. Move them out first.");
             return;
         }
 
-        if (!ConfirmActionDialog.Ask(Owner, room.IsActive ? "Deactivate room" : "Activate room",
-                                     ConfirmWording.RoomStatus(room.Name, activate: !room.IsActive))) return;
 
         var entity = db.Rooms.Find(room.Id)!;
         entity.IsActive = !room.IsActive;
@@ -663,13 +546,13 @@ public partial class RoomsPage : Page
 
     // ---------- Bed actions ----------
 
-    private void AddBed_Click(object sender, RoutedEventArgs e)
+    internal void AddBed_Click(object sender, RoutedEventArgs e)
     {
         var room = CurrentRoom;
         if (room == null) return;
         if (!room.IsActive)
         {
-            Tell("Beds cannot be added to an inactive room. Activate the room first.");
+            Say.Info("Beds cannot be added to an inactive room. Activate the room first.");
             return;
         }
 
@@ -680,7 +563,7 @@ public partial class RoomsPage : Page
                 var label = v[0].Trim();
                 if (label == "") return "Please enter a bed label.";
                 if (!TryMoney(v[1], out _)) return "Enter the monthly rent as a number (e.g. 1500).";
-                using var check = new AppDbContext();
+                using var check = AppDb.Create();
                 return check.Beds.Any(b => b.RoomId == room.Id && b.BedLabel == label)
                     ? "This room already has a bed with that label." : null;
             });
@@ -688,7 +571,7 @@ public partial class RoomsPage : Page
 
         TryMoney(values[1], out var rate);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var bed = new Bed { RoomId = room.Id, BedLabel = values[0].Trim(), MonthlyRate = Math.Round(rate, 2) };
         db.Beds.Add(bed);
         db.SaveChanges();
@@ -697,7 +580,7 @@ public partial class RoomsPage : Page
         Reload();
     }
 
-    private void EditBed_Click(object sender, RoutedEventArgs e)
+    internal void EditBed_Click(object sender, RoutedEventArgs e)
     {
         var room = CurrentRoom;
         var bed = SelectedBed;
@@ -710,7 +593,7 @@ public partial class RoomsPage : Page
                 var label = v[0].Trim();
                 if (label == "") return "Please enter a bed label.";
                 if (!TryMoney(v[1], out _)) return "Enter the monthly rent as a number (e.g. 1500).";
-                using var check = new AppDbContext();
+                using var check = AppDb.Create();
                 return check.Beds.Any(b => b.RoomId == room.Id && b.BedLabel == label && b.Id != bed.Id)
                     ? "Another bed in this room has that label." : null;
             },
@@ -725,7 +608,7 @@ public partial class RoomsPage : Page
         if (changes.Count == 0) return;
         if (!ConfirmActionDialog.Ask(Owner, "Edit bed", ConfirmWording.EditBed(room.Name, bed.Label, changes))) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var entity = db.Beds.Find(bed.Id)!;
         entity.BedLabel = values[0].Trim();
         entity.MonthlyRate = Math.Round(rate, 2);
@@ -734,20 +617,18 @@ public partial class RoomsPage : Page
         Reload();
     }
 
-    private void DeactivateBed_Click(object sender, RoutedEventArgs e)
+    internal void DeactivateBed_Click(object sender, RoutedEventArgs e)
     {
         var bed = SelectedBed;
         if (bed == null) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         if (db.Occupancies.CurrentOrUpcoming().Any(o => o.BedId == bed.Id))
         {
-            Tell("This bed cannot be deactivated because it has a tenant or an upcoming move-in. Move the tenant out first.");
+            Say.Info("This bed cannot be deactivated because it has a tenant or an upcoming move-in. Move the tenant out first.");
             return;
         }
 
-        if (!ConfirmActionDialog.Ask(Owner, "Deactivate bed",
-                                     ConfirmWording.BedStatus(CurrentRoom?.Name ?? "", bed.Label, activate: false))) return;
 
         var entity = db.Beds.Find(bed.Id)!;
         entity.IsActive = false;
@@ -755,14 +636,12 @@ public partial class RoomsPage : Page
         Reload();
     }
 
-    private void ActivateBed_Click(object sender, RoutedEventArgs e)
+    internal void ActivateBed_Click(object sender, RoutedEventArgs e)
     {
         var bed = SelectedBed;
         if (bed == null) return;
 
-        using var db = new AppDbContext();
-        if (!ConfirmActionDialog.Ask(Owner, "Activate bed",
-                                     ConfirmWording.BedStatus(CurrentRoom?.Name ?? "", bed.Label, activate: true))) return;
+        using var db = AppDb.Create();
 
         var entity = db.Beds.Find(bed.Id)!;
         entity.IsActive = true;
@@ -770,20 +649,18 @@ public partial class RoomsPage : Page
         Reload();
     }
 
-    private void StartMaintenance_Click(object sender, RoutedEventArgs e)
+    internal void StartMaintenance_Click(object sender, RoutedEventArgs e)
     {
         var bed = SelectedBed;
         if (bed == null) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         if (db.Occupancies.CurrentOrUpcoming().Any(o => o.BedId == bed.Id))
         {
-            Tell("Maintenance cannot be started because this bed has a tenant or an upcoming move-in. Move the tenant out first.");
+            Say.Info("Maintenance cannot be started because this bed has a tenant or an upcoming move-in. Move the tenant out first.");
             return;
         }
 
-        if (!ConfirmActionDialog.Ask(Owner, "Start maintenance",
-                                     ConfirmWording.MaintenanceStart(CurrentRoom?.Name ?? "", bed.Label))) return;
 
         var entity = db.Beds.Find(bed.Id)!;
         entity.IsMaintenance = true;
@@ -791,14 +668,12 @@ public partial class RoomsPage : Page
         Reload();
     }
 
-    private void EndMaintenance_Click(object sender, RoutedEventArgs e)
+    internal void EndMaintenance_Click(object sender, RoutedEventArgs e)
     {
         var bed = SelectedBed;
         if (bed == null) return;
 
-        using var db = new AppDbContext();
-        if (!ConfirmActionDialog.Ask(Owner, "End maintenance",
-                                     ConfirmWording.MaintenanceEnd(CurrentRoom?.Name ?? "", bed.Label))) return;
+        using var db = AppDb.Create();
 
         var entity = db.Beds.Find(bed.Id)!;
         entity.IsMaintenance = false;

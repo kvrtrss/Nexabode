@@ -383,3 +383,41 @@ All notable changes to this project are listed here.
 - The sign-in window fits small screens, and scrolls if it must
 - Dialogs can no longer run off the bottom or side of a small screen, and a tall dialog scrolls
 
+## [1.5.0] - Safer data, simpler sign-in, and a tidier app
+
+### Added
+- A first-run screen where you create your own Owner account. There is no default `admin` / `admin123` account any more
+- One Owner recovery key (shown once, printable) replaces the per-account recovery codes, the emergency access key and the reset phrase. "Forgot password?" accepts it to set a new password for an Owner or to create a new Owner account
+- Very weak passwords are refused wherever a new password is chosen, including for backups
+- Generate rent is one window: due date, partial-month option and the tenants to charge, all in view. The usual due day is a setting (Settings, Billing). Rent is never due before a tenant's move-in day
+- One print window for everything that prints (receipts, recovery sheets and reports): the page on the left, and the printer, copies and orientation on the right
+- A Dashboard banner that leads with the first thing to do (such as the first backup) and explains why
+- Follow the Windows light or dark setting (Settings, Appearance)
+- Keyboard shortcuts (Ctrl+1 to Ctrl+9, Ctrl+0, Ctrl+F, Ctrl+N), right-click menus on tables, and screen-reader names on icon-only buttons
+- The Nexabode logo and application icon
+- Edit stay shows each bed's price, and choosing another bed fills in its price as the rent (it can still be changed), as the move-in window does
+
+### Changed
+- "Credit" is now "Deposit" everywhere. Payments made from a deposit are converted once, on first start
+- Rent Billing shows Paid, Partial, Unpaid or Overdue with a balance, instead of "Generated"
+- The Payments form keeps the Record payment button in view, asks what is being paid first, and offers a one-click "Use the full amount" link
+- The Utility Bills form has labelled fields and a clear "whole month or custom period" choice
+- Messages use one Nexabode window instead of the grey Windows box. "Are you sure?" is asked only for money and irreversible actions, and its heading names the action
+- Plural wording ("1 bed", "2 beds"), sentence-case labels, shorter text, and fewer font sizes
+- Status colours were adjusted so every one can be read as text in both themes. The side bar folds to icons on narrow windows
+- Optional tips are kept apart from real alerts and never counted on the bell
+
+### Fixed
+- Tenants who moved in mid-month no longer show as overdue before they arrive
+- The tick box in the Generate rent list was cut off
+- The database key is written safely with a spare copy, and Nexabode no longer silently makes a new key if the file is missing
+- The database layout has a version number. The automatic safety copy is made once per upgrade, not on every start, and only the newest five are kept
+- An account, a move-in or emergency access is saved together with its history entry, or not at all
+- A restore checks the backup's integrity and refuses a backup from a newer version
+
+### Removed
+- The default `admin` account, per-account recovery codes, the reset phrase, and the separate "Locked out of every account?" link
+
+### For developers
+- The test project uses the real app (no list of copied source files) and includes database-backed tests for deposits, receipt numbers, sign-in, recovery and accounts. The app gets its database and clock through small seams (`AppDb`, `Clock`)
+

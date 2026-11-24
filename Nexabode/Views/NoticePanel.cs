@@ -75,7 +75,7 @@ public static class NoticePanel
         text.Children.Add(new TextBlock
         {
             Text = n.Category,
-            FontSize = 11,
+            FontSize = 12,
             FontWeight = FontWeights.SemiBold,
             Foreground = Res(n.Tone + "Brush"),
             Opacity = isRead ? 0.5 : 1

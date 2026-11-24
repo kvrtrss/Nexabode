@@ -6,18 +6,20 @@ namespace Nexabode.Views;
 // Enter confirms. Used for every confirmation in the app, so they all look and behave the same.
 public partial class ConfirmActionDialog : Window
 {
-    private ConfirmActionDialog(string title, string message, string confirmText)
+    private ConfirmActionDialog(string title, string message, string confirmText, string cancelText)
     {
         InitializeComponent();
         Title = title;
+        HeadingText.Text = title;   // the heading says what is being confirmed, not just "Are you sure?"
         MessageText.Text = message;
         ConfirmButton.Content = confirmText;
+        BackButton.Content = cancelText;
     }
 
     // True only when the person pressed the confirm button. 'confirmText' names the action ("Archive", "Delete"...).
-    public static bool Ask(Window? owner, string title, string message, string confirmText = "Confirm")
+    public static bool Ask(Window? owner, string title, string message, string confirmText = "Confirm", string cancelText = "Back")
     {
-        var dialog = new ConfirmActionDialog(title, message, confirmText);
+        var dialog = new ConfirmActionDialog(title, message, confirmText, cancelText);
         dialog.Owner = owner ?? ActiveWindow();
         return dialog.ShowDialog() == true;
     }

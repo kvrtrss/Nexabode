@@ -1,11 +1,11 @@
-namespace Nexabode.Services;
+﻿namespace Nexabode.Services;
 
 public enum PasswordStrength { None = 0, Weak = 1, Fair = 2, Good = 3, Strong = 4 }
 
 public readonly record struct PasswordStrengthResult(PasswordStrength Level, string Hint);
 
-// A simple, honest hint about how hard a password is to guess. It only advises: the rules that actually
-// block a password (at least 8 characters, not the default, not the username) are in AccountService.
+// A simple, honest hint about how hard a password is to guess. Anything rated Weak is also refused (see Refusal),
+// so what the strength meter shows and what is allowed always agree.
 // No database or screens in here, so it can be tested on its own.
 public static class PasswordStrengthRules
 {
@@ -43,14 +43,22 @@ public static class PasswordStrengthRules
 
         // A long password of any kind is strong: length matters more than symbols.
         if (password.Length >= 16 && password.Distinct().Count() >= 6)
-            return new(PasswordStrength.Strong, "Strong password.");
+            return new(PasswordStrength.Strong, "Hard to guess.");
         if (password.Length >= 12 && classes >= 3)
-            return new(PasswordStrength.Strong, "Strong password.");
+            return new(PasswordStrength.Strong, "Hard to guess.");
 
         if (password.Length >= 12 || (password.Length >= 10 && classes >= 3))
             return new(PasswordStrength.Good, "A few more characters would make it stronger.");
 
         return new(PasswordStrength.Fair, "Make it longer, or mix letters, numbers and symbols.");
+    }
+
+    // The reason a new password is refused, or null when it can be used. A password rated Weak is never accepted.
+    // Only for choosing a new password: entering an existing one (signing in, restoring a backup) must not use this.
+    public static string? Refusal(string? password, string? username = null)
+    {
+        var result = Evaluate(password, username);
+        return result.Level == PasswordStrength.Weak ? result.Hint : null;
     }
 
     public static string Label(PasswordStrength level) => level switch

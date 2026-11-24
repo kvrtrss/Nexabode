@@ -49,7 +49,7 @@ public partial class ChangeUsernameDialog : Window
         if (nameError != null) { Fail(nameError); return; }
         if (requested == _username) { Fail("This is already your username."); return; }
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var user = db.AdminUsers.FirstOrDefault(u => u.Username == _username);
         if (user == null) { Fail("The account could not be found."); return; }
 
@@ -72,7 +72,6 @@ public partial class ChangeUsernameDialog : Window
             return;
         }
 
-        if (!ConfirmActionDialog.Ask(this, "Change username", ConfirmWording.ChangeUsername(_username, requested))) return;
 
         // The history entry is written under the old name, because that is who made the change.
         AuditService.Record(db, "Account", user.Id, null, "Username", user.Username, requested,

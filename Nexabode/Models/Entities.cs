@@ -9,7 +9,7 @@ public class AdminUser
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = "Owner";          // "Owner" can do everything, "Staff" works with records only
     public bool MustChangePassword { get; set; }          // true after an account is added or its password is reset
-    public string? RecoveryCodeHash { get; set; }          // BCrypt hash of the account's recovery code (the code itself is never stored)
+    public string? RecoveryCodeHash { get; set; }          // No longer used: per-account recovery codes were replaced by the Owner recovery key. The column is kept so older data still opens.
 }
 
 // One row that remembers failed sign-in attempts, so closing and reopening the app can't reset the count.
@@ -19,8 +19,8 @@ public class SignInGuard
     public int FailedAttempts { get; set; }      // failed attempts in the current round
     public int LockLevel { get; set; }           // how many times sign-in has been locked in a row (longer locks each time)
     public DateTime? LockedUntilUtc { get; set; } // null = not locked
-    public string? EmergencyKeyHash { get; set; } // BCrypt hash of the emergency access key (never the key itself)
-    public string? ResetPhraseHash { get; set; }  // BCrypt hash of the Owner's reset phrase (never the phrase itself)
+    public string? EmergencyKeyHash { get; set; } // BCrypt hash of the Owner recovery key (never the key itself)
+    public string? ResetPhraseHash { get; set; }  // No longer used: the reset phrase was removed. The column is kept so older data still opens.
 }
 
 public class Room
@@ -154,19 +154,19 @@ public class PaymentAllocation
     public Charge Charge { get; set; } = null!;
     public decimal AmountApplied { get; set; }
 
-    public class AuditLogEntry
-    {
-        public int Id { get; set; }
-        public DateTime ChangedAt { get; set; }
-        public string Administrator { get; set; } = string.Empty;
-        public string EntityType { get; set; } = string.Empty;   // "Stay" now; "Charge" / "UtilityBill" in later phases
-        public int EntityId { get; set; }
-        public int? TenantId { get; set; }
-        public string Field { get; set; } = string.Empty;        // e.g. "MoveInDate"
-        public string? OldValue { get; set; }
-        public string? NewValue { get; set; }
-        public string Reason { get; set; } = string.Empty;
-        public bool IsConflictException { get; set; }            // saved despite a bed conflict
-    }
+}
 
+public class AuditLogEntry
+{
+    public int Id { get; set; }
+    public DateTime ChangedAt { get; set; }
+    public string Administrator { get; set; } = string.Empty;
+    public string EntityType { get; set; } = string.Empty;   // "Stay" now; "Charge" / "UtilityBill" in later phases
+    public int EntityId { get; set; }
+    public int? TenantId { get; set; }
+    public string Field { get; set; } = string.Empty;        // e.g. "MoveInDate"
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public bool IsConflictException { get; set; }            // saved despite a bed conflict
 }

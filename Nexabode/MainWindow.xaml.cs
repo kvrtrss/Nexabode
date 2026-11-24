@@ -1,7 +1,10 @@
-﻿using Nexabode.Data;
+﻿using Nexabode.Controls;
+using Nexabode.Data;
 using Nexabode.Services;
 using Nexabode.Views;
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Wpf.Ui.Controls;
 using static Nexabode.Views.SettingsPage;
@@ -36,6 +39,8 @@ public partial class MainWindow : FluentWindow
         RefreshAccount();
         _startPage = startPage;
         Closing += MainWindow_Closing;
+        SizeChanged += MainWindow_SizeChanged;
+        PreviewKeyDown += MainWindow_PreviewKeyDown;
         // Never open larger than the screen's usable area, so nothing starts off-screen on a small display.
         var area = SystemParameters.WorkArea;
         MinWidth = Math.Min(MinWidth, area.Width);
@@ -68,14 +73,79 @@ public partial class MainWindow : FluentWindow
         };
     }
 
+    private bool _narrow;
+
+    // On a small screen the side bar folds down to its icons, so the page gets the room. It only changes when the width
+    // crosses the line, so a person who opens or closes the side bar themselves is left alone.
+    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var narrow = ActualWidth < 1200;
+        if (narrow == _narrow) return;
+        _narrow = narrow;
+        RootNavigation.IsPaneOpen = !narrow;
+    }
+
+    // Ctrl+1 to Ctrl+9 and Ctrl+0 open the pages in the order of the side bar. Ctrl+F goes to the page's search box.
+    // Ctrl+N does what the page's main button does.
+    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+
+        var digit = e.Key is >= Key.D0 and <= Key.D9 ? e.Key - Key.D0
+                  : e.Key is >= Key.NumPad0 and <= Key.NumPad9 ? e.Key - Key.NumPad0
+                  : -1;
+        if (digit >= 0)
+        {
+            var pages = RootNavigation.MenuItems.OfType<NavigationViewItem>()
+                .Concat(RootNavigation.FooterMenuItems.OfType<NavigationViewItem>())
+                .Select(item => item.TargetPageType)
+                .Where(type => type != null)
+                .ToList();
+            var index = digit == 0 ? 9 : digit - 1;
+            if (index < pages.Count)
+            {
+                NavigateTo(pages[index]!);
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if (e.Key == Key.F)
+        {
+            var box = FindDescendant<System.Windows.Controls.TextBox>(RootNavigation,
+                tb => tb.Name.Contains("Search") && tb.IsVisible && tb.IsEnabled);
+            if (box == null) return;
+            box.Focus();
+            box.SelectAll();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.N)
+        {
+            if (FindDescendant<PageHeader>(RootNavigation)?.TryInvokeAction() == true) e.Handled = true;
+        }
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root, Func<T, bool>? match = null) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T hit && (match == null || match(hit))) return hit;
+            if (FindDescendant(child, match) is { } deeper) return deeper;
+        }
+        return null;
+    }
+
     // Counts what needs attention and shows it on the bell. Never blocks the app if the check fails.
     // refillPopup is false for the background refresh, so an open panel does not jump back to the top.
     public void RefreshNotifications(bool refillPopup = true)
     {
         try
         {
-            using var db = new AppDbContext();
-            _notices = NotificationService.Build(db, StayQueries.Today, AppSettings.Load().ReminderLeadDays);
+            using var db = AppDb.Create();
+            // Optional tips are listed on the Notifications page only, so they never reach the bell or its panel.
+            _notices = NotificationService.Build(db, StayQueries.Today, AppSettings.Load().ReminderLeadDays)
+                .Where(n => !n.IsTip).ToList();
         }
         catch
         {
@@ -86,7 +156,8 @@ public partial class MainWindow : FluentWindow
         var unread = NotificationService.UnreadCount(_notices);
         NoticeBadgeText.Text = unread > 99 ? "99+" : unread.ToString();
         NoticeBadge.Visibility = unread > 0 ? Visibility.Visible : Visibility.Collapsed;
-        BellButton.ToolTip = unread == 0 ? "No new notifications" : $"{unread} new notification(s)";
+        BellButton.ToolTip = unread == 0 ? "No new notifications" : $"{unread} new {(unread == 1 ? "notification" : "notifications")}";
+        System.Windows.Automation.AutomationProperties.SetName(BellButton, BellButton.ToolTip?.ToString() ?? "Notifications");
 
         if (refillPopup && NoticePopup.IsOpen) FillPopup();
     }
@@ -178,13 +249,17 @@ public partial class MainWindow : FluentWindow
         Close();
     }
 
-    private void ThemeButton_Click(object sender, RoutedEventArgs e)
+    private void ThemeButton_Click(object sender, RoutedEventArgs e) =>
+        SwitchTheme(ThemeService.IsDark ? "Light" : "Dark");
+
+    // Applies a new appearance ("System", "Light" or "Dark"). A new window is made so everything starts in the new theme.
+    public void SwitchTheme(string choice)
     {
         // Remember which page is open so we come back to it.
         var current = (RootNavigation.SelectedItem as NavigationViewItem)?.TargetPageType
                       ?? typeof(DashboardPage);
 
-        ThemeService.Toggle();            // saves and applies the new theme
+        ThemeService.SetChoice(choice);   // saves and applies the new theme
 
         var fresh = new MainWindow(current);   // a new window starts in the new theme -
 
@@ -212,14 +287,13 @@ public partial class MainWindow : FluentWindow
         var days = BackupReminder.DaysSinceBackup();
         var how = days == null
             ? "You have not made a backup yet."
-            : $"Your last backup was {days} day(s) ago.";
+            : $"Your last backup was {Fmt.Count(days.Value, "day")} ago.";
 
-        var answer = System.Windows.MessageBox.Show(this,
-            how + "\n\nBack up before closing?\n\n" +
-            "Select Yes to open Settings and create a backup, or No to close Nexabode now.",
-            "Nexabode", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
+        var backUp = ConfirmActionDialog.Ask(this, "Back up before closing?",
+            how + "\n\nYour records live only on this computer, so a backup protects them if it breaks or is lost.",
+            confirmText: "Back up now", cancelText: "Close without backup");
 
-        if (answer == System.Windows.MessageBoxResult.Yes)
+        if (backUp)
         {
             e.Cancel = true;
             NavigateTo(typeof(SettingsPage));

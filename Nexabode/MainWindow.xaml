@@ -20,7 +20,7 @@
             <ui:TitleBar.TrailingContent>
                 <StackPanel Orientation="Horizontal">
                     <ui:Button x:Name="BellButton" Appearance="Transparent"
-                               ToolTip="Notifications"
+                               ToolTip="Notifications" AutomationProperties.Name="Notifications"
                                Click="BellButton_Click" />
                     <Popup x:Name="NoticePopup" Placement="Bottom" StaysOpen="False"
                            AllowsTransparency="True" PopupAnimation="Fade"
@@ -66,11 +66,11 @@
                             Background="{DynamicResource DangerBrush}" CornerRadius="9"
                             MinWidth="18" Height="18" Padding="5,0" Margin="-8,0,8,0"
                             VerticalAlignment="Center">
-                        <TextBlock x:Name="NoticeBadgeText" Foreground="White" FontSize="11" FontWeight="SemiBold"
+                        <TextBlock x:Name="NoticeBadgeText" Foreground="White" FontSize="12" FontWeight="SemiBold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ui:Button x:Name="ThemeButton" Appearance="Transparent"
-                               ToolTip="Switch between light and dark mode"
+                               ToolTip="Switch between light and dark mode" AutomationProperties.Name="Switch between light and dark mode"
                                Click="ThemeButton_Click" />
                 </StackPanel>
             </ui:TitleBar.TrailingContent>
@@ -81,27 +81,27 @@
                            PaneDisplayMode="Left" OpenPaneLength="240"
                            IsBackButtonVisible="Collapsed">
             <ui:NavigationView.MenuItems>
-                <ui:NavigationViewItem Content="Dashboard" Icon="{ui:SymbolIcon Home24}"
+                <ui:NavigationViewItem Content="Dashboard" ToolTip="Dashboard (Ctrl+1)" Icon="{ui:SymbolIcon Home24}"
                                        TargetPageType="{x:Type views:DashboardPage}" />
-                <ui:NavigationViewItem Content="Notifications" Icon="{ui:SymbolIcon Alert24}"
+                <ui:NavigationViewItem Content="Notifications" ToolTip="Notifications (Ctrl+2)" Icon="{ui:SymbolIcon Alert24}"
                                        TargetPageType="{x:Type views:NotificationsPage}" />
-                <ui:NavigationViewItem Content="Rooms &amp; Beds" Icon="{ui:SymbolIcon Building24}"
+                <ui:NavigationViewItem Content="Rooms &amp; Beds" ToolTip="Rooms &amp; Beds (Ctrl+3)" Icon="{ui:SymbolIcon Building24}"
                                        TargetPageType="{x:Type views:RoomsPage}" />
-                <ui:NavigationViewItem Content="Tenants" Icon="{ui:SymbolIcon People24}"
+                <ui:NavigationViewItem Content="Tenants" ToolTip="Tenants (Ctrl+4)" Icon="{ui:SymbolIcon People24}"
                                        TargetPageType="{x:Type views:TenantsPage}" />
-                <ui:NavigationViewItem Content="Rent Billing" Icon="{ui:SymbolIcon DocumentText24}"
+                <ui:NavigationViewItem Content="Rent Billing" ToolTip="Rent Billing (Ctrl+5)" Icon="{ui:SymbolIcon DocumentText24}"
                        TargetPageType="{x:Type views:RentBillingPage}" />
-                <ui:NavigationViewItem Content="Utility Bills" Icon="{ui:SymbolIcon Flash24}"
+                <ui:NavigationViewItem Content="Utility Bills" ToolTip="Utility Bills (Ctrl+6)" Icon="{ui:SymbolIcon Flash24}"
                                        TargetPageType="{x:Type views:UtilityBillsPage}" />
-                <ui:NavigationViewItem Content="Billing Charges" Icon="{ui:SymbolIcon Receipt24}"
+                <ui:NavigationViewItem Content="Billing Charges" ToolTip="Billing Charges (Ctrl+7)" Icon="{ui:SymbolIcon Receipt24}"
                                        TargetPageType="{x:Type views:BillingPage}" />
-                <ui:NavigationViewItem Content="Payments" Icon="{ui:SymbolIcon Money24}"
+                <ui:NavigationViewItem Content="Payments" ToolTip="Payments (Ctrl+8)" Icon="{ui:SymbolIcon Money24}"
                                        TargetPageType="{x:Type views:PaymentsPage}" />
-                <ui:NavigationViewItem Content="Reports" Icon="{ui:SymbolIcon DataBarVertical24}"
+                <ui:NavigationViewItem Content="Reports" ToolTip="Reports (Ctrl+9)" Icon="{ui:SymbolIcon DataBarVertical24}"
                                        TargetPageType="{x:Type views:ReportsPage}" />
             </ui:NavigationView.MenuItems>
             <ui:NavigationView.FooterMenuItems>
-                <ui:NavigationViewItem Content="Settings" Icon="{ui:SymbolIcon Settings24}"
+                <ui:NavigationViewItem Content="Settings" ToolTip="Settings (Ctrl+0)" Icon="{ui:SymbolIcon Settings24}"
                            TargetPageType="{x:Type views:SettingsPage}" />
             </ui:NavigationView.FooterMenuItems>
 
@@ -112,7 +112,7 @@
                             Background="{DynamicResource AppSurfaceBrush}">
                         <StackPanel Orientation="Horizontal">
                             <Border Width="32" Height="32" CornerRadius="16"
-                                    Background="{DynamicResource AppPrimaryBrush}">
+                                    Background="{DynamicResource AppPrimaryStrongBrush}">
                                 <TextBlock x:Name="AccountInitial" Text="A" Foreground="White" FontWeight="SemiBold"
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>

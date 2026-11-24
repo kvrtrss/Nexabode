@@ -15,7 +15,7 @@
                        Visibility="Collapsed" Margin="0,0,0,8" />
 
             <TextBlock Text="Bed" Style="{StaticResource MutedText}" Margin="0,10,0,4" />
-            <ComboBox x:Name="BedCombo" DisplayMemberPath="Display" Margin="0,0,0,12" />
+            <ComboBox x:Name="BedCombo" DisplayMemberPath="Display" Margin="0,0,0,12" SelectionChanged="BedCombo_SelectionChanged"/>
 
             <TextBlock Text="Move-in date" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
             <DatePicker x:Name="MoveInPicker" Margin="0,0,0,12" />
@@ -26,10 +26,10 @@
                       Click="Ongoing_Click" Margin="0,0,0,6" />
             <DatePicker x:Name="MoveOutPicker" Margin="0,0,0,12" />
 
-            <TextBlock Text="Agreed monthly rent" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <TextBlock Text="Agreed monthly rent (₱)" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
             <ui:TextBox x:Name="RentBox" Margin="0,0,0,12" />
 
-            <TextBlock Text="Deposit (blank for none)" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <TextBlock Text="Deposit (₱, blank for none)" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
             <ui:TextBox x:Name="DepositBox" Margin="0,0,0,12" />
 
             <TextBlock Text="Reason for this change (required, saved in the change history)"

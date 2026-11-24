@@ -25,24 +25,35 @@ public partial class RentBillingPage : Page
         public int? ChargeId { get; set; }
         public bool IsArchived { get; set; }
         public bool Settled => Generated && (IsVoided || Balance <= 0);
+        // Payment status for rent that exists (Paid, Partial, Unpaid or Overdue), the same words as Billing Charges.
         public string Status => IsVoided ? "Voided"
                               : IsArchived && Settled ? "Archived"
-                              : Generated ? "Generated" : "Not generated";
+                              : Generated ? BillingRules.ChargeStatus(Amount, Paid, DueDate ?? DateOnly.MaxValue,
+                                                                      DateOnly.FromDateTime(DateTime.Today))
+                              : "Not generated";
+        public string DueText => DueDate is DateOnly due ? Fmt.Date(due) : "";
+        public string BalanceText => Generated && !IsVoided ? Fmt.Peso(Math.Max(0, Balance)) : "";
+        // Two-line rows: second line of the first column (bed and details), and of the rent column (what is left).
+        public string LineTwo => string.Join("  ·  ", new[] { Bed, Details }.Where(t => !string.IsNullOrWhiteSpace(t)));
+        public string BalanceLine => Generated && !IsVoided ? (Balance <= 0 ? "Paid in full" : $"Balance {Fmt.Peso(Balance)}") : "";
     }
 
     private List<RentRow> _rows = new();
     private bool _ready;
+    private string _emptyMessage = "";   // the page's own "no rent to show" text, put back when the search is cleared
 
     public RentBillingPage()
     {
         InitializeComponent();
+        _emptyMessage = EmptyText.Text;
+
+        // Right-click on a row offers the same actions as the buttons.
+        GridMenu.Attach(RentGrid, EditRentButton, RestoreRentButton, ArchiveButton, UnarchiveButton);
         Loaded += (_, _) => Setup();
     }
 
     // ---------- Helpers ----------
 
-    private static void Tell(string message) =>
-        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
     private Window? Owner => Window.GetWindow(this);
 
@@ -58,24 +69,26 @@ public partial class RentBillingPage : Page
     {
         var months = BillingHelpers.BuildMonths();
         MonthCombo.ItemsSource = months;
-        FullRentCheck.IsChecked = AppSettings.Load().FullRentForPartialMonths;
         _ready = true;
         MonthCombo.SelectedItem = months.First(m => m.Start == BillingHelpers.CurrentMonthStart());
     }
 
     private void MonthCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_ready || SelectedMonth is not DateOnly start) return;
-        RentDuePicker.SelectedDate = start.AddDays(4).ToDateTime(TimeOnly.MinValue);   // the 5th
+        if (!_ready || SelectedMonth is null) return;
         LoadList();
     }
 
-    private void FullRent_Changed(object sender, RoutedEventArgs e)
+    // The usual due date for a month, from the house setting in Settings.
+    private static DateOnly UsualDue(DateOnly monthStart) =>
+        RentDueRules.UsualDueDate(monthStart, AppSettings.Load().RentDueDay);
+
+    // Opens the little menu with the less common actions.
+    private void More_Click(object sender, RoutedEventArgs e)
     {
-        if (!_ready) return;
-        var full = FullRentCheck.IsChecked == true;
-        AppSettings.Update(s => s.FullRentForPartialMonths = full);   // remembered for the whole property
-        LoadList();
+        if (MoreButton.ContextMenu is not { } menu) return;
+        menu.PlacementTarget = MoreButton;
+        menu.IsOpen = true;
     }
 
     private void ShowArchived_Changed(object sender, RoutedEventArgs e)
@@ -113,13 +126,13 @@ public partial class RentBillingPage : Page
             .ToList();
         if (ids.Count == 0)
         {
-            Tell("There are no fully paid rent charges to archive for this month.");
+            Say.Info("There are no fully paid rent charges to archive for this month.");
             return;
         }
 
         var month = (MonthCombo.SelectedItem as MonthOption)?.Display;
         var answer = ConfirmActionDialog.YesNo(
-            $"Archive {ids.Count} fully paid rent charge(s) for {month}?\n\n" +
+            $"Archive {Fmt.Count(ids.Count, "fully paid rent charge")} for {month}?\n\n" +
             "They are only hidden from this list. Totals, reports and statements are not affected, " +
             "and the rent still counts as generated. You can show the charges again with Show archived and Unarchive.",
             "Archive settled rent", confirmText: "Archive");
@@ -132,7 +145,7 @@ public partial class RentBillingPage : Page
     {
         if (ids.Count == 0) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         foreach (var charge in db.Charges.IgnoreQueryFilters().Where(c => ids.Contains(c.Id)).ToList())
             charge.IsArchived = archived;
         db.SaveChanges();
@@ -141,6 +154,11 @@ public partial class RentBillingPage : Page
     }
 
     private void ShowVoided_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_ready) LoadList();
+    }
+
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_ready) LoadList();
     }
@@ -155,7 +173,6 @@ public partial class RentBillingPage : Page
 
     private void UpdateButtons()
     {
-        GenerateSelectedButton.IsEnabled = SelectedRow is { Generated: false, IsVoided: false };
         EditRentButton.IsEnabled = SelectedRow is { Generated: true, IsVoided: false, ChargeId: not null };
         RestoreRentButton.IsEnabled = SelectedRow is { Generated: true, IsVoided: true, ChargeId: not null };
 
@@ -166,7 +183,7 @@ public partial class RentBillingPage : Page
 
     // ---------- The list: what rent exists and what is still to be generated ----------
 
-    private static List<RentRow> BuildRows(AppDbContext db, DateOnly start, bool fullRentForPartial)
+    private static List<RentRow> BuildRows(AppDbContext db, DateOnly start, bool fullRentForPartial, DateOnly usualDue)
     {
         var end = start.AddMonths(1).AddDays(-1);
         var key = BillingHelpers.MonthKey(start);
@@ -234,7 +251,9 @@ public partial class RentBillingPage : Page
                 Tenant = stay.Tenant.FullName,
                 Bed = bed,
                 Details = rent.Description,
-                Amount = rent.Amount
+                Amount = rent.Amount,
+                // Never due before the stay starts, so a new tenant is not overdue on their first day.
+                DueDate = RentDueRules.DueDate(usualDue, stay.MoveInDate)
             });
         }
 
@@ -247,14 +266,27 @@ public partial class RentBillingPage : Page
 
         var today = DateOnly.FromDateTime(DateTime.Today);
 
-        using var db = new AppDbContext();
-        _rows = BuildRows(db, start, FullRentCheck.IsChecked == true);
+        using var db = AppDb.Create();
+        var settings = AppSettings.Load();
+        _rows = BuildRows(db, start, settings.FullRentForPartialMonths, UsualDue(start));
+        DueInfoText.Text = $"Rent is due on day {Math.Clamp(settings.RentDueDay, 1, 31)} of each month, " +
+                           "or on the move-in day for a tenant who moves in later. Change the usual day in Settings.";
         var showVoided = ShowVoidedCheck.IsChecked == true;
         var showArchived = ShowArchivedCheck.IsChecked == true;
+        var query = SearchBox.Text.Trim();
         RentGrid.ItemsSource = _rows
             .Where(r => showVoided || !r.IsVoided)
             .Where(r => showArchived || !(r.IsArchived && r.Settled))
+            .Where(r => query.Length == 0
+                || r.Tenant.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || r.Bed.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || r.Details.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || r.Status.Contains(query, StringComparison.OrdinalIgnoreCase))
             .ToList();
+        EmptyText.Text = query.Length > 0 && _rows.Count > 0 && RentGrid.Items.Count == 0
+            ? "No rent charges match your search. Clear the search box to see them all."
+            : _emptyMessage;
+        EmptyText.Visibility = RentGrid.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         var live = _rows.Where(r => !r.IsVoided).ToList();
         var generated = live.Where(r => r.Generated).ToList();
@@ -287,6 +319,10 @@ public partial class RentBillingPage : Page
         OverdueCard.Caption = overdue > 0 ? "Past due date" : "Nothing overdue";
         OverdueCard.Tone = overdue > 0 ? "Danger" : "Success";
 
+        // The main button says how much is left to do, and switches off when there is nothing to generate.
+        PageHeaderControl.ActionText = missing > 0 ? $"Generate rent ({missing})" : "Generate rent";
+        PageHeaderControl.ActionEnabled = missing > 0;
+
         UpdateButtons();
     }
 
@@ -299,14 +335,14 @@ public partial class RentBillingPage : Page
     {
         if (SelectedRow is not RentRow { Generated: true, IsVoided: true, ChargeId: int chargeId }) return;
 
-        var fullRent = FullRentCheck.IsChecked == true;
+        var fullRent = AppSettings.Load().FullRentForPartialMonths;
         var today = DateOnly.FromDateTime(DateTime.Today);
 
         RentRestorePlan plan;
-        using (var look = new AppDbContext())
+        using (var look = AppDb.Create())
         {
             var (found, problem) = RentRestore.Plan(look, chargeId, fullRent, today);
-            if (found == null) { Tell(problem ?? "That rent charge could not be restored."); return; }
+            if (found == null) { Say.Info(problem ?? "That rent charge could not be restored."); return; }
             plan = found;
         }
 
@@ -320,7 +356,7 @@ public partial class RentBillingPage : Page
 
         try
         {
-            using var db = new AppDbContext();
+            using var db = AppDb.Create();
             using var transaction = db.Database.BeginTransaction();
 
             // Work it out again at the last moment, in case something changed while the window was open.
@@ -328,7 +364,7 @@ public partial class RentBillingPage : Page
             if (fresh == null)
             {
                 transaction.Rollback();
-                Tell(problem ?? "That rent charge could not be restored.");
+                Say.Info(problem ?? "That rent charge could not be restored.");
                 LoadList();
                 return;
             }
@@ -339,7 +375,7 @@ public partial class RentBillingPage : Page
         }
         catch (Exception ex) when (ex is DbUpdateException or Microsoft.Data.Sqlite.SqliteException)
         {
-            Tell("The charge could not be restored because the data changed at the same moment. " +
+            Say.Info("The charge could not be restored because the data changed at the same moment. " +
                  "Nothing was changed. Please try again.");
         }
 
@@ -403,7 +439,7 @@ public partial class RentBillingPage : Page
                     ConfirmWording.EditRecord($"{row.Tenant}'s rent", reviewList), "Save changes")) return;
         }
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var charge = db.Charges
             .Include(c => c.Allocations)
             .Include(c => c.Occupancy)
@@ -411,13 +447,13 @@ public partial class RentBillingPage : Page
 
         if (charge == null)
         {
-            Tell("This rent charge has been voided, so it cannot be edited.");
+            Say.Info("This rent charge has been voided, so it cannot be edited.");
             LoadList();
             return;
         }
         if (canEditAmount && charge.Allocations.Count > 0)
         {
-            Tell("A payment was just applied to this charge, so the amount cannot be changed. Nothing was saved.");
+            Say.Info("A payment was just applied to this charge, so the amount cannot be changed. Nothing was saved.");
             LoadList();
             return;
         }
@@ -455,7 +491,7 @@ public partial class RentBillingPage : Page
 
         if (changes == 0)
         {
-            Tell("No changes were made.");
+            Say.Info("No changes were made.");
             return;
         }
 
@@ -467,57 +503,46 @@ public partial class RentBillingPage : Page
 
     private void GenerateAll_Click(object sender, RoutedEventArgs e)
     {
-        var todo = _rows.Where(r => !r.Generated && !r.IsVoided).ToList();
-
-        if (todo.Count == 0)
+        if (SelectedMonth is not DateOnly start)
         {
-            Tell(_rows.Count == 0
+            Say.Info("Select a billing month first.");
+            return;
+        }
+
+        if (!_rows.Any(r => !r.Generated && !r.IsVoided))
+        {
+            Say.Info(_rows.Count == 0
                 ? "No tenants stayed during this month, so there is no rent to generate."
                 : "All rent for this month has already been generated.");
             return;
         }
 
-        Generate(todo);
-    }
-
-    private void GenerateSelected_Click(object sender, RoutedEventArgs e)
-    {
-        if (SelectedRow is not RentRow { Generated: false, IsVoided: false } row)
-        {
-            Tell("Select a tenant whose rent has not been generated yet.");
-            return;
-        }
-
-        Generate(new List<RentRow> { row });
-    }
-
-    private void Generate(List<RentRow> todo)
-    {
-        if (SelectedMonth is not DateOnly start)
-        {
-            Tell("Select a billing month first.");
-            return;
-        }
-        if (RentDuePicker.SelectedDate is not DateTime dueDt)
-        {
-            Tell("Select a rent due date.");
-            return;
-        }
-
-        var due = DateOnly.FromDateTime(dueDt);
+        var settings = AppSettings.Load();
         var monthName = (MonthCombo.SelectedItem as MonthOption)?.Display ?? "this month";
 
-        var confirm = ConfirmActionDialog.YesNo(
-            $"Create {todo.Count} rent charge(s) for {monthName}, totalling {Fmt.Peso(todo.Sum(r => r.Amount))}, " +
-            $"due {Fmt.Date(due)}?\n\nA charge can be voided later in Billing Charges if it was created by mistake.",
-            "Generate rent", confirmText: "Generate rent");
-        if (confirm != MessageBoxResult.Yes) return;
+        // Worked out again inside the window whenever the due date or the partial-month option changes.
+        List<RentRow> Build(bool fullRent, DateOnly usualDue)
+        {
+            using var db = AppDb.Create();
+            return BuildRows(db, start, fullRent, usualDue).Where(r => !r.Generated && !r.IsVoided).ToList();
+        }
 
+        var choice = GenerateRentDialog.Ask(Owner, monthName, UsualDue(start), settings.FullRentForPartialMonths, Build);
+        if (choice == null) return;
+
+        // The partial-month option is remembered for the whole property, as before.
+        AppSettings.Update(s => s.FullRentForPartialMonths = choice.FullRent);
+        Generate(choice.Rows, start, choice.UsualDue);
+    }
+
+    // The window itself was the confirmation, so this goes straight to saving.
+    private void Generate(List<RentRow> todo, DateOnly start, DateOnly due)
+    {
         var count = todo.Count;
         var partial = todo.Count(r => r.Details.StartsWith("Rent (", StringComparison.Ordinal));
         var key = BillingHelpers.MonthKey(start);
 
-        using (var db = new AppDbContext())
+        using (var db = AppDb.Create())
         {
             foreach (var row in todo)
             {
@@ -528,7 +553,7 @@ public partial class RentBillingPage : Page
                     ChargeType = ChargeType.Rent,
                     Description = row.Details,
                     Amount = row.Amount,
-                    DueDate = due
+                    DueDate = row.DueDate ?? due
                 });
             }
 
@@ -538,7 +563,7 @@ public partial class RentBillingPage : Page
             }
             catch (DbUpdateException)
             {
-                Tell("The rent charges could not be saved and nothing was saved. Some of them may already exist for this month.\n\n" +
+                Say.Info("The rent charges could not be saved and nothing was saved. Some of them may already exist for this month.\n\n" +
                      "The list has been refreshed. Check it and try again.");
                 LoadList();
                 return;
@@ -549,7 +574,7 @@ public partial class RentBillingPage : Page
 
         var message = $"Rent charges created: {count}.";
         if (partial > 0)
-            message += $"\n\n{partial} charge(s) were calculated by days (a move-in or move-out during the month, or more than one stay this month).";
-        Tell(message);
+            message += $"\n\n{Fmt.Count(partial, "charge")} {(partial == 1 ? "was" : "were")} calculated by days (a move-in or move-out during the month, or more than one stay this month).";
+        Say.Info(message);
     }
 }

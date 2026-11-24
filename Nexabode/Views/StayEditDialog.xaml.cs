@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using Nexabode.Services;
 
 namespace Nexabode.Views;
@@ -11,6 +12,7 @@ public partial class StayEditDialog : Window
     private readonly Func<StayEdit, string?> _conflictText;
     private StayEdit? _result;
     private string? _acknowledged;   // the exact warning the exception box was ticked for
+    private bool _ready;             // false while the form is being filled in, so that is not counted as choosing another bed
 
     private StayEditDialog(string title, string? note, List<BedChoice> beds, StayEdit current,
                            Func<StayEdit, string?> hardCheck, Func<StayEdit, string?> conflictText)
@@ -40,6 +42,16 @@ public partial class StayEditDialog : Window
 
         RentBox.Text = current.Rent.ToString("0.##", CultureInfo.CurrentCulture);
         DepositBox.Text = current.Deposit == 0 ? "" : current.Deposit.ToString("0.##", CultureInfo.CurrentCulture);
+
+        _ready = true;
+    }
+
+    // Like the move-in window: choosing another bed fills in that bed's price as the rent. It can still be changed by hand,
+    // and the list shows each bed's price so the original price is always visible.
+    private void BedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_ready || BedCombo.SelectedItem is not BedChoice bed) return;
+        RentBox.Text = bed.Rate.ToString("0.##", CultureInfo.CurrentCulture);
     }
 
     // Returns the confirmed edit, or null if the administrator cancelled.

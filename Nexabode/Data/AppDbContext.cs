@@ -2,7 +2,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nexabode.Models;
 using Nexabode.Services;
-using static Nexabode.Models.PaymentAllocation;
 
 namespace Nexabode.Data;
 
@@ -21,8 +20,15 @@ public class AppDbContext : DbContext
     public DbSet<Reminder> Reminders => Set<Reminder>();
     public DbSet<SignInGuard> SignInGuards => Set<SignInGuard>();
 
+    public AppDbContext() { }
+
+    // Used by tests, which bring their own database.
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
+        if (options.IsConfigured) return;   // a test has already chosen the database
+
         options.UseSqlite(DatabaseKeyProvider.BuildConnectionString(
             DatabaseKeyProvider.DbPath, DatabaseKeyProvider.GetOrCreateKey()));
     }

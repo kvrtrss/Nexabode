@@ -24,7 +24,7 @@ public static class BackupService
     {
         try
         {
-            using var db = new AppDbContext();
+            using var db = AppDb.Create();
             db.Database.ExecuteSqlRaw("PRAGMA wal_checkpoint(TRUNCATE);");
         }
         catch { /* the copy below still works if no checkpoint was needed */ }
@@ -147,6 +147,7 @@ public static class BackupService
         var temp = Path.Combine(DatabaseKeyProvider.AppFolder, "restore-check.tmp");
         File.WriteAllBytes(temp, database);
 
+        long backupVersion;
         try
         {
             var connection = DatabaseKeyProvider.BuildConnectionString(temp, Convert.ToBase64String(key), pooling: false);
@@ -156,6 +157,14 @@ public static class BackupService
             using var command = check.CreateCommand();
             command.CommandText = "SELECT COUNT(*) FROM AdminUsers";
             command.ExecuteScalar();
+
+            // Make sure the data inside is not damaged, and note which version of Nexabode made it.
+            command.CommandText = "PRAGMA integrity_check";
+            if (!string.Equals(command.ExecuteScalar() as string, "ok", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The backup failed its integrity check.");
+
+            command.CommandText = "PRAGMA user_version";
+            backupVersion = Convert.ToInt64(command.ExecuteScalar());
         }
         catch (Exception)
         {
@@ -166,12 +175,21 @@ public static class BackupService
             throw new InvalidDataException("The backup could not be opened. It may be damaged.");
         }
 
+        if (backupVersion > DbInitializer.SchemaVersion)
+        {
+            SqliteConnection.ClearAllPools();
+            DeleteQuietly(temp);
+            DeleteQuietly(temp + "-wal");
+            DeleteQuietly(temp + "-shm");
+            throw new InvalidDataException("This backup was made by a newer version of Nexabode. Install the latest Nexabode, then restore it.");
+        }
+
         DeleteQuietly(temp + "-wal");
         DeleteQuietly(temp + "-shm");
 
         // 2. Save a safety copy of the current data, locked with the same password.
         Directory.CreateDirectory(SafetyFolder);
-        var safety = Path.Combine(SafetyFolder, $"before-restore-{DateTime.Now:yyyyMMdd-HHmmss}.nexabak");
+        var safety = Path.Combine(SafetyFolder, $"before-restore-{Clock.Now:yyyyMMdd-HHmmss}.nexabak");
         try
         {
             CreateBackup(safety, password);

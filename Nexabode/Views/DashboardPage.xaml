@@ -6,7 +6,7 @@
       Title="Dashboard">
     <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Auto" Background="Transparent">
-        <Border Padding="32,24" MinWidth="880"
+        <Border Padding="32,24" MinWidth="800"
                 Width="{Binding ViewportWidth, ElementName=PageScroll}">
         <Grid>
             <Grid.RowDefinitions>
@@ -149,20 +149,20 @@
                             <TextBlock x:Name="MonthTitle" Style="{StaticResource SectionTitle}"
                                        FontSize="18" VerticalAlignment="Center" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <ui:Button Content="‹" Appearance="Transparent" Click="PrevMonth_Click" />
+                                <ui:Button Content="‹" Appearance="Transparent" Click="PrevMonth_Click" AutomationProperties.Name="Previous month" />
                                 <ui:Button Content="Today" Appearance="Transparent" Click="Today_Click" />
-                                <ui:Button Content="›" Appearance="Transparent" Click="NextMonth_Click" />
+                                <ui:Button Content="›" Appearance="Transparent" Click="NextMonth_Click" AutomationProperties.Name="Next month" />
                             </StackPanel>
                         </Grid>
 
                         <UniformGrid Columns="7" Margin="0,0,0,4">
-                            <TextBlock Text="MON" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                            <TextBlock Text="TUE" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                            <TextBlock Text="WED" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                            <TextBlock Text="THU" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                            <TextBlock Text="FRI" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                            <TextBlock Text="SAT" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                            <TextBlock Text="SUN" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            <TextBlock Text="Mon" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            <TextBlock Text="Tue" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            <TextBlock Text="Wed" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            <TextBlock Text="Thu" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            <TextBlock Text="Fri" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            <TextBlock Text="Sat" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            <TextBlock Text="Sun" Style="{StaticResource MutedText}" FontWeight="SemiBold" HorizontalAlignment="Center" />
                         </UniformGrid>
 
                         <UniformGrid x:Name="DayGrid" Columns="7" />

@@ -23,6 +23,12 @@ public partial class DashboardPage : Page
     public DashboardPage()
     {
         InitializeComponent();
+
+        // The summary boxes open the page behind their number.
+        LinkCard(OccupancyCard, typeof(RoomsPage), "Open Rooms & Beds");
+        LinkCard(BedsCard, typeof(RoomsPage), "Open Rooms & Beds");
+        LinkCard(CollectedCard, typeof(PaymentsPage), "Open Payments");
+        LinkCard(OutstandingCard, typeof(BillingPage), "Open Billing Charges");
         Loaded += (_, _) => Setup();
     }
 
@@ -31,7 +37,11 @@ public partial class DashboardPage : Page
     private void Go(Type page) => (Window.GetWindow(this) as MainWindow)?.NavigateTo(page);
 
     private void AddTenant_Click(object sender, RoutedEventArgs e) => Go(typeof(TenantsPage));
-    private void RecordPayment_Click(object sender, RoutedEventArgs e) => Go(typeof(PaymentsPage));
+    private void RecordPayment_Click(object sender, RoutedEventArgs e)
+    {
+        PaymentsPage.OpenFormOnLoad = true;   // the Payments page opens the Record payment window itself
+        Go(typeof(PaymentsPage));
+    }
     private void GenerateRent_Click(object sender, RoutedEventArgs e) => Go(typeof(RentBillingPage));
     private void AddUtility_Click(object sender, RoutedEventArgs e) => Go(typeof(UtilityBillsPage));
 
@@ -41,7 +51,7 @@ public partial class DashboardPage : Page
     private static bool _setupHidden;
 
     // 'Urgent' steps are the first-time setup; the rest are gentle tips.
-    private sealed record SetupStep(string Line, string Button, Func<bool> Do, bool Urgent,
+    private sealed record SetupStep(string Line, string Why, string Button, Func<bool> Do, bool Urgent,
                                     string? SecondaryButton = null, Action? Secondary = null);
 
     private SetupStep? _nextStep;
@@ -50,44 +60,25 @@ public partial class DashboardPage : Page
     {
         var steps = new List<SetupStep>();
 
-        var needRecovery = !AuthService.HasRecoveryCode(Session.UserId);
-        var needEmergency = Session.IsOwner && !AuthService.HasEmergencyKey();
-        if (needRecovery || needEmergency)
-        {
-            var line = needRecovery && needEmergency ? "Save your recovery code and emergency access key"
-                     : needRecovery ? "Save your recovery code"
-                     : "Save your emergency access key";
-            steps.Add(new SetupStep(line, "Save my recovery codes",
-                () => SetupCodesDialog.RunFirstTime(Window.GetWindow(this)), Urgent: true));
-        }
+        if (Session.IsOwner && !AuthService.HasEmergencyKey())
+            steps.Add(new SetupStep("Save your Owner recovery key",
+                "It is the only way back in if an Owner forgets their password.",
+                "Save my recovery key",
+                () => RecoveryCodeDialog.OfferIfMissing(Window.GetWindow(this)), Urgent: true));
 
         if (BackupReminder.IsDue)
         {
             var days = BackupReminder.DaysSinceBackup();
             steps.Add(days == null
-                ? new SetupStep("Make your first backup", "Go to Settings", GoToSettings, Urgent: true)
-                : new SetupStep($"Refresh your backup (the last one was {days} day(s) ago)", "Go to Settings",
-                                GoToSettings, Urgent: false));
+                ? new SetupStep("Make your first backup",
+                    "Your records live only on this computer. A backup protects them if it breaks or is lost.",
+                    "Go to backup settings", GoToSettings, Urgent: true)
+                : new SetupStep($"Your last backup was {Fmt.Count(days.Value, "day")} ago",
+                    "Make a fresh one so your recent records are protected.",
+                    "Go to backup settings", GoToSettings, Urgent: false));
         }
 
-        // The reset-phrase suggestion is only a tip, so it waits until everything else is done.
-        // The second-Owner tip below then waits for this one, so only one tip shows at a time.
-        if (steps.Count == 0 && Session.IsOwner && !AppSettings.Load().HideResetPhraseTip && !AuthService.HasResetPhrase())
-        {
-            steps.Add(new SetupStep("Optional: set a reset phrase, an easier-to-remember way back in if nobody can sign in",
-                "Set a reset phrase", SetResetPhrase, Urgent: false,
-                SecondaryButton: "Not needed", Secondary: () => AppSettings.Update(x => x.HideResetPhraseTip = true)));
-        }
-
-        // The second-Owner suggestion is only a tip, so it waits until everything else is done.
-        if (steps.Count == 0 && Session.IsOwner && !AppSettings.Load().HideSecondOwnerTip)
-        {
-            using var db = new AppDbContext();
-            if (AccountService.OwnerCount(db) < 2)
-                steps.Add(new SetupStep("Optional: add a second Owner, so either one can help the other get back in",
-                    "Add an Owner", GoToSettings, Urgent: false,
-                    SecondaryButton: "Not needed", Secondary: () => AppSettings.Update(x => x.HideSecondOwnerTip = true)));
-        }
+        // Optional tips (such as adding a second Owner) are not shown here. They live on the Notifications page.
 
         SetupRows.Children.Clear();
         _nextStep = steps.Count > 0 ? steps[0] : null;
@@ -97,6 +88,8 @@ public partial class DashboardPage : Page
             return;
         }
 
+        // The banner leads with the first thing to do and why; anything else waiting is mentioned below it.
+        var first = steps[0];
         var urgent = steps.Any(x => x.Urgent);
         if (urgent)
         {
@@ -105,8 +98,6 @@ public partial class DashboardPage : Page
             SetupIcon.Foreground = Res("WarningBrush");
             SetupIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ShieldError24;
             SetupCard.Resources["SetupAccent"] = new SolidColorBrush(Color.FromRgb(0xB4, 0x53, 0x09));   // deep amber, readable with white text
-            SetupTitle.Text = "A few important steps are still waiting";
-            SetupSubtitle.Text = "Finish setting up now for peace of mind and to keep your data safe. It only takes a few minutes.";
         }
         else
         {
@@ -115,14 +106,14 @@ public partial class DashboardPage : Page
             SetupIcon.Foreground = Res("InfoBrush");
             SetupIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Shield24;
             SetupCard.Resources["SetupAccent"] = new SolidColorBrush(Color.FromRgb(0x03, 0x69, 0xA1));   // deep blue
-            SetupTitle.Text = "A quick reminder";
-            SetupSubtitle.Text = "Nothing is wrong. This is just a friendly nudge.";
         }
+        SetupTitle.Text = first.Line;
+        SetupSubtitle.Text = first.Why;
 
-        foreach (var step in steps)
+        foreach (var step in steps.Skip(1))
             SetupRows.Children.Add(new TextBlock
             {
-                Text = "\u2022  " + step.Line,
+                Text = "Also: " + step.Line,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 2, 0, 0),
                 Foreground = Res("AppTextBrush")
@@ -145,17 +136,6 @@ public partial class DashboardPage : Page
     {
         _nextStep?.Secondary?.Invoke();
         ShowSetupCard();
-    }
-
-    // Asks for the password again, as Settings does, then opens the reset phrase window.
-    private bool SetResetPhrase()
-    {
-        var owner = Window.GetWindow(this);
-        if (!ConfirmPasswordDialog.Ask(owner, Session.Administrator,
-                "Enter your password to set the reset phrase. The phrase can be used to regain access when nobody can sign in."))
-            return false;
-
-        return ResetPhraseDialog.Ask(owner, Session.Administrator);
     }
 
     private bool GoToSettings()
@@ -194,7 +174,7 @@ public partial class DashboardPage : Page
         var monthStart = new DateOnly(today.Year, today.Month, 1);
         var lastStart = monthStart.AddMonths(-1);
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         var totalBeds = db.Beds.Count(b => b.IsActive && b.Room.IsActive && !b.IsMaintenance);
         var occupied = db.Occupancies.CurrentOrUpcoming().Select(o => o.BedId).Distinct().Count();
@@ -211,8 +191,8 @@ public partial class DashboardPage : Page
         OccupancyCard.Tone = "Info";
 
         BedsCard.Value = $"{occupied} / {totalBeds}";
-        BedsCard.Caption = $"{vacant} bed(s) available";
-        BedsCard.Tone = "Success";
+        BedsCard.Caption = $"{Fmt.Count(vacant, "bed")} available";
+        BedsCard.Tone = vacant > 0 ? "Success" : "Neutral";
 
         // Money is summed in C# because SQLite can't add up decimal columns.
         var payments = db.Payments.Where(p => p.PaymentDate >= lastStart && !p.IsVoided).ToList();
@@ -240,7 +220,7 @@ public partial class DashboardPage : Page
         var overdueCount = openBalances.Count(x => x.DueDate < today);
 
         OutstandingCard.Value = Fmt.Peso(openBalances.Sum(x => x.Balance));
-        OutstandingCard.Caption = overdueCount > 0 ? $"{overdueCount} overdue charge(s)" : "Nothing overdue";
+        OutstandingCard.Caption = overdueCount > 0 ? Fmt.Count(overdueCount, "overdue charge") : "Nothing overdue";
         OutstandingCard.Tone = overdueCount > 0 ? "Danger" : "Success";
     }
 
@@ -276,7 +256,7 @@ public partial class DashboardPage : Page
     private List<CalEvent> LoadMonthEvents(DateOnly first, DateOnly last)
     {
         var events = new List<CalEvent>();
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         var charges = db.Charges
     .Include(c => c.Allocations)
@@ -333,7 +313,7 @@ public partial class DashboardPage : Page
 
         var offset = ((int)_month.DayOfWeek + 6) % 7;   // Monday-first
         for (var i = 0; i < offset; i++)
-            DayGrid.Children.Add(new Border { Height = 54 });
+            DayGrid.Children.Add(new Border { Height = 40 });
 
         var days = DateTime.DaysInMonth(_month.Year, _month.Month);
         for (var d = 1; d <= days; d++)
@@ -360,7 +340,7 @@ public partial class DashboardPage : Page
             Width = 30,
             Height = 30,
             CornerRadius = new CornerRadius(15),
-            Background = isToday ? Res("AppPrimaryBrush")
+            Background = isToday ? Res("AppPrimaryStrongBrush")
                        : isSelected ? Res("AppBorderBrush")
                        : Brushes.Transparent,
             Child = number
@@ -389,7 +369,7 @@ public partial class DashboardPage : Page
 
         var cell = new Border
         {
-            Height = 54,
+            Height = 40,
             Background = Brushes.Transparent,
             Cursor = Cursors.Hand,
             Child = stack
@@ -470,16 +450,23 @@ public partial class DashboardPage : Page
 
     // ---------- Recent activity ----------
 
+    private void LinkCard(FrameworkElement card, Type page, string tip)
+    {
+        card.Cursor = Cursors.Hand;
+        card.ToolTip = tip;
+        card.MouseLeftButtonUp += (_, _) => (Window.GetWindow(this) as MainWindow)?.NavigateTo(page);
+    }
+
     private void LoadActivity()
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
         var cutoff = today.AddDays(-45);
         var items = new List<ActivityItem>();
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         foreach (var p in db.Payments.Include(p => p.Tenant).ToList().Where(p => p.PaymentDate >= cutoff && !p.IsVoided))
-            items.Add(new ActivityItem(p.PaymentDate, "PAYMENT RECEIVED",
+            items.Add(new ActivityItem(p.PaymentDate, "Payment received",
                 p.Tenant.FullName + (string.IsNullOrWhiteSpace(p.Method) ? "" : $" ({p.Method})"),
                 p.Amount, "Success", Wpf.Ui.Controls.SymbolRegular.Money24));
 
@@ -491,10 +478,10 @@ public partial class DashboardPage : Page
         {
             var bed = $"{s.Bed.Room.RoomName} / {s.Bed.BedLabel}";
             if (s.MoveInDate >= cutoff && s.MoveInDate <= today)
-                items.Add(new ActivityItem(s.MoveInDate, "TENANT MOVED IN", $"{s.Tenant.FullName}, {bed}", null, "Occupied",
+                items.Add(new ActivityItem(s.MoveInDate, "Tenant moved in", $"{s.Tenant.FullName}, {bed}", null, "Occupied",
                     Wpf.Ui.Controls.SymbolRegular.PersonArrowRight24));
             if (s.MoveOutDate is DateOnly mo && mo >= cutoff && mo <= today)
-                items.Add(new ActivityItem(mo, "TENANT MOVED OUT", $"{s.Tenant.FullName}, {bed}", null, "Neutral",
+                items.Add(new ActivityItem(mo, "Tenant moved out", $"{s.Tenant.FullName}, {bed}", null, "Neutral",
                     Wpf.Ui.Controls.SymbolRegular.PersonArrowLeft24));
         }
 
@@ -509,8 +496,8 @@ public partial class DashboardPage : Page
         foreach (var x in overdue)
         {
             var late = today.DayNumber - x.Charge.DueDate.DayNumber;
-            items.Add(new ActivityItem(x.Charge.DueDate, "CHARGE OVERDUE",
-                $"{x.Charge.Occupancy.Tenant.FullName}, {late} day(s) overdue", x.Balance, "Danger",
+            items.Add(new ActivityItem(x.Charge.DueDate, "Charge overdue",
+                $"{x.Charge.Occupancy.Tenant.FullName}, {Fmt.Count(late, "day")} overdue", x.Balance, "Danger",
                 Wpf.Ui.Controls.SymbolRegular.Warning24));
         }
 
@@ -560,7 +547,7 @@ public partial class DashboardPage : Page
         text.Children.Add(new TextBlock
         {
             Text = item.Title,
-            FontSize = 11.5,
+            FontSize = 12,
             FontWeight = FontWeights.SemiBold,
             Foreground = Res(item.Tone + "Brush")
         });
@@ -574,7 +561,7 @@ public partial class DashboardPage : Page
         {
             Text = Fmt.Date(item.Date),
             Style = (Style)FindResource("MutedText"),
-            FontSize = 11
+            FontSize = 12
         });
         Grid.SetColumn(text, 1);
 

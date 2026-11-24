@@ -1,3 +1,4 @@
+﻿using Microsoft.EntityFrameworkCore;
 using Nexabode.Data;
 using Nexabode.Models;
 
@@ -18,20 +19,13 @@ public sealed class EmergencyResult
     public bool Success { get; init; }
     public string? Error { get; init; }
     public bool Locked { get; init; }
-    public string? Username { get; init; }          // the Owner account that was created
+    public string? Username { get; init; }          // the Owner account that was created or whose password was reset
+    public bool WasReset { get; init; }             // true when an existing Owner's password was replaced
     public string? NewEmergencyKey { get; init; }   // the replacement key, shown once
 }
 
-public sealed class RecoveryResult
-{
-    public bool Success { get; init; }
-    public string? Error { get; init; }
-    public bool Locked { get; init; }              // sign-in is now locked (or already was)
-    public string? NewRecoveryCode { get; init; }  // the replacement code, shown once; set only on success
-}
-
-// Signing in, the lock after failed attempts, choosing a new password with a recovery code,
-// and the emergency access key for when no account can be signed in to.
+// Signing in, the lock after failed attempts, and the Owner recovery key: the one way back in when an Owner
+// forgets their password. (Staff who forget theirs ask an Owner to reset it in Settings.)
 // What this class writes to the change history never includes a password, a recovery code,
 // or what was typed in the username box (people sometimes type their password there by mistake).
 public static class AuthService
@@ -72,14 +66,14 @@ public static class AuthService
     // Nexabode (or logging out) does not clear it.
     public static bool IsLocked(out TimeSpan remaining)
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var guard = db.SignInGuards.FirstOrDefault();
         if (guard == null)
         {
             remaining = TimeSpan.Zero;
             return false;
         }
-        return LockoutRules.IsLocked(Read(guard, DateTime.UtcNow), DateTime.UtcNow, out remaining);
+        return LockoutRules.IsLocked(Read(guard, Clock.UtcNow), Clock.UtcNow, out remaining);
     }
 
     // Counts one wrong attempt and saves it. Returns the new state. 'what' is for the change history.
@@ -112,8 +106,8 @@ public static class AuthService
         if (username.Length == 0 || password.Length == 0)
             return new SignInResult { Status = SignInStatus.MissingInput };
 
-        using var db = new AppDbContext();
-        var now = DateTime.UtcNow;
+        using var db = AppDb.Create();
+        var now = Clock.UtcNow;
         var guard = LoadGuard(db);
         var state = Read(guard, now);
 
@@ -141,92 +135,11 @@ public static class AuthService
     // Only checks a password, for a person who is already signed in (it does not touch the lock).
     public static bool VerifyPassword(string username, string password)
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var lower = (username ?? "").Trim().ToLower();
         var user = db.AdminUsers.FirstOrDefault(u => u.Username.ToLower() == lower);
         var matches = BCrypt.Net.BCrypt.Verify(password ?? "", user?.PasswordHash ?? DummyHash.Value);
         return user != null && matches;
-    }
-
-    // ---------- forgot password ----------
-
-    // Chooses a new password for the account when the recovery code is right. Wrong guesses count
-    // toward the same lock as sign-in, so the code can't be tried over and over.
-    // The error for a wrong username and for a wrong code is the same, so it doesn't reveal which usernames exist.
-    public static RecoveryResult Recover(string? username, string? code, string? newPassword, string? confirmPassword)
-    {
-        username = (username ?? "").Trim();
-        newPassword ??= "";
-        var normalized = RecoveryCodeRules.Normalize(code);
-
-        using var db = new AppDbContext();
-        var now = DateTime.UtcNow;
-        var guard = LoadGuard(db);
-        var state = Read(guard, now);
-
-        if (LockoutRules.IsLocked(state, now, out _))
-            return new RecoveryResult { Locked = true, Error = "Too many unsuccessful attempts. Please wait until the lock ends." };
-
-        if (username.Length == 0 || normalized.Length == 0)
-            return new RecoveryResult { Error = "Enter your username and recovery code." };
-
-        // The password rules are public, so they are checked first and a typo here doesn't use up an attempt.
-        var passwordError = AccountService.PasswordError(username, newPassword);
-        if (passwordError != null) return new RecoveryResult { Error = passwordError };
-        if (newPassword != confirmPassword) return new RecoveryResult { Error = "The new passwords do not match." };
-
-        var lower = username.ToLower();
-        var user = db.AdminUsers.FirstOrDefault(u => u.Username.ToLower() == lower);
-
-        var hashMatches = BCrypt.Net.BCrypt.Verify(normalized, user?.RecoveryCodeHash ?? DummyHash.Value);
-        if (user == null || user.RecoveryCodeHash == null || !hashMatches)
-        {
-            var next = RegisterFailure(db, guard, state, now, "Password recovery");
-            var locked = LockoutRules.IsLocked(next, now, out _);
-            var left = LockoutRules.AttemptsLeft(next);
-            return new RecoveryResult
-            {
-                Locked = locked,
-                Error = locked
-                    ? "Too many unsuccessful attempts. For your security, sign-in is now temporarily locked."
-                    : $"The username and recovery code do not match. {left} attempt{(left == 1 ? "" : "s")} remaining before sign-in is locked."
-            };
-        }
-
-        // The recovery code works once: choosing a new password gives a new code.
-        var newCode = RecoveryCodeRules.Generate();
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
-        user.MustChangePassword = false;   // they just chose their own password
-        user.RecoveryCodeHash = BCrypt.Net.BCrypt.HashPassword(newCode);
-
-        AuditService.Record(db, "Account", user.Id, null, "Password", null, null,
-            "Password changed with a recovery code (a new recovery code was created)", administrator: user.Username);
-        Write(guard, LockoutRules.AfterSuccess());
-        db.SaveChanges();   // the password, the new code, the history entry and the cleared lock are saved together
-
-        return new RecoveryResult { Success = true, NewRecoveryCode = RecoveryCodeRules.Format(newCode) };
-    }
-
-    // ---------- recovery codes ----------
-
-    // Saves a recovery code for the account, replacing any earlier one (which stops working).
-    // 'code' is what RecoveryCodeRules.Generate returned; only its hash is kept.
-    public static void SaveRecoveryCode(int userId, string code, string reason)
-    {
-        using var db = new AppDbContext();
-        var user = db.AdminUsers.Find(userId) ?? throw new InvalidOperationException("The account could not be found.");
-
-        user.RecoveryCodeHash = BCrypt.Net.BCrypt.HashPassword(RecoveryCodeRules.Normalize(code));
-        AuditService.Record(db, "Account", user.Id, null, "Recovery code", null, null, reason,
-                            administrator: user.Username);
-        db.SaveChanges();
-    }
-
-    // True when the account already has a recovery code.
-    public static bool HasRecoveryCode(int userId)
-    {
-        using var db = new AppDbContext();
-        return db.AdminUsers.Where(u => u.Id == userId).Select(u => u.RecoveryCodeHash).FirstOrDefault() != null;
     }
 
     // ---------- emergency access ----------
@@ -235,119 +148,52 @@ public static class AuthService
 
     public static bool HasEmergencyKey()
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         return db.SignInGuards.Select(g => g.EmergencyKeyHash).FirstOrDefault() != null;
     }
 
     // Saves an emergency access key, replacing any earlier one (which stops working).
     public static void SaveEmergencyKey(string key, string reason)
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var guard = LoadGuard(db);
         guard.EmergencyKeyHash = BCrypt.Net.BCrypt.HashPassword(RecoveryCodeRules.Normalize(key));
-        AuditService.Record(db, "Security", 0, null, "Emergency key", null, null, reason,
+        AuditService.Record(db, "Security", 0, null, "Recovery key", null, null, reason,
                             administrator: Session.Administrator);
         db.SaveChanges();
     }
 
-    // ---------- reset phrase ----------
+    // ---------- the Owner recovery key ----------
 
-    private const string PhraseAudit = "(reset phrase)";
+    private const string SetupAudit = "(first-run setup)";
 
-    public static bool HasResetPhrase()
+    // True once at least one account exists. A brand-new install has none, so setup comes first.
+    public static bool HasAnyAccount()
     {
-        using var db = new AppDbContext();
-        return db.SignInGuards.Select(g => g.ResetPhraseHash).FirstOrDefault() != null;
+        using var db = AppDb.Create();
+        return db.AdminUsers.Any();
     }
 
-    // The username of an account, for printing on its recovery sheet.
-    public static string? UsernameOf(int userId)
+    // First run only: creates the first Owner account and saves the Owner recovery key together.
+    // 'recoveryKey' is what RecoveryCodeRules.Generate returned and has already been shown to the person;
+    // only its hash is kept. Returns an error message, or null when it worked.
+    public static string? CreateFirstOwner(string username, string password, string recoveryKey)
     {
-        using var db = new AppDbContext();
-        return db.AdminUsers.Where(u => u.Id == userId).Select(u => u.Username).FirstOrDefault();
-    }
-
-    // Saves the reset phrase, replacing any earlier one. The rules are checked by the caller
-    // (ResetPhraseRules.Error); only the hash is kept, and the phrase never reaches the change history.
-    public static void SaveResetPhrase(string phrase, string reason)
-    {
-        using var db = new AppDbContext();
-        var guard = LoadGuard(db);
-        guard.ResetPhraseHash = BCrypt.Net.BCrypt.HashPassword(ResetPhraseRules.Normalize(phrase));
-        AuditService.Record(db, "Security", 0, null, "Reset phrase", null, null, reason,
-                            administrator: Session.Administrator);
-        db.SaveChanges();
-    }
-
-    public static void ClearResetPhrase(string reason)
-    {
-        using var db = new AppDbContext();
-        var guard = LoadGuard(db);
-        guard.ResetPhraseHash = null;
-        AuditService.Record(db, "Security", 0, null, "Reset phrase", null, null, reason,
-                            administrator: Session.Administrator);
-        db.SaveChanges();
-    }
-
-    // ---------- getting back in when nobody can sign in ----------
-
-    private enum AccessSecret { EmergencyKey, ResetPhrase }
-
-    // For when nobody can sign in. With the right emergency key, makes a NEW Owner account. It does not
-    // change or remove any existing account. The key can only be used once: using it makes a new one.
-    // Wrong keys count toward the same lock as sign-in, so the key can't be tried over and over.
-    public static EmergencyResult EmergencyAccess(string? key, string? username, string? password, string? confirm) =>
-        Access(AccessSecret.EmergencyKey, key, username, password, confirm);
-
-    // The same, with the Owner's reset phrase instead of the emergency key. The phrase can only be used once too:
-    // using it removes it, and an Owner sets a new one in Settings.
-    public static EmergencyResult ResetPhraseAccess(string? phrase, string? username, string? password, string? confirm) =>
-        Access(AccessSecret.ResetPhrase, phrase, username, password, confirm);
-
-    private static EmergencyResult Access(AccessSecret secret, string? typed, string? username, string? password, string? confirm)
-    {
-        var isKey = secret == AccessSecret.EmergencyKey;
-        var label = isKey ? "emergency access key" : "reset phrase";
-
         username = (username ?? "").Trim();
-        password ??= "";
-        var normalized = isKey ? RecoveryCodeRules.Normalize(typed) : ResetPhraseRules.Normalize(typed);
 
-        using var db = new AppDbContext();
-        var now = DateTime.UtcNow;
-        var guard = LoadGuard(db);
-        var state = Read(guard, now);
+        using var db = AppDb.Create();
+        if (db.AdminUsers.Any()) return "An account already exists. Sign in with it instead.";
 
-        if (LockoutRules.IsLocked(state, now, out _))
-            return new EmergencyResult { Locked = true, Error = "Too many unsuccessful attempts. Please wait until the lock ends." };
-
-        if (normalized.Length == 0 || username.Length == 0)
-            return new EmergencyResult { Error = $"Enter the {label} and a username for the new Owner account." };
-
-        // The password rules are public, so they are checked first and a typo here doesn't use up an attempt.
-        var passwordError = AccountService.PasswordError(username, password);
-        if (passwordError != null) return new EmergencyResult { Error = passwordError };
-        if (password != confirm) return new EmergencyResult { Error = "The new passwords do not match." };
-
-        var stored = isKey ? guard.EmergencyKeyHash : guard.ResetPhraseHash;
-        var matches = BCrypt.Net.BCrypt.Verify(normalized, stored ?? DummyHash.Value);
-        if (stored == null || !matches)
-        {
-            var next = RegisterFailure(db, guard, state, now, isKey ? "Emergency access" : "Reset phrase access");
-            var locked = LockoutRules.IsLocked(next, now, out _);
-            var left = LockoutRules.AttemptsLeft(next);
-            return new EmergencyResult
-            {
-                Locked = locked,
-                Error = locked
-                    ? "Too many unsuccessful attempts. For your security, sign-in is now temporarily locked."
-                    : $"The {label} is not correct. {left} attempt{(left == 1 ? "" : "s")} remaining before sign-in is locked."
-            };
-        }
-
-        // The secret is right, so it is safe to say whether the username can be used.
         var nameError = AccountService.NameError(db, username);
-        if (nameError != null) return new EmergencyResult { Error = nameError };
+        if (nameError != null) return nameError;
+
+        var passwordError = AccountService.PasswordError(username, password);
+        if (passwordError != null) return passwordError;
+
+        var guard = LoadGuard(db);
+
+        // The account, the key and the history entries are saved as one unit: all of it, or none of it.
+        using var transaction = db.Database.BeginTransaction();
 
         var user = new AdminUser
         {
@@ -359,32 +205,125 @@ public static class AuthService
         db.AdminUsers.Add(user);
         db.SaveChanges();   // gives the account its id for the history entry
 
-        string? newKey = null;
-        if (isKey)
+        guard.EmergencyKeyHash = BCrypt.Net.BCrypt.HashPassword(RecoveryCodeRules.Normalize(recoveryKey));
+
+        AuditService.Record(db, "Account", user.Id, null, "Created", null, $"{username} ({AccountRoles.Owner})",
+                            "First Owner account created at setup", administrator: SetupAudit);
+        AuditService.Record(db, "Security", 0, null, "Recovery key", null, null,
+                            "First Owner recovery key made at setup", administrator: SetupAudit);
+        db.SaveChanges();
+        transaction.Commit();
+        return null;
+    }
+
+    // For an Owner who forgot their password (or when nobody can sign in). With the right Owner recovery key:
+    //  - if an Owner account has the typed username, its password is replaced;
+    //  - if no account has that username, a new Owner account is created.
+    // A Staff account is never touched: an Owner resets those in Settings.
+    // The key works once: using it makes a new one. Wrong keys count toward the same lock as sign-in.
+    public static EmergencyResult RecoverAccess(string? key, string? username, string? password, string? confirm)
+    {
+        username = (username ?? "").Trim();
+        password ??= "";
+        var normalized = RecoveryCodeRules.Normalize(key);
+
+        using var db = AppDb.Create();
+        var now = Clock.UtcNow;
+        var guard = LoadGuard(db);
+        var state = Read(guard, now);
+
+        if (LockoutRules.IsLocked(state, now, out _))
+            return new EmergencyResult { Locked = true, Error = "Too many unsuccessful attempts. Please wait until the lock ends." };
+
+        if (normalized.Length == 0 || username.Length == 0)
+            return new EmergencyResult { Error = "Enter the Owner recovery key and your username." };
+
+        // The password rules are public, so they are checked first and a typo here doesn't use up an attempt.
+        var passwordError = AccountService.PasswordError(username, password);
+        if (passwordError != null) return new EmergencyResult { Error = passwordError };
+        if (password != confirm) return new EmergencyResult { Error = "The new passwords do not match." };
+
+        var stored = guard.EmergencyKeyHash;
+        var matches = BCrypt.Net.BCrypt.Verify(normalized, stored ?? DummyHash.Value);
+        if (stored == null || !matches)
         {
-            newKey = RecoveryCodeRules.Generate(RecoveryCodeRules.EmergencyKeyLength);
-            guard.EmergencyKeyHash = BCrypt.Net.BCrypt.HashPassword(newKey);
+            var next = RegisterFailure(db, guard, state, now, "Owner recovery key");
+            var locked = LockoutRules.IsLocked(next, now, out _);
+            var left = LockoutRules.AttemptsLeft(next);
+            return new EmergencyResult
+            {
+                Locked = locked,
+                Error = locked
+                    ? "Too many unsuccessful attempts. For your security, sign-in is now temporarily locked."
+                    : $"The Owner recovery key is not correct. {left} attempt{(left == 1 ? "" : "s")} remaining before sign-in is locked."
+            };
+        }
+
+        // The key is right, so it is safe to say what can and can't be done with the username.
+        var lower = username.ToLower();
+        var existing = db.AdminUsers.FirstOrDefault(u => u.Username.ToLower() == lower);
+
+        if (existing != null && existing.Role != AccountRoles.Owner)
+            return new EmergencyResult
+            {
+                Error = "That is a Staff account. Ask an Owner to reset its password in Settings, " +
+                        "or choose a different username to create a new Owner account."
+            };
+
+        if (existing == null)
+        {
+            var nameError = AccountService.NameError(db, username);
+            if (nameError != null) return new EmergencyResult { Error = nameError };
+        }
+
+        var newKey = RecoveryCodeRules.Generate(RecoveryCodeRules.EmergencyKeyLength);
+
+        // Everything below is saved as one unit: the account change, the replaced key, the cleared lock
+        // and the history entries. If anything fails in between, none of it is kept.
+        using var transaction = db.Database.BeginTransaction();
+
+        AdminUser user;
+        if (existing != null)
+        {
+            user = existing;
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
+            user.MustChangePassword = false;   // they just chose their own password
         }
         else
         {
-            guard.ResetPhraseHash = null;   // used once, then gone
+            user = new AdminUser
+            {
+                Username = username,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+                Role = AccountRoles.Owner,
+                MustChangePassword = false
+            };
+            db.AdminUsers.Add(user);
+            db.SaveChanges();   // gives the account its id for the history entry
         }
+
+        guard.EmergencyKeyHash = BCrypt.Net.BCrypt.HashPassword(newKey);
         Write(guard, LockoutRules.AfterSuccess());
 
-        var audit = isKey ? EmergencyAudit : PhraseAudit;
-        AuditService.Record(db, "Account", user.Id, null, "Created", null, $"{username} ({AccountRoles.Owner})",
-            $"Owner account created with the {label}", administrator: audit);
-        AuditService.Record(db, "Security", 0, null, isKey ? "Emergency key" : "Reset phrase", null, null,
-            isKey ? "Emergency access key used, and replaced with a new one"
-                  : "Reset phrase used and removed. An Owner can set a new one in Settings",
-            administrator: audit);
-        db.SaveChanges();   // the new key, the history entries and the cleared lock are saved together
+        if (existing != null)
+            AuditService.Record(db, "Account", user.Id, null, "Password", null, null,
+                "Owner password reset with the Owner recovery key", administrator: EmergencyAudit);
+        else
+            AuditService.Record(db, "Account", user.Id, null, "Created", null, $"{user.Username} ({AccountRoles.Owner})",
+                "Owner account created with the Owner recovery key", administrator: EmergencyAudit);
+
+        AuditService.Record(db, "Security", 0, null, "Recovery key", null, null,
+            "Owner recovery key used, and replaced with a new one", administrator: EmergencyAudit);
+
+        db.SaveChanges();
+        transaction.Commit();
 
         return new EmergencyResult
         {
             Success = true,
-            Username = username,
-            NewEmergencyKey = newKey is null ? null : RecoveryCodeRules.Format(newKey)
+            Username = user.Username,
+            WasReset = existing != null,
+            NewEmergencyKey = RecoveryCodeRules.Format(newKey)
         };
     }
 }

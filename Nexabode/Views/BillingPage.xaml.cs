@@ -42,6 +42,10 @@ public partial class BillingPage : Page
         public string Note { get; set; } = "";
         public List<PaidItem> Payments { get; set; } = new();
         public bool IsArchived { get; set; }
+        // One column instead of two: the description already says what the charge is, so the item is only
+        // added in front when the description does not mention it.
+        public string ChargeText => Description.Contains(Item, StringComparison.OrdinalIgnoreCase)
+            ? Description : $"{Item}: {Description}";
         public string ArchivedText => IsArchived ? "Archived" : "";
         public bool Settled => IsVoided || Balance <= 0;
         public decimal Refunded { get; set; }
@@ -49,6 +53,112 @@ public partial class BillingPage : Page
         public string RefundDetail => Refunded <= 0 ? ""
             : Fmt.Peso(Refunded) + (RefundedOn is DateOnly d ? " on " + Fmt.Date(d) : "");
         public string NoteText => IsVoided ? Note : Refunded > 0 ? "Refunded " + RefundDetail : "";
+
+        // Second line of the amount column, and the three lines that open under a selected row.
+        public string BalanceLine => IsVoided ? "" : Balance <= 0 ? "Paid in full" : $"Balance {Fmt.Peso(Balance)}";
+        public string DetailsMain { get; set; } = "";
+        public string PaymentsText { get; set; } = "";
+
+        public string Month { get; set; } = "";        // billing month key, "2026-11"
+        public string MonthText => DateOnly.TryParseExact(Month + "-01", "yyyy-MM-dd", out var m)
+            ? m.ToString("MMMM yyyy", CultureInfo.CurrentCulture) : Month;
+
+        // Under a tenant's name the row does not repeat it: second line says whether and when it was paid.
+        // Empty when there is nothing to say (the page then leaves the line out), instead of repeating "No payment yet".
+        public string LineTwoGrouped => NoteText != "" ? NoteText
+            : LastPaid is DateOnly paidOn ? $"Last paid {Fmt.Date(paidOn)}" : "";
+
+        // "6 days late" next to the Overdue badge; empty for everything that is not overdue.
+        public int DaysLate { get; set; }
+        public string LateText => DaysLate > 0 ? Fmt.Count(DaysLate, "day") + " late" : "";
+
+        public TenantGroupKey? GroupKey { get; set; }   // set by the page, so the charges of a tenant sit together
+        public MonthGroupKey? MonthGroup { get; set; }  // set by the Tenant account window, so a month's charges sit together
+    }
+
+    // The heading above one month's charges in the Tenant account window.
+    public sealed class MonthGroupKey : IEquatable<MonthGroupKey>
+    {
+        public string Month { get; init; } = "";
+        public string Name { get; init; } = "";
+        public string Summary { get; set; } = "";
+
+        private bool _isExpanded = true;
+        public Action<string, bool>? ExpandedChanged { get; set; }
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set { _isExpanded = value; ExpandedChanged?.Invoke(Month, value); }
+        }
+
+        public bool Equals(MonthGroupKey? other) => other != null && other.Month == Month;
+        public override bool Equals(object? obj) => Equals(obj as MonthGroupKey);
+        public override int GetHashCode() => Month.GetHashCode();
+    }
+
+    // The heading above one tenant's charges: their name and what they owe in the rows shown.
+    public sealed class TenantGroupKey : IEquatable<TenantGroupKey>
+    {
+        public int Id { get; init; }
+        public string Name { get; init; } = "";
+        public string Summary { get; set; } = "";
+
+        // Whether this tenant's charges are open. The page remembers it, so a refresh does not reset it.
+        private bool _isExpanded;
+        public Action<int, bool>? ExpandedChanged { get; set; }
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set { _isExpanded = value; ExpandedChanged?.Invoke(Id, value); }
+        }
+
+        public bool Equals(TenantGroupKey? other) => other != null && other.Id == Id;
+        public override bool Equals(object? obj) => Equals(obj as TenantGroupKey);
+        public override int GetHashCode() => Id;
+    }
+
+    // One charge as a row, shared by this page and the Tenant account window.
+    internal static ChargeRow ToRow(Charge c, DateOnly today)
+    {
+        var paid = c.Allocations.Sum(a => a.AmountApplied);
+        var balance = c.Amount - paid;
+        return new ChargeRow
+        {
+            Id = c.Id,
+            TenantId = c.Occupancy.TenantId,
+            Tenant = c.Occupancy.Tenant.FullName,
+            Bed = $"{c.Occupancy.Bed.Room.RoomName} / {c.Occupancy.Bed.BedLabel}",
+            Item = BillingHelpers.ItemOf(c),
+            Description = c.Description ?? c.ChargeType.ToString(),
+            Type = c.ChargeType,
+            Amount = c.Amount,
+            Paid = paid,
+            Balance = balance,
+            DueDate = c.DueDate,
+            Month = c.BillingMonth,
+            IsVoided = c.IsVoided,
+            IsArchived = c.IsArchived,
+            Note = c.IsVoided ? $"Voided: {c.VoidReason}" : "",
+            Status = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today, c.IsVoided, c.RefundedAmount),
+            Refunded = c.RefundedAmount,
+            RefundedOn = c.RefundedOn,
+            DaysLate = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today, c.IsVoided, c.RefundedAmount) == "Overdue"
+                ? Math.Max(0, today.DayNumber - c.DueDate.DayNumber) : 0,
+            LastPaid = c.Allocations.Count == 0
+                ? (DateOnly?)null
+                : c.Allocations.Max(a => a.Payment.PaymentDate),
+            Payments = c.Allocations
+                .Select(a => new PaidItem
+                {
+                    Date = a.Payment.PaymentDate,
+                    Method = a.Payment.Method ?? "",
+                    ReceiptNo = a.Payment.ReceiptNo ?? "",
+                    Reference = a.Payment.ReferenceNo ?? "",
+                    Amount = a.AmountApplied
+                })
+                .OrderByDescending(p => p.Date)
+                .ToList()
+        };
     }
 
     private const string AllItems = "All items";
@@ -57,17 +167,22 @@ public partial class BillingPage : Page
     private int? _selectedId;
     private bool _ready;
     private bool _binding;
+    // Tenants whose charges the user has opened. Everything starts closed; a refresh (after closing the
+    // Tenant account window, editing, filtering) keeps what was opened.
+    private readonly HashSet<int> _expanded = new();
+    private List<int> _shownTenants = new();   // tenants with a heading in the list right now (for Expand all)
 
     public BillingPage()
     {
         InitializeComponent();
+
+        // Right-click on a row offers the same actions as the buttons.
+        GridMenu.Attach(ChargeGrid, EditButton, VoidButton, ArchiveButton, UnarchiveButton);
         Loaded += (_, _) => Setup();
     }
 
     // ---------- Helpers ----------
 
-    private static void Tell(string message) =>
-        MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Information);
 
     private Window? Owner => Window.GetWindow(this);
 
@@ -86,6 +201,39 @@ public partial class BillingPage : Page
     private ChargeRow? Selected =>
         ChargeGrid.SelectedItems.Count == 1 ? ChargeGrid.SelectedItem as ChargeRow : null;
 
+    // ---------- Tenant account window, and the More menu ----------
+
+    private void More_Click(object sender, RoutedEventArgs e)
+    {
+        if (MoreButton.ContextMenu is not { } menu) return;
+        menu.PlacementTarget = MoreButton;
+        menu.IsOpen = true;
+    }
+
+    private void OpenAccount(int tenantId)
+    {
+        var window = new TenantAccountWindow(tenantId);
+        if (Window.GetWindow(this) is { } owner) window.Owner = owner;
+        window.ShowDialog();
+        LoadCharges();   // a payment may have been recorded in the window
+    }
+
+    // The "Tenant account" button on a tenant's heading.
+    private void GroupAccount_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: int tenantId }) OpenAccount(tenantId);
+    }
+
+    // Only a double-click on a charge (not on a heading or the empty area) opens the account.
+    private void ChargeGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        for (var element = e.OriginalSource as DependencyObject; element != null; element = VisualTreeHelper.GetParent(element))
+        {
+            if (element is DataGridRow { Item: ChargeRow row }) { OpenAccount(row.TenantId); return; }
+            if (element is DataGrid) return;
+        }
+    }
+
     private List<ChargeRow> SelectedCharges =>
         ChargeGrid.SelectedItems.OfType<ChargeRow>().ToList();
 
@@ -99,9 +247,35 @@ public partial class BillingPage : Page
         MonthCombo.SelectedItem = months.First(m => m.Start == BillingHelpers.CurrentMonthStart());
     }
 
+    // Previous / next month buttons next to the month list.
+    private void StepMonth(int direction)
+    {
+        if (MonthCombo.ItemsSource is not IEnumerable<MonthOption> months || SelectedMonth is not DateOnly current) return;
+        var target = direction < 0
+            ? months.Where(m => m.Start < current).OrderByDescending(m => m.Start).FirstOrDefault()
+            : months.Where(m => m.Start > current).OrderBy(m => m.Start).FirstOrDefault();
+        if (target != null) MonthCombo.SelectedItem = target;
+    }
+
+    private void PrevMonth_Click(object sender, RoutedEventArgs e) => StepMonth(-1);
+
+    private void NextMonth_Click(object sender, RoutedEventArgs e) => StepMonth(1);
+
+    private void UpdateMonthButtons()
+    {
+        if (MonthCombo.ItemsSource is not IEnumerable<MonthOption> months || SelectedMonth is not DateOnly current)
+        {
+            PrevMonthButton.IsEnabled = NextMonthButton.IsEnabled = false;
+            return;
+        }
+        PrevMonthButton.IsEnabled = months.Any(m => m.Start < current);
+        NextMonthButton.IsEnabled = months.Any(m => m.Start > current);
+    }
+
     private void MonthCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_ready) return;
+        UpdateMonthButtons();
         _selectedId = null;
         LoadCharges();
     }
@@ -143,13 +317,13 @@ public partial class BillingPage : Page
         var ids = _all.Where(r => !r.IsArchived && !r.IsVoided && r.Balance <= 0).Select(r => r.Id).ToList();
         if (ids.Count == 0)
         {
-            Tell("There are no fully paid charges to archive for this month.");
+            Say.Info("There are no fully paid charges to archive for this month.");
             return;
         }
 
         var month = (MonthCombo.SelectedItem as MonthOption)?.Display;
         var answer = ConfirmActionDialog.YesNo(
-            $"Archive {ids.Count} fully paid charge(s) for {month}?\n\n" +
+            $"Archive {Fmt.Count(ids.Count, "fully paid charge")} for {month}?\n\n" +
             "They are only hidden from this list. Totals, reports and statements are not affected, " +
             "and you can bring them back with Show archived and Unarchive.",
             "Archive settled charges", confirmText: "Archive");
@@ -162,7 +336,7 @@ public partial class BillingPage : Page
     {
         if (ids.Count == 0) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         foreach (var charge in db.Charges.IgnoreQueryFilters().Where(c => ids.Contains(c.Id)).ToList())
             charge.IsArchived = archived;
         db.SaveChanges();
@@ -180,11 +354,58 @@ public partial class BillingPage : Page
         if (_ready) ApplyFilter();
     }
 
+    // Closing a tenant's heading hides its rows, so charges selected inside it are deselected
+    // (otherwise Edit / Void would act on a row nobody can see).
+    private void GroupToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_binding) return;
+        if (sender is not FrameworkElement { DataContext: System.Windows.Data.CollectionViewGroup { Name: TenantGroupKey key } }) return;
+        foreach (var row in ChargeGrid.SelectedItems.OfType<ChargeRow>().Where(r => r.TenantId == key.Id).ToList())
+            ChargeGrid.SelectedItems.Remove(row);
+    }
+
+    private void ExpandAll_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var id in _shownTenants) _expanded.Add(id);
+        ApplyFilter();
+    }
+
+    private void CollapseAll_Click(object sender, RoutedEventArgs e)
+    {
+        _expanded.Clear();
+        _selectedId = null;
+        ApplyFilter();
+    }
+
+    // The summary cards double as filters: click one to see just those charges, click it again for everything.
+    private void SetStatusChoice(string choice)
+    {
+        foreach (var item in StatusFilter.Items.OfType<ComboBoxItem>())
+            if (item.Content?.ToString() == choice) { StatusFilter.SelectedItem = item; return; }
+    }
+
+    private void CardFilter(string choice) =>
+        SetStatusChoice(ChoiceOf(StatusFilter) == choice ? "All statuses" : choice);
+
+    private void BilledCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => SetStatusChoice("All statuses");
+    private void PaidCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => CardFilter("Fully paid");
+    private void BalanceCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => CardFilter("Not fully paid");
+    private void OverdueCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => CardFilter("Overdue");
+
+    private void ClearFilters_Click(object sender, RoutedEventArgs e)
+    {
+        _binding = true;   // one rebuild at the end, not one per box
+        ItemFilter.SelectedItem = AllItems;
+        StatusFilter.SelectedIndex = 0;
+        _binding = false;
+        SearchBox.Text = "";
+        ApplyFilter();
+    }
+
     private void ChargeGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_binding) return;
         _selectedId = Selected?.Id;
-        ShowDetail();
         UpdateButtons();
     }
 
@@ -209,7 +430,7 @@ public partial class BillingPage : Page
         var key = BillingHelpers.MonthKey(start);
         var showVoided = ShowVoidedCheck.IsChecked == true;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var charges = db.Charges.IgnoreQueryFilters()   // look past the voided-charge filter
             .Include(c => c.UtilityBill)
             .Include(c => c.Allocations).ThenInclude(a => a.Payment)
@@ -221,45 +442,7 @@ public partial class BillingPage : Page
             .ToList();
 
         _all = charges
-            .Select(c =>
-            {
-                var paid = c.Allocations.Sum(a => a.AmountApplied);
-                var balance = c.Amount - paid;
-                return new ChargeRow
-                {
-                    Id = c.Id,
-                    TenantId = c.Occupancy.TenantId,
-                    Tenant = c.Occupancy.Tenant.FullName,
-                    Bed = $"{c.Occupancy.Bed.Room.RoomName} / {c.Occupancy.Bed.BedLabel}",
-                    Item = BillingHelpers.ItemOf(c),
-                    Description = c.Description ?? c.ChargeType.ToString(),
-                    Type = c.ChargeType,
-                    Amount = c.Amount,
-                    Paid = paid,
-                    Balance = balance,
-                    DueDate = c.DueDate,
-                    IsVoided = c.IsVoided,
-                    IsArchived = c.IsArchived,
-                    Note = c.IsVoided ? $"Voided: {c.VoidReason}" : "",
-                    Status = BillingRules.ChargeStatus(c.Amount, paid, c.DueDate, today, c.IsVoided, c.RefundedAmount),
-                    Refunded = c.RefundedAmount,
-                    RefundedOn = c.RefundedOn,
-                    LastPaid = c.Allocations.Count == 0
-                        ? (DateOnly?)null
-                        : c.Allocations.Max(a => a.Payment.PaymentDate),
-                    Payments = c.Allocations
-                        .Select(a => new PaidItem
-                        {
-                            Date = a.Payment.PaymentDate,
-                            Method = a.Payment.Method ?? "",
-                            ReceiptNo = a.Payment.ReceiptNo ?? "",
-                            Reference = a.Payment.ReferenceNo ?? "",
-                            Amount = a.AmountApplied
-                        })
-                        .OrderByDescending(p => p.Date)
-                        .ToList()
-                };
-            })
+            .Select(c => ToRow(c, today))
             .OrderBy(r => r.Tenant).ThenBy(r => r.Item == "Rent" ? 0 : 1).ThenBy(r => r.Item)
             .ToList();
 
@@ -270,7 +453,7 @@ public partial class BillingPage : Page
         var overdue = live.Where(r => r.Status == "Overdue").Sum(r => r.Balance);
 
         BilledCard.Value = Fmt.Peso(billed);
-        BilledCard.Caption = $"{live.Count} charge(s)";
+        BilledCard.Caption = Fmt.Count(live.Count, "charge");
 
         PaidCard.Value = Fmt.Peso(paidTotal);
         if (billed == 0)
@@ -287,10 +470,28 @@ public partial class BillingPage : Page
         }
         PaidCard.Tone = "Success";
 
-        BalanceCard.Value = Fmt.Peso(billed - paidTotal);
-        BalanceCard.Caption = "Still to collect";
-        BalanceCard.Tone = "Warning";
+        var balance = billed - paidTotal;
+        BalanceCard.Value = Fmt.Peso(balance);
+        if (balance <= 0)
+        {
+            BalanceCard.Caption = "Nothing left to collect";
+            BalanceCard.Tone = "Success";
+        }
+        else if (overdue >= balance)
+        {
+            BalanceCard.Caption = "All of it is past due";   // the Overdue card would show the same number
+            BalanceCard.Tone = "Danger";
+        }
+        else
+        {
+            BalanceCard.Caption = "Still to collect";
+            BalanceCard.Tone = "Warning";
+        }
 
+        // The Overdue card only appears when it says something the Balance card does not.
+        var showOverdue = overdue != balance;
+        OverdueCard.Visibility = showOverdue ? Visibility.Visible : Visibility.Collapsed;
+        StatsGrid.Columns = showOverdue ? 4 : 3;
         OverdueCard.Value = Fmt.Peso(overdue);
         OverdueCard.Caption = overdue > 0 ? "Past due date" : "Nothing overdue";
         OverdueCard.Tone = overdue > 0 ? "Danger" : "Success";
@@ -316,6 +517,7 @@ public partial class BillingPage : Page
 
     private void ApplyFilter()
     {
+        FillDetailText();
         var item = ItemFilter.SelectedItem as string ?? AllItems;
         var status = ChoiceOf(StatusFilter);
         var query = SearchBox.Text.Trim();
@@ -335,114 +537,91 @@ public partial class BillingPage : Page
             .Where(r => query == "" || r.Tenant.Contains(query, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
+        // Tenants with the most overdue come first, then the most owed, then by name.
+        rows = rows.GroupBy(r => r.TenantId)
+            .Select(g => new
+            {
+                Rows = g,
+                Name = g.First().Tenant,
+                Overdue = g.Where(r => !r.IsVoided && r.Status == "Overdue").Sum(r => r.Balance),
+                Owed = g.Where(r => !r.IsVoided).Sum(r => r.Balance)
+            })
+            .OrderByDescending(t => t.Overdue).ThenByDescending(t => t.Owed)
+            .ThenBy(t => t.Name, StringComparer.CurrentCultureIgnoreCase)
+            .SelectMany(t => t.Rows)
+            .ToList();
+        _shownTenants = rows.Select(r => r.TenantId).Distinct().ToList();
+
+        ClearFiltersButton.Visibility = item != AllItems || status != "All statuses" || query != ""
+            ? Visibility.Visible : Visibility.Collapsed;
+        var anyShown = _shownTenants.Count > 0;
+        ExpandAllButton.IsEnabled = CollapseAllButton.IsEnabled = anyShown;
+
+        // One heading per tenant, with what they owe in the rows shown.
+        var keys = new Dictionary<int, TenantGroupKey>();
+        foreach (var group in rows.GroupBy(r => r.TenantId))
+        {
+            var live = group.Where(r => !r.IsVoided).ToList();
+            var owed = live.Sum(r => r.Balance);
+            var overdue = live.Where(r => r.Status == "Overdue").Sum(r => r.Balance);
+            var summary = Fmt.Count(group.Count(), "charge") + "   ·   " +
+                          (owed > 0 ? $"Balance {Fmt.Peso(owed)}" : "Paid in full") +
+                          (overdue > 0 ? $"   ·   Overdue {Fmt.Peso(overdue)}" : "");
+            var key = new TenantGroupKey { Id = group.Key, Name = group.First().Tenant, Summary = summary };
+            key.IsExpanded = _expanded.Contains(group.Key);   // set before the callback, so loading changes nothing
+            key.ExpandedChanged = (id, open) => { if (open) _expanded.Add(id); else _expanded.Remove(id); };
+            keys[group.Key] = key;
+            foreach (var row in group) row.GroupKey = keys[group.Key];
+        }
+
+        var view = new System.Windows.Data.ListCollectionView(rows);
+        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(ChargeRow.GroupKey)));
+
         _binding = true;   // ignore selection events while the list is being rebuilt
-        ChargeGrid.ItemsSource = rows;
-        ChargeGrid.SelectedItem = rows.FirstOrDefault(r => r.Id == _selectedId);
+        ChargeGrid.ItemsSource = view;
+        EmptyText.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ChargeGrid.SelectedItem = rows.FirstOrDefault(r => r.Id == _selectedId && _expanded.Contains(r.TenantId));
         _binding = false;
 
-        ShowDetail();
         UpdateButtons();
     }
 
-    // ---------- Details: who paid what ----------
+    // ---------- Details: who paid what (shown under the selected row) ----------
 
-    private static void AddLine(Panel panel, string label, string value, string? tone = null)
+    // Fills in the lines that open under a selected row: the numbers, and what was paid on this charge.
+    private void FillDetailText()
     {
-        var line = new TextBlock { Margin = new Thickness(0, 0, 0, 4), TextWrapping = TextWrapping.Wrap };
-        line.Inlines.Add(new Run(label + "   ") { Foreground = Res("AppSecondaryBrush") });
-        line.Inlines.Add(new Run(value)
+        foreach (var row in _all)
         {
-            FontWeight = FontWeights.SemiBold,
-            Foreground = tone == null ? Res("AppTextBrush") : Res(tone + "Brush")
-        });
-        panel.Children.Add(line);
-    }
-
-    private void ShowDetail()
-    {
-        var row = Selected;
-        DetailEmpty.Visibility = row == null ? Visibility.Visible : Visibility.Collapsed;
-        DetailBody.Visibility = row == null ? Visibility.Collapsed : Visibility.Visible;
-        if (row == null) return;
-
-        DetailTitle.Text = row.Tenant;
-        DetailSub.Text = $"{row.Description}  -  {row.Bed}";
-        DetailBadge.Content = row.Status;
-
-        InfoPanel.Children.Clear();
-        AddLine(InfoPanel, "Amount", Fmt.Peso(row.Amount));
-        AddLine(InfoPanel, "Paid", Fmt.Peso(row.Paid), row.Paid > 0 ? "Success" : null);
-        AddLine(InfoPanel, "Balance", Fmt.Peso(row.Balance),
-            row.IsVoided ? null : row.Balance <= 0 ? "Success" : row.Status == "Overdue" ? "Danger" : "Warning");
-        AddLine(InfoPanel, "Due", row.DueText);
-        if (row.IsVoided) AddLine(InfoPanel, "Voided", row.Note.Replace("Voided: ", ""));
-        if (row.Refunded > 0) AddLine(InfoPanel, "Refunded", row.RefundDetail, "Warning");
-
-        PaymentList.Children.Clear();
-        if (row.Payments.Count == 0)
-        {
-            PaymentList.Children.Add(new TextBlock
+            var main = new List<string>
             {
-                Text = row.IsVoided ? "This charge was voided." : "No payment has been applied to this charge yet.",
-                Style = (Style)FindResource("MutedText"),
-                TextWrapping = TextWrapping.Wrap
-            });
-        }
-        foreach (var payment in row.Payments)
-        {
-            var parts = new List<string> { Fmt.Date(payment.Date) };
-            if (payment.ReceiptNo != "") parts.Add(payment.ReceiptNo);
-            if (payment.Method != "") parts.Add(payment.Method);
-            if (payment.Reference != "") parts.Add("Ref " + payment.Reference);
-
-            var item = new Grid { Margin = new Thickness(0, 0, 0, 6) };
-            item.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            item.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            item.Children.Add(new TextBlock
-            {
-                Text = string.Join("  -  ", parts),
-                Foreground = Res("AppTextBrush"),
-                TextWrapping = TextWrapping.Wrap
-            });
-            var amount = new TextBlock
-            {
-                Text = Fmt.Peso(payment.Amount),
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Res("SuccessBrush"),
-                Margin = new Thickness(8, 0, 0, 0)
+                $"Amount {Fmt.Peso(row.Amount)}",
+                $"Paid {Fmt.Peso(row.Paid)}",
+                $"Balance {Fmt.Peso(row.Balance)}",
+                $"Due {row.DueText}"
             };
-            Grid.SetColumn(amount, 1);
-            item.Children.Add(amount);
+            if (row.LastPaid is DateOnly lastPaid) main.Add($"Last paid {Fmt.Date(lastPaid)}");
+            if (row.IsVoided) main.Add("Voided: " + row.Note.Replace("Voided: ", ""));
+            if (row.Refunded > 0) main.Add("Refunded " + row.RefundDetail);
+            if (row.IsArchived) main.Add("Archived");
+            row.DetailsMain = string.Join("     ", main);
 
-            PaymentList.Children.Add(item);
+            if (row.Payments.Count == 0)
+            {
+                row.PaymentsText = row.IsVoided ? "This charge was voided." : "No payment has been applied to this charge yet.";
+            }
+            else
+            {
+                row.PaymentsText = "Payments on this charge:\n" + string.Join("\n", row.Payments.Select(payment =>
+                {
+                    var parts = new List<string> { Fmt.Date(payment.Date) };
+                    if (payment.ReceiptNo != "") parts.Add(payment.ReceiptNo);
+                    if (payment.Method != "") parts.Add(payment.Method);
+                    if (payment.Reference != "") parts.Add("Ref " + payment.Reference);
+                    return string.Join("  ·  ", parts) + "   " + Fmt.Peso(payment.Amount);
+                }));
+            }
         }
-
-        // This month for the same tenant, item by item: Rent, Electricity, Water, ...
-        var month = (MonthCombo.SelectedItem as MonthOption)?.Display ?? "this month";
-        SummaryTitle.Text = $"{row.Tenant} in {month}";
-        SummaryPanel.Children.Clear();
-
-        var mine = _all.Where(r => r.TenantId == row.TenantId && !r.IsVoided).ToList();
-
-        foreach (var group in mine.GroupBy(r => r.Item)
-                                  .OrderBy(g => g.Key == "Rent" ? 0 : 1).ThenBy(g => g.Key))
-        {
-            var billed = group.Sum(r => r.Amount);
-            var paid = group.Sum(r => r.Paid);
-            var left = billed - paid;
-            var isOverdue = group.Any(r => r.Status == "Overdue");
-
-            var text = left <= 0 ? "Paid in full"
-                     : paid <= 0 ? $"Not paid yet ({Fmt.Peso(left)})"
-                     : $"{Fmt.Peso(paid)} paid of {Fmt.Peso(billed)}";
-
-            AddLine(SummaryPanel, group.Key, text,
-                left <= 0 ? "Success" : isOverdue ? "Danger" : "Warning");
-        }
-
-        var totalBalance = mine.Sum(r => r.Balance);
-        AddLine(SummaryPanel, "Outstanding", Fmt.Peso(totalBalance), totalBalance <= 0 ? "Success" : "Warning");
     }
 
     // ---------- Edit and void ----------
@@ -498,7 +677,7 @@ public partial class BillingPage : Page
                     ConfirmWording.EditRecord($"{row.Tenant}'s {row.Description.ToLower()}", reviewList), "Save changes")) return;
         }
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var charge = db.Charges.First(c => c.Id == row.Id);
         charge.Description = Blank(v[0]);
         TryDate(v[1], out var due);
@@ -520,7 +699,7 @@ public partial class BillingPage : Page
 
         if (row.Paid > 0)
         {
-            Tell("This charge cannot be voided because payments have been applied to it.\n\n" +
+            Say.Info("This charge cannot be voided because payments have been applied to it.\n\n" +
                  "Void those payments first (Payments page, Payment history), then void the charge.");
             return;
         }
@@ -538,12 +717,12 @@ public partial class BillingPage : Page
             note);
         if (v == null) return;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var charge = db.Charges.Include(c => c.Allocations).Include(c => c.Occupancy).First(c => c.Id == row.Id);
 
         if (charge.Allocations.Count > 0)
         {
-            Tell("A payment was just applied to this charge, so it cannot be voided. Void that payment first, then try again.");
+            Say.Info("A payment was just applied to this charge, so it cannot be voided. Void that payment first, then try again.");
             LoadCharges();
             return;
         }

@@ -19,12 +19,13 @@
             <ComboBox x:Name="BedCombo" DisplayMemberPath="Display" Margin="0,0,0,12" />
             <TextBlock Text="Move-in date" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
             <DatePicker x:Name="MoveInDate" Margin="0,0,0,12" />
-            <TextBlock Text="Agreed monthly rent" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <TextBlock Text="Agreed monthly rent (₱)" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
             <ui:TextBox x:Name="RentBox" Margin="0,0,0,12" />
-            <TextBlock Text="Move-out date (optional, leave blank if still staying)"
-                       Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <TextBlock Text="Move-out date" Style="{StaticResource MutedText}" Margin="0,0,0,2" />
+            <TextBlock Text="Leave blank if the tenant is still staying." Style="{StaticResource MutedText}"
+                       FontSize="12" Margin="0,0,0,4" />
             <DatePicker x:Name="NewMoveOutDate" Margin="0,0,0,12" />
-            <TextBlock Text="Deposit (optional)" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+            <TextBlock Text="Deposit (₱)" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
             <ui:TextBox x:Name="DepositBox" Margin="0,0,0,12" />
         </StackPanel>
 

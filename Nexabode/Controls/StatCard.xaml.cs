@@ -11,13 +11,24 @@ public partial class StatCard : UserControl
     public string Label
     {
         get => LabelText.Text;
-        set => LabelText.Text = value.ToUpperInvariant();
+        set => LabelText.Text = value;
     }
 
     public string Value
     {
         get => ValueText.Text;
         set => ValueText.Text = value;
+    }
+
+    // Font size of the big number. 28 by default; pages that repeat the numbers can use a smaller size.
+    public double ValueSize
+    {
+        get => ValueText.FontSize;
+        set
+        {
+            ValueText.FontSize = value;
+            ValueText.Margin = new Thickness(0, 3, 0, 0);
+        }
     }
 
     public string Caption

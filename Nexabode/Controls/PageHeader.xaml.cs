@@ -32,5 +32,20 @@ public partial class PageHeader : UserControl
         }
     }
 
+    // Used by the Ctrl+N shortcut: does what the main button does, if it is there and switched on.
+    public bool TryInvokeAction()
+    {
+        if (ActionButton.Visibility != Visibility.Visible || !ActionButton.IsEnabled) return false;
+        ActionButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        return true;
+    }
+
+    // Switch the primary button off when there is nothing for it to do.
+    public bool ActionEnabled
+    {
+        get => ActionButton.IsEnabled;
+        set => ActionButton.IsEnabled = value;
+    }
+
     private void ActionButton_Click(object sender, RoutedEventArgs e) => ActionClick?.Invoke(this, e);
 }

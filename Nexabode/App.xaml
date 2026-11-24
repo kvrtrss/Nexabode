@@ -12,20 +12,22 @@
             <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F5F7FB" />
             <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="AppTextBrush" Color="#1E293B" />
-            <SolidColorBrush x:Key="AppSecondaryBrush" Color="#64748B" />
+            <SolidColorBrush x:Key="AppSecondaryBrush" Color="#5A687D" />
             <SolidColorBrush x:Key="AppPrimaryBrush" Color="#4F46E5" />
+            <!-- Always the deep indigo, for places with white text on top of it (white on the lighter dark-theme indigo is hard to read). -->
+            <SolidColorBrush x:Key="AppPrimaryStrongBrush" Color="#4F46E5" />
             <SolidColorBrush x:Key="AppBorderBrush" Color="#E2E8F0" />
-            <SolidColorBrush x:Key="SuccessBrush" Color="#16A34A" />
-            <SolidColorBrush x:Key="WarningBrush" Color="#D97706" />
-            <SolidColorBrush x:Key="DangerBrush" Color="#DC2626" />
-            <SolidColorBrush x:Key="InfoBrush" Color="#0284C7" />
-            <SolidColorBrush x:Key="NeutralBrush" Color="#64748B" />
+            <SolidColorBrush x:Key="SuccessBrush" Color="#107535" />
+            <SolidColorBrush x:Key="WarningBrush" Color="#9A5404" />
+            <SolidColorBrush x:Key="DangerBrush" Color="#C22121" />
+            <SolidColorBrush x:Key="InfoBrush" Color="#026BA1" />
+            <SolidColorBrush x:Key="NeutralBrush" Color="#5A687D" />
             <SolidColorBrush x:Key="OccupiedBrush" Color="#4F46E5" />
-            <SolidColorBrush x:Key="SuccessSoftBrush" Color="#2616A34A" />
-            <SolidColorBrush x:Key="WarningSoftBrush" Color="#26D97706" />
-            <SolidColorBrush x:Key="DangerSoftBrush" Color="#26DC2626" />
-            <SolidColorBrush x:Key="InfoSoftBrush" Color="#260284C7" />
-            <SolidColorBrush x:Key="NeutralSoftBrush" Color="#2664748B" />
+            <SolidColorBrush x:Key="SuccessSoftBrush" Color="#26107535" />
+            <SolidColorBrush x:Key="WarningSoftBrush" Color="#269A5404" />
+            <SolidColorBrush x:Key="DangerSoftBrush" Color="#26C22121" />
+            <SolidColorBrush x:Key="InfoSoftBrush" Color="#26026BA1" />
+            <SolidColorBrush x:Key="NeutralSoftBrush" Color="#265A687D" />
             <SolidColorBrush x:Key="OccupiedSoftBrush" Color="#264F46E5" />
 
             <!-- The colors of the kinds of change in the Change history (light theme; ThemeService swaps them for dark).
@@ -102,7 +104,7 @@
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
                 <Setter Property="HorizontalContentAlignment" Value="Center" />
             </Style>
-            <!-- The small heading above a block of actions, such as STAY or CREDIT. -->
+            <!-- The small heading above a block of actions, such as STAY or DEPOSIT. -->
             <Style x:Key="GroupLabel" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
                 <Setter Property="FontSize" Value="11" />
                 <Setter Property="FontWeight" Value="SemiBold" />
@@ -159,6 +161,7 @@
                 <Setter Property="FontSize" Value="12.5" />
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="Padding" Value="12,10" />
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="DataGridColumnHeader">
@@ -167,7 +170,7 @@
                         BorderThickness="0,0,0,1"
                         Padding="{TemplateBinding Padding}">
                                 <Grid>
-                                    <ContentPresenter VerticalAlignment="Center" />
+                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
                                     <Path x:Name="SortArrow" Visibility="Collapsed" Data="M0,0 L8,0 L4,5 Z"
                               Fill="{DynamicResource AppSecondaryBrush}"
                               HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -192,6 +195,62 @@
                                 </Trigger>
                                 <Trigger Property="SortDirection" Value="Descending">
                                     <Setter TargetName="SortArrow" Property="Visibility" Value="Visible" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- For a column of amounts: the header sits over the right-aligned numbers. -->
+            <!-- Right-aligned header: its text ends where the numbers below it end. While the column is sorted it moves
+                 left a little, to make room for the sort arrow. -->
+            <Style x:Key="RightColumnHeaderStyle" TargetType="DataGridColumnHeader" BasedOn="{StaticResource AppColumnHeaderStyle}">
+                <Setter Property="HorizontalContentAlignment" Value="Right" />
+                <Setter Property="Padding" Value="12,10,12,10" />
+                <Style.Triggers>
+                    <Trigger Property="SortDirection" Value="Ascending">
+                        <Setter Property="Padding" Value="12,10,26,10" />
+                    </Trigger>
+                    <Trigger Property="SortDirection" Value="Descending">
+                        <Setter Property="Padding" Value="12,10,26,10" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- A clear, clean "go there" button for use inside a table row: soft accent fill, accent text and a small arrow.
+                 It turns solid on hover, so it is easy to spot and obviously clickable. -->
+            <Style x:Key="AccountLinkButton" TargetType="Button">
+                <Setter Property="Foreground" Value="{DynamicResource AppPrimaryBrush}" />
+                <Setter Property="Background" Value="{DynamicResource OccupiedSoftBrush}" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Padding" Value="14,7,12,7" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8"
+                                    Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                                <StackPanel Orientation="Horizontal">
+                                    <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="False"
+                                                      TextElement.Foreground="{TemplateBinding Foreground}" />
+                                    <Path Data="M 0,0 L 4,4 L 0,8" Width="5" Height="8" Margin="9,1,0,0" VerticalAlignment="Center"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                          StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round" />
+                                </StackPanel>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppPrimaryBrush}" />
+                                    <Setter Property="Foreground" Value="White" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Opacity" Value="0.85" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -297,8 +356,8 @@
                         <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource DangerBrush}" />
                     </DataTrigger>
                     <DataTrigger Binding="{Binding}" Value="Maintenance">
-                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource DangerSoftBrush}" />
-                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource InfoSoftBrush}" />
+                        <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource InfoBrush}" />
                     </DataTrigger>
                     <!-- Indigo: occupied -->
                     <DataTrigger Binding="{Binding}" Value="Occupied">

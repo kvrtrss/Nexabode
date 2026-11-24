@@ -4,7 +4,7 @@ namespace Nexabode.Services;
 
 public static class StayQueries
 {
-    public static DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
+    public static DateOnly Today => DateOnly.FromDateTime(Clock.Today);
 
     // Stays that hold their bed today or later: ongoing, reserved, or ending today or later.
     // A stay whose tenant has been confirmed as moved out no longer holds the bed (see StayRules.LastDayHoldingBed),

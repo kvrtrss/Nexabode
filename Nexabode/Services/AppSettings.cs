@@ -12,9 +12,10 @@ public class AppSettings
     public string LastBackup { get; set; } = "";
     public DateTime? LastBackupAt { get; set; }
     public bool FullRentForPartialMonths { get; set; }   // false = bill partial months by days
+    public string? ThemeChoice { get; set; }   // "System" (follow Windows), "Light" or "Dark". Not set yet = follow Windows.
+    public int RentDueDay { get; set; } = RentDueRules.DefaultDueDay;   // the usual day of the month rent is due
     public int ReminderLeadDays { get; set; } = 3;       // how many days ahead notifications warn about due dates
     public bool HideSecondOwnerTip { get; set; }          // the Owner chose "Not needed" for the second-Owner suggestion
-    public bool HideResetPhraseTip { get; set; }          // the Owner chose "Not needed" for the reset-phrase suggestion
     public List<string> ReadNoticeKeys { get; set; } = new();   // notifications marked as read (a changed situation gets a new key)
 
     private static string FilePath => Path.Combine(DatabaseKeyProvider.AppFolder, "settings.json");

@@ -19,12 +19,7 @@
                         </WrapPanel.Resources>
                         <ui:Button Content="Change password" Click="ChangePassword_Click" />
                         <ui:Button Content="Change username" Click="ChangeUsername_Click" />
-                        <Border Style="{StaticResource ToolbarDivider}" />
-                        <ui:Button Content="New recovery code" Click="RecoveryCode_Click"
-                                   ToolTip="Create a new code for resetting a forgotten password" />
                     </WrapPanel>
-                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,10,0,0"
-                               Text="Your recovery code lets you reset a forgotten password from the sign-in screen. A new code replaces the old one. A code is shown only once, so you can print it on a recovery sheet as soon as it is created." />
                 </StackPanel>
             </ui:Card>
 
@@ -41,11 +36,11 @@
                             <TextBlock Text="There is only one Owner account" FontWeight="SemiBold" TextWrapping="Wrap"
                                        Foreground="{DynamicResource AppTextBrush}" />
                             <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,2,0,0"
-                                       Text="If that person forgets their password and loses their recovery code, nobody can reset it. Add a second Owner account (for a trusted person, or a second account for yourself) so that either Owner can reset the other's password." />
+                                       Text="If that person forgets their password, the Owner recovery key is the only way back in. Add a second Owner account (a trusted person, or a second account for yourself) so that either Owner can reset the other's password." />
                         </StackPanel>
                     </Border>
                     <DataGrid x:Name="AccountGrid" AutoGenerateColumns="False" IsReadOnly="True"
-                              CanUserAddRows="False" SelectionMode="Single" Height="160" Margin="0,0,0,12"
+                              CanUserAddRows="False" SelectionMode="Single" MinHeight="90" MaxHeight="220" Margin="0,0,0,12"
                               SelectionChanged="AccountGrid_SelectionChanged">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="*" />
@@ -54,7 +49,7 @@
                         </DataGrid.Columns>
                     </DataGrid>
                     <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,10"
-                               Text="Ways back in if nobody can sign in: the emergency key is a code to write down and keep somewhere safe. The reset phrase is a sentence you choose and remember instead. Either one, entered under &quot;Locked out of every account?&quot; on the sign-in screen, creates a new Owner account." />
+                               Text="The Owner recovery key is a code to write down and keep somewhere safe. If an Owner forgets their password, &quot;Forgot password?&quot; on the sign-in screen accepts it. Staff who forget theirs ask an Owner to reset it above." />
                     <WrapPanel>
                         <WrapPanel.Resources>
                             <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
@@ -67,10 +62,8 @@
                         <ui:Button x:Name="RemoveAccountButton" Content="Remove account" Click="RemoveAccount_Click" IsEnabled="False"
                                    Style="{StaticResource DangerToolbarButton}" />
                         <Border Style="{StaticResource ToolbarDivider}" />
-                        <ui:Button Content="New emergency key" Click="EmergencyKey_Click"
-                                   ToolTip="Create a new emergency access key, for use when nobody can sign in" />
-                        <ui:Button Content="Reset phrase" Click="ResetPhrase_Click"
-                                   ToolTip="Set a phrase that can also be used to regain access when nobody can sign in" />
+                        <ui:Button Content="New recovery key" Click="EmergencyKey_Click"
+                                   ToolTip="Create a new Owner recovery key. The current one stops working" />
                     </WrapPanel>
                     <TextBlock x:Name="RecoveryStatusText" Style="{StaticResource MutedText}" TextWrapping="Wrap"
                                Margin="0,10,0,0" />
@@ -79,10 +72,41 @@
 
             <ui:Card Margin="0,0,0,16">
                 <StackPanel>
+                    <TextBlock Text="Appearance" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Colors" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <ComboBox x:Name="AppearanceCombo" Width="190" SelectionChanged="Appearance_Changed"
+                                  AutomationProperties.Name="Light or dark colors">
+                            <ComboBoxItem Content="Follow Windows" Tag="System" />
+                            <ComboBoxItem Content="Light" Tag="Light" />
+                            <ComboBoxItem Content="Dark" Tag="Dark" />
+                        </ComboBox>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="Follow Windows uses your Windows light or dark setting each time Nexabode starts. You can also switch with the moon button at the top." />
+                </StackPanel>
+            </ui:Card>
+
+            <ui:Card Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="Billing" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Rent is due on day" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <ComboBox x:Name="RentDueDayCombo" Width="80" SelectionChanged="RentDueDay_Changed"
+                                  AutomationProperties.Name="Day of the month rent is due" />
+                        <TextBlock Text="of each month" VerticalAlignment="Center" Margin="10,0,0,0" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="A tenant who moves in after that day is due on their move-in day. You can still change the date each time you generate rent." />
+                </StackPanel>
+            </ui:Card>
+
+            <ui:Card Margin="0,0,0,16">
+                <StackPanel>
                     <TextBlock Text="Backup and restore" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
                     <TextBlock x:Name="LastBackupText" Margin="0,0,0,6" TextWrapping="Wrap" />
                     <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12"
-                               Text="A backup contains all your rooms, tenants, billing and payments in one file protected by a backup password. Keep a copy on a USB drive or cloud storage, not only on this computer. A backup is also how you move Nexabode to another computer." />
+                               Text="A backup is one file with all your data, protected by its own password. Keep a copy off this computer, such as on a USB drive or in cloud storage. It is also how you move Nexabode to another computer." />
                     <WrapPanel>
                         <WrapPanel.Resources>
                             <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
@@ -95,14 +119,21 @@
 
             <ui:Card Margin="0,0,0,16">
                 <StackPanel>
-                    <TextBlock Text="Stay records check" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
-                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12"
-                   Text="Checks for stays that overlap on the same bed or for the same tenant, counting the move-out date as the last day. This check only reads your data and does not change anything." />
-                    <WrapPanel>
+                    <TextBlock Text="Records" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
+                    <TextBlock Text="Look for stays that overlap on the same bed or for the same tenant. This only reads your data and changes nothing."
+                               Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <WrapPanel Margin="0,0,0,14">
                         <WrapPanel.Resources>
                             <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
                         </WrapPanel.Resources>
                         <ui:Button Content="Check stay records" Click="CheckStays_Click" />
+                    </WrapPanel>
+                    <TextBlock Text="See who changed what, and when." Style="{StaticResource MutedText}"
+                               TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <WrapPanel>
+                        <WrapPanel.Resources>
+                            <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
+                        </WrapPanel.Resources>
                         <ui:Button Content="View change history" Click="ViewHistory_Click" />
                     </WrapPanel>
                 </StackPanel>
@@ -114,6 +145,10 @@
                     <TextBlock Text="Nexabode - Boarding House Bed Occupancy &amp; Payment Monitoring System"
                                Foreground="{DynamicResource AppTextBrush}" TextWrapping="Wrap" Margin="0,0,0,4" />
                     <TextBlock x:Name="VersionText" Text="Version" Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+                    <TextBlock Text="Keyboard shortcuts" FontWeight="SemiBold"
+                               Foreground="{DynamicResource AppTextBrush}" Margin="0,0,0,2" />
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,10"
+                               Text="Ctrl+1 to Ctrl+9 and Ctrl+0 open the pages in the order of the side bar. Ctrl+F goes to the search box, and Ctrl+N does what the page's main button does. Right-click a row for its actions." />
                     <TextBlock Text="Where your data is stored" FontWeight="SemiBold"
                                Foreground="{DynamicResource AppTextBrush}" Margin="0,0,0,2" />
                     <TextBlock x:Name="DataPathText" Style="{StaticResource MutedText}" TextWrapping="Wrap" />

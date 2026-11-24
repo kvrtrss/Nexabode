@@ -20,6 +20,9 @@ public class Notice
     public DateOnly? Date { get; init; }
     public NoticeTarget Target { get; init; }
     public int? ReminderId { get; init; }         // set for the administrator's own reminders
+    public bool IsTip { get; init; }              // an optional suggestion: listed on the Notifications page, never counted on the bell
+    public string OpenLabel { get; init; } = "";  // what the Open button says ("" = a default for the target)
+    public Action? Dismiss { get; init; }         // lets a tip be hidden for good
 
     public int Rank => Tone switch { "Danger" => 0, "Warning" => 1, _ => 2 };
 }
@@ -44,11 +47,10 @@ public static class NotificationService
         AddStayNotices(db, today, soon, list);
         AddRentNotice(db, today, list);
         AddUtilityNotices(db, list);
-        AddCreditNotices(db, today, list);
+        AddDepositNotices(db, today, list);
         AddReminderNotices(db, today, soon, list);
         AddBackupNotice(list);
         AddOwnerNotice(db, list);
-        AddResetPhraseNotice(list);
 
         return list
             .OrderBy(n => n.Rank)
@@ -61,10 +63,11 @@ public static class NotificationService
 
     public static HashSet<string> ReadKeys() => (AppSettings.Load().ReadNoticeKeys ?? new()).ToHashSet();
 
+    // The red number on the bell: things that need attention and are not read yet. Optional tips never count.
     public static int UnreadCount(IEnumerable<Notice> notices)
     {
         var read = ReadKeys();
-        return notices.Count(n => !read.Contains(n.Key));
+        return notices.Count(n => !n.IsTip && !read.Contains(n.Key));
     }
 
     public static void MarkRead(IEnumerable<string> keys) =>
@@ -130,7 +133,7 @@ public static class NotificationService
                 {
                     Key = $"overdue:{tenant.Key}:{overdue.Sum(x => x.Balance):0.00}:{oldest:yyyyMMdd}",
                     Tone = "Danger",
-                    Category = "OVERDUE",
+                    Category = "Overdue",
                     Title = $"{name} owes {Fmt.Peso(overdue.Sum(x => x.Balance))} past the due date",
                     Detail = $"{ItemText(overdue.Select(x => x.Charge))}. The oldest was due {Fmt.Date(oldest)} ({Days(late)} late).",
                     Date = oldest,
@@ -145,7 +148,7 @@ public static class NotificationService
                 {
                     Key = $"today:{tenant.Key}:{dueToday.Sum(x => x.Balance):0.00}",
                     Tone = "Warning",
-                    Category = "DUE TODAY",
+                    Category = "Due today",
                     Title = $"{name} has {Fmt.Peso(dueToday.Sum(x => x.Balance))} due today",
                     Detail = ItemText(dueToday.Select(x => x.Charge)) + ".",
                     Date = today,
@@ -161,7 +164,7 @@ public static class NotificationService
                 {
                     Key = $"soon:{tenant.Key}:{upcoming.Sum(x => x.Balance):0.00}:{next:yyyyMMdd}",
                     Tone = "Info",
-                    Category = "DUE SOON",
+                    Category = "Due soon",
                     Title = $"{name} has {Fmt.Peso(upcoming.Sum(x => x.Balance))} coming due",
                     Detail = $"{ItemText(upcoming.Select(x => x.Charge))}. Next due {Fmt.Date(next)}, in {Days(next.DayNumber - today.DayNumber)}.",
                     Date = next,
@@ -276,8 +279,8 @@ public static class NotificationService
         {
             Key = $"rent:{key}:{missing.Count}",
             Tone = "Warning",
-            Category = "RENT",
-            Title = $"Rent for {monthStart.ToString("MMMM yyyy", CultureInfo.CurrentCulture)} has not been generated for {missing.Count} tenant(s)",
+            Category = "Rent",
+            Title = $"Rent for {monthStart.ToString("MMMM yyyy", CultureInfo.CurrentCulture)} has not been generated for {Fmt.Count(missing.Count, "tenant")}",
             Detail = names + ". Open Rent Billing and select Generate rent.",
             Date = monthStart,
             Target = NoticeTarget.RentBilling
@@ -304,7 +307,7 @@ public static class NotificationService
             {
                 Key = $"utility:{b.Id}",
                 Tone = "Warning",
-                Category = "UTILITY",
+                Category = "Utility",
                 Title = $"{b.UtilityType} bill for {month} is not split yet",
                 Detail = $"{Fmt.Peso(b.TotalAmount)} for {(b.Room?.RoomName ?? "the whole house")}. " +
                          "Open Utility Bills and split it so that each tenant is charged a share.",
@@ -314,9 +317,9 @@ public static class NotificationService
         }
     }
 
-    // ---------- Credit left with a tenant who has gone ----------
+    // ---------- Deposit left with a tenant who has gone ----------
 
-    private static void AddCreditNotices(AppDbContext db, DateOnly today, List<Notice> list)
+    private static void AddDepositNotices(AppDbContext db, DateOnly today, List<Notice> list)
     {
         var used = db.Payments
             .Where(p => !p.IsVoided && p.Source == DepositService.PaymentSource)
@@ -328,7 +331,7 @@ public static class NotificationService
 
         foreach (var tenant in db.Occupancies.ToList().GroupBy(o => o.TenantId))
         {
-            // Someone still staying can use their credit; only a tenant who has left needs a refund decision.
+            // Someone still staying can use their deposit; only a tenant who has left needs a refund decision.
             var stillHere = tenant.Any(o => o.MovedOutOn == null && (o.MoveOutDate == null || o.MoveOutDate >= today));
             if (stillHere) continue;
 
@@ -340,9 +343,9 @@ public static class NotificationService
             {
                 Key = $"credit:{tenant.Key}:{held:0.00}",
                 Tone = "Info",
-                Category = "CREDIT",
-                Title = $"{name} has {Fmt.Peso(held)} credit left",
-                Detail = "This tenant has moved out. Refund the credit, or apply it to unpaid charges, on the Tenants page.",
+                Category = "Deposit",
+                Title = $"{name} has {Fmt.Peso(held)} deposit left",
+                Detail = "This tenant has moved out. Refund the deposit, or apply it to unpaid charges, on the Tenants page.",
                 Target = NoticeTarget.Tenants
             });
         }
@@ -364,7 +367,7 @@ public static class NotificationService
             {
                 Key = $"reminder:{r.Id}:{state}",
                 Tone = r.DueDate < today ? "Danger" : r.DueDate == today ? "Warning" : "Info",
-                Category = "REMINDER",
+                Category = "Reminder",
                 Title = r.Title,
                 Detail = string.IsNullOrWhiteSpace(r.Note) ? when : $"{when} {r.Note!.Trim()}",
                 Date = r.DueDate,
@@ -384,27 +387,13 @@ public static class NotificationService
         {
             Key = "owners:1",
             Tone = "Info",
-            Category = "SECURITY",
-            Title = "Optional: add a second Owner",
-            Detail = "Helpful if more than one person runs the house. Either Owner can help the other get back in. Add one in Settings.",
-            Target = NoticeTarget.Settings
-        });
-    }
-
-    // Told to Owners only, since only an Owner can set the phrase. It is optional, so "Not needed" on the Dashboard
-    // (or setting a phrase) makes it go away. Marking it as read just clears the badge, as for every notice.
-    private static void AddResetPhraseNotice(List<Notice> list)
-    {
-        if (!Session.IsOwner || AppSettings.Load().HideResetPhraseTip || AuthService.HasResetPhrase()) return;
-
-        list.Add(new Notice
-        {
-            Key = "phrase:1",
-            Tone = "Info",
-            Category = "SECURITY",
-            Title = "Optional: set a reset phrase",
-            Detail = "An easier-to-remember way back in if nobody can sign in. It works with \"Locked out of every account?\" on the sign-in screen. Set one in Settings.",
-            Target = NoticeTarget.Settings
+            Category = "Tip",
+            Title = "Add a second Owner",
+            Detail = "Helpful if more than one person runs the house. Either Owner can reset the other's password. Add one in Settings.",
+            Target = NoticeTarget.Settings,
+            IsTip = true,
+            OpenLabel = "Add an Owner",
+            Dismiss = () => AppSettings.Update(x => x.HideSecondOwnerTip = true)
         });
     }
 
@@ -420,10 +409,11 @@ public static class NotificationService
         {
             Key = $"backup:{lastBackup}",
             Tone = "Warning",
-            Category = "BACKUP",
-            Title = days == null ? "No backup has been made yet" : $"Your last backup was {days} day(s) ago",
+            Category = "Backup",
+            Title = days == null ? "No backup has been made yet" : $"Your last backup was {Fmt.Count(days.Value, "day")} ago",
             Detail = "Make a fresh backup in Settings so that your recent records are protected.",
-            Target = NoticeTarget.Settings
+            Target = NoticeTarget.Settings,
+            OpenLabel = "Go to backup settings"
         });
     }
 }

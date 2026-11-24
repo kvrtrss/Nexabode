@@ -22,7 +22,7 @@ public partial class ChangePasswordDialog : Window
         {
             Title = "Set up your account";
             TitleText.Text = "Set up your account";
-            NoteText.Text = "You signed in with the default password. For security, choose your own password " +
+            NoteText.Text = "You signed in with a temporary password. For security, choose your own password " +
                             "before continuing. You can also choose your own username.";
             CurrentPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Visible;
@@ -68,7 +68,7 @@ public partial class ChangePasswordDialog : Window
         var newPassword = NewBox.Password;
         var requested = _forced ? UsernameBox.Text.Trim() : _username;
 
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var user = db.AdminUsers.FirstOrDefault(u => u.Username == _username);
         if (user == null) { Fail("The account could not be found."); return; }
 
@@ -96,13 +96,8 @@ public partial class ChangePasswordDialog : Window
             return;
         }
 
-        if (newPassword.Length < 8) { Fail("The new password must be at least 8 characters."); return; }
-        if (newPassword == "admin123") { Fail("Choose a password other than the default."); return; }
-        if (newPassword.Equals(requested, StringComparison.OrdinalIgnoreCase))
-        {
-            Fail("The password cannot be the same as the username.");
-            return;
-        }
+        var passwordError = AccountService.PasswordError(requested, newPassword);
+        if (passwordError != null) { Fail(passwordError); return; }
         if (newPassword != ConfirmBox.Password) { Fail("The two new passwords do not match."); return; }
         if (BCrypt.Net.BCrypt.Verify(newPassword, user.PasswordHash))
         {
@@ -110,12 +105,8 @@ public partial class ChangePasswordDialog : Window
             return;
         }
 
-        // Everything checked out: one last "are you sure?" before the password (and username) change.
-        var confirmText = _forced
-            ? ConfirmWording.FirstSignIn(user.Username, requested)
-            : ConfirmWording.ChangePassword(user.Username);
-        if (!ConfirmActionDialog.Ask(this, _forced ? "Save your account" : "Change password", confirmText)) return;
-
+        // No extra "are you sure?" here: this window's own Save button is the confirmation,
+        // and a password change also needed the current password a moment ago.
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
         user.MustChangePassword = false;   // the person has now chosen their own password
 

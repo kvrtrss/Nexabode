@@ -1,0 +1,68 @@
+﻿<Window x:Class="Nexabode.Views.NewUtilityBillDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="New utility bill" Width="500" SizeToContent="Height" MaxHeight="760" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI">
+    <!-- Adding a bill has its own window, so the Utility Bills page keeps all its room for the list of bills. -->
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock Text="New utility bill" Style="{StaticResource SectionTitle}" FontSize="18" />
+            <TextBlock x:Name="MonthText" Style="{StaticResource MutedText}" Margin="0,2,0,12" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,0,14,0">
+                <TextBlock Text="Utility" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                <ComboBox x:Name="UtilityTypeBox" IsEditable="True" Margin="0,0,0,12" AutomationProperties.Name="Utility">
+                    <ComboBoxItem Content="Electricity" />
+                    <ComboBoxItem Content="Water" />
+                    <ComboBoxItem Content="Internet" />
+                    <ComboBoxItem Content="Other" />
+                </ComboBox>
+
+                <TextBlock Text="Total bill amount" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                <ui:TextBox x:Name="BillAmountBox" PlaceholderText="₱" Margin="0,0,0,12"
+                            AutomationProperties.Name="Total bill amount" />
+
+                <TextBlock Text="Applies to" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                <ComboBox x:Name="ScopeCombo" DisplayMemberPath="Display" Margin="0,0,0,12"
+                          AutomationProperties.Name="Applies to" />
+
+                <TextBlock Text="Each share is due on" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                <DatePicker x:Name="BillDuePicker" Margin="0,0,0,12"
+                            AutomationProperties.Name="Due date of each tenant's share" />
+
+                <TextBlock Text="Bill covers" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <RadioButton x:Name="WholeMonthRadio" GroupName="PeriodMode" Content="The whole month"
+                                 IsChecked="True" Margin="0,0,20,0" />
+                    <RadioButton x:Name="CustomPeriodRadio" GroupName="PeriodMode" Content="A custom period"
+                                 ToolTip="For a bill that does not match the calendar month, for example Sep 15 to Oct 14. It is still listed under the month selected on the page."
+                                 Checked="PeriodMode_Changed" Unchecked="PeriodMode_Changed" />
+                </StackPanel>
+
+                <StackPanel x:Name="PeriodPanel" Visibility="Collapsed">
+                    <TextBlock Text="First day covered" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                    <DatePicker x:Name="PeriodFromPicker" Margin="0,0,0,12" AutomationProperties.Name="First day the bill covers" />
+                    <TextBlock Text="Last day covered" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                    <DatePicker x:Name="PeriodToPicker" Margin="0,0,0,6" AutomationProperties.Name="Last day the bill covers" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <ui:Button Content="Cancel" IsCancel="True" MinWidth="90" Margin="0,0,8,0" />
+            <ui:Button Content="Add bill" Appearance="Primary" IsDefault="True" MinWidth="110"
+                       FontWeight="SemiBold" Click="AddBill_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

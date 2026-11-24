@@ -5,10 +5,10 @@
     <ui:Card HorizontalAlignment="Stretch">
         <StackPanel>
             <TextBlock x:Name="LabelText" Style="{StaticResource MutedText}"
-                       FontSize="11.5" FontWeight="SemiBold" />
+                       FontSize="12" FontWeight="SemiBold" />
             <TextBlock x:Name="ValueText" FontSize="28" FontWeight="SemiBold"
                        Margin="0,6,0,2" Foreground="{DynamicResource AppTextBrush}" />
-            <TextBlock x:Name="CaptionText" FontSize="12.5" FontWeight="SemiBold"
+            <TextBlock x:Name="CaptionText" FontSize="13" FontWeight="SemiBold"
                        Foreground="{DynamicResource AppSecondaryBrush}" />
         </StackPanel>
     </ui:Card>

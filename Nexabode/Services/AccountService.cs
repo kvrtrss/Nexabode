@@ -1,4 +1,5 @@
-﻿using Nexabode.Data;
+﻿using Microsoft.EntityFrameworkCore;
+using Nexabode.Data;
 using Nexabode.Models;
 
 namespace Nexabode.Services;
@@ -33,7 +34,9 @@ public static class AccountService
         if (password == DefaultPassword) return "Choose a password other than the default.";
         if (password.Equals(username, StringComparison.OrdinalIgnoreCase))
             return "The password cannot be the same as the username.";
-        return null;
+
+        // Anything the strength meter rates Weak is refused too, so the meter and the rules never disagree.
+        return PasswordStrengthRules.Refusal(password, username);
     }
 
     public static string? NameError(AppDbContext db, string username)
@@ -68,12 +71,16 @@ public static class AccountService
             Role = canonical,
             MustChangePassword = true   // they choose their own password the first time they sign in
         };
+        // The account and its history entry are saved as one unit: if anything fails in between, neither is kept.
+        using var transaction = db.Database.CurrentTransaction == null ? db.Database.BeginTransaction() : null;
+
         db.AdminUsers.Add(user);
-        db.SaveChanges();
+        db.SaveChanges();   // gives the account its id for the history entry
 
         AuditService.Record(db, "Account", user.Id, null, "Created", null, $"{username} ({canonical})",
                             "Account added in Settings");
         db.SaveChanges();
+        transaction?.Commit();
         return null;
     }
 

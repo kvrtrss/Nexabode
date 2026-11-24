@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -9,13 +9,13 @@ using Nexabode.Services;
 
 namespace Nexabode.Views;
 
-// Prints a receipt for one recorded payment. It goes straight to the printer: nothing is saved as a file.
+// Shows and prints a receipt for one recorded payment. Nothing is saved as a file.
 // Each printing is written to the change history, so a reprint is marked as a duplicate and can be traced.
 public static class ReceiptPrinter
 {
     private const string AuditField = "Receipt printed";
 
-    // Returns true when the receipt was sent to the printer.
+    // Returns true when the receipt was sent to the printer (cancelling the preview or the print window returns false).
     public static bool Print(Window? owner, int paymentId)
     {
         ReceiptData? data;
@@ -36,20 +36,10 @@ public static class ReceiptPrinter
             return false;
         }
 
-        var printDialog = new PrintDialog();
-        if (printDialog.ShowDialog() != true) return false;
-
-        try
-        {
-            var document = Build(data, DateTime.Now, printDialog.PrintableAreaWidth, printDialog.PrintableAreaHeight);
-            printDialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator,
-                                      "Receipt " + data.ReceiptNo);
-        }
-        catch (Exception ex)   // a printer can fail in many ways; whatever happens, say so
-        {
-            Warn(owner, "The receipt could not be printed. Details: " + ex.Message);
+        // The receipt is shown first; Print... on the preview sends it to the printer.
+        if (!PrintPreview.Show(owner, "Receipt " + data.ReceiptNo, "receipt",
+                               (width, height) => Build(data, DateTime.Now, width, height)))
             return false;
-        }
 
         RecordPrint(paymentId, data);
         return true;
@@ -59,7 +49,7 @@ public static class ReceiptPrinter
 
     private static (ReceiptData? Data, string? Problem) Load(int paymentId)
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
 
         var payment = db.Payments
             .Include(p => p.Tenant)
@@ -124,7 +114,7 @@ public static class ReceiptPrinter
     {
         try
         {
-            using var db = new AppDbContext();
+            using var db = AppDb.Create();
             var tenantId = db.Payments.Where(p => p.Id == paymentId).Select(p => (int?)p.TenantId).FirstOrDefault();
             AuditService.Record(db, "Payment", paymentId, tenantId, AuditField, null, data.ReceiptNo,
                                 data.PrintNumber > 1 ? $"Duplicate copy, print no. {data.PrintNumber}" : "Original printed");
@@ -135,8 +125,7 @@ public static class ReceiptPrinter
 
     private static void Warn(Window? owner, string message)
     {
-        if (owner != null) MessageBox.Show(owner, message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Warning);
-        else MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Warning);
+        Say.Error(message, owner);
     }
 
     // ---------- The paper ----------
@@ -210,7 +199,7 @@ public static class ReceiptPrinter
 
         foreach (var note in ReceiptWording.Notes)
             document.Blocks.Add(new Paragraph(new Run(note))
-                { FontSize = 11, Foreground = Brushes.DimGray, Margin = new Thickness(0, 0, 0, 2) });
+                { FontSize = 12, Foreground = Brushes.DimGray, Margin = new Thickness(0, 0, 0, 2) });
 
         document.Blocks.Add(new Paragraph(new Run(
                 $"Printed {printedAt.ToString("MMMM d, yyyy h:mm tt", CultureInfo.CurrentCulture)} by {Session.Administrator}"))

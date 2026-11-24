@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -8,31 +8,15 @@ using Nexabode.Services;
 namespace Nexabode.Views;
 
 // Prints a recovery code or an emergency access key on paper, for the person to keep somewhere safe.
-// It goes straight to the printer: nothing is saved as a file by Nexabode, and nothing is put on the clipboard.
+// It is shown in a preview and printed from there: nothing is saved as a file by Nexabode, and nothing is put on the clipboard.
 public static class RecoverySheetPrinter
 {
     // Returns true when the sheet was sent to the printer. 'secret' is the code or key, already formatted.
     public static bool Print(Window? owner, RecoverySheetKind kind, string? account, string secret)
     {
-        var printDialog = new PrintDialog();
-        if (printDialog.ShowDialog() != true) return false;
-
-        try
-        {
-            var document = Build(kind, account, secret, DateTime.Now,
-                                 printDialog.PrintableAreaWidth, printDialog.PrintableAreaHeight);
-            printDialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator,
-                                      RecoverySheetText.Heading(kind));
-            return true;
-        }
-        catch (Exception ex)   // a printer can fail in many ways; whatever happens, say so instead of closing the dialog
-        {
-            var message = "The sheet could not be printed. Details: " + ex.Message +
-                          "\n\nYou can still write it down by hand.";
-            if (owner != null) MessageBox.Show(owner, message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Warning);
-            else MessageBox.Show(message, "Nexabode", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return false;
-        }
+        return PrintPreview.Show(owner, RecoverySheetText.Heading(kind), "sheet",
+            (width, height) => Build(kind, account, secret, DateTime.Now, width, height),
+            failureNote: "You can still write it down by hand.");
     }
 
     // Always black on white, whatever theme the app is in, so it prints the same on any printer.
@@ -58,7 +42,7 @@ public static class RecoverySheetPrinter
             { Foreground = Brushes.DimGray, Margin = new Thickness(0, 0, 0, 22) });
 
         document.Blocks.Add(new Paragraph(new Run(RecoverySheetText.SecretCaption(kind)))
-            { FontSize = 11, FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Center,
+            { FontSize = 12, FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Center,
               Foreground = Brushes.DimGray, Margin = new Thickness(0, 0, 0, 6) });
 
         document.Blocks.Add(new Paragraph(new Run(secret))

@@ -32,6 +32,10 @@
 
                 <TextBlock Text="Your reminders" Style="{StaticResource SectionTitle}" Margin="0,24,0,8" />
                 <StackPanel x:Name="ReminderList" />
+
+                <TextBlock x:Name="TipTitle" Text="Optional tips" Style="{StaticResource SectionTitle}"
+                           Margin="0,24,0,8" Visibility="Collapsed" />
+                <StackPanel x:Name="TipList" />
             </StackPanel>
         </ScrollViewer>
     </Grid>

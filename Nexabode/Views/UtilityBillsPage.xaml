@@ -3,10 +3,18 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:controls="clr-namespace:Nexabode.Controls"
+      xmlns:svc="clr-namespace:Nexabode.Services"
       Title="Utility Bills">
+    <Page.Resources>
+        <svc:SubtractConverter x:Key="Minus" />
+        <!-- Rows keep a steady height: two lines (a name, then a detail line). -->
+        <Style x:Key="TallCell" TargetType="DataGridCell" BasedOn="{StaticResource AppCellStyle}">
+            <Setter Property="MinHeight" Value="58" />
+        </Style>
+    </Page.Resources>
     <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Auto" Background="Transparent">
-    <Border Padding="32,24" MinWidth="900" MinHeight="780"
+    <Border Padding="32,24" MinWidth="640" MinHeight="560"
             Width="{Binding ViewportWidth, ElementName=PageScroll}"
             Height="{Binding ViewportHeight, ElementName=PageScroll}">
     <Grid>
@@ -39,63 +47,104 @@
             <CheckBox x:Name="ShowArchivedCheck" Content="Show archived" Margin="20,0,0,0"
           Checked="ShowArchived_Changed" Unchecked="ShowArchived_Changed" />
         </StackPanel>
-        <ui:Card Grid.Row="3" Margin="0,0,0,12">
-            <StackPanel>
-                <TextBlock Text="New utility bill" Style="{StaticResource SectionTitle}" Margin="0,0,0,10" />
-                <WrapPanel Orientation="Horizontal">
-                    <ComboBox x:Name="UtilityTypeBox" IsEditable="True" Width="150" Margin="0,0,8,8">
-                        <ComboBoxItem Content="Electricity" />
-                        <ComboBoxItem Content="Water" />
-                        <ComboBoxItem Content="Internet" />
-                        <ComboBoxItem Content="Other" />
-                    </ComboBox>
-                    <ui:TextBox x:Name="BillAmountBox" PlaceholderText="Total bill amount"
-                                Width="160" Margin="0,0,8,8" />
-                    <ComboBox x:Name="ScopeCombo" Width="170" DisplayMemberPath="Display" Margin="0,0,8,8" />
-                    <DatePicker x:Name="BillDuePicker" Width="160" Margin="0,0,8,8"
-                                ToolTip="Due date of each tenant's share" />
-                    <DatePicker x:Name="PeriodFromPicker" Width="150" Margin="0,0,8,8"
-                                ToolTip="Optional: the first day this bill covers" />
-                    <DatePicker x:Name="PeriodToPicker" Width="150" Margin="0,0,0,8"
-                                ToolTip="Optional: the last day this bill covers" />
-                </WrapPanel>
-                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                           Text="Billing period (optional): use the last two date fields. Leave both blank if the bill covers the whole month. Enter both dates for a bill that spans two months, for example Sep 15 to Oct 14. The bill is listed under the month selected above." />
-            </StackPanel>
-        </ui:Card>
-
         <WrapPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,6">
             <WrapPanel.Resources>
                 <Style TargetType="ui:Button" BasedOn="{StaticResource ToolbarButton}" />
             </WrapPanel.Resources>
-            <!-- Split the bill | change the bill | tidy up -->
             <ui:Button x:Name="SplitButton" Content="Split selected bill" Appearance="Primary"
                        Click="SplitBill_Click" IsEnabled="False" />
-            <ui:Button x:Name="UndoButton" Content="Undo split" Click="UndoSplit_Click" IsEnabled="False" />
-            <ui:Button x:Name="RecalcButton" Content="Recalculate shares" Click="Recalculate_Click" IsEnabled="False" />
-            <Border Style="{StaticResource ToolbarDivider}" />
             <ui:Button x:Name="EditButton" Content="Edit bill" Click="EditBill_Click" IsEnabled="False" />
-            <ui:Button x:Name="DeleteButton" Content="Delete bill" Click="DeleteBill_Click" IsEnabled="False" />
-            <Border Style="{StaticResource ToolbarDivider}" />
-            <ui:Button x:Name="ArchiveButton" Content="Archive" Click="Archive_Click" IsEnabled="False" />
-            <ui:Button x:Name="UnarchiveButton" Content="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
-            <ui:Button x:Name="ArchiveSettledButton" Content="Archive all settled" Click="ArchiveSettled_Click" />
+            <ui:Button x:Name="MoreButton" Content="More" Click="More_Click"
+                       ToolTip="Undo or recalculate a split, delete a bill, or archive settled bills.">
+                <ui:Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem x:Name="UndoButton" Header="Undo split" Click="UndoSplit_Click" IsEnabled="False" />
+                        <MenuItem x:Name="RecalcButton" Header="Recalculate shares" Click="Recalculate_Click" IsEnabled="False" />
+                        <MenuItem x:Name="DeleteButton" Header="Delete bill" Click="DeleteBill_Click" IsEnabled="False" />
+                        <Separator />
+                        <MenuItem x:Name="ArchiveButton" Header="Archive" Click="Archive_Click" IsEnabled="False" />
+                        <MenuItem x:Name="UnarchiveButton" Header="Unarchive" Click="Unarchive_Click" IsEnabled="False" />
+                        <MenuItem x:Name="ArchiveSettledButton" Header="Archive all settled" Click="ArchiveSettled_Click" />
+                    </ContextMenu>
+                </ui:Button.ContextMenu>
+            </ui:Button>
         </WrapPanel>
 
+        <!-- Shown on top of the empty table, so a blank area explains itself and says what to do. -->
+        <TextBlock x:Name="EmptyText" Grid.Row="5" Panel.ZIndex="1" Style="{StaticResource MutedText}"
+                   Text="No utility bills for this month. Select Add bill at the top of the page to add one."
+                   HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                   TextWrapping="Wrap" MaxWidth="380" IsHitTestVisible="False" Visibility="Collapsed" />
         <DataGrid x:Name="BillGrid" Grid.Row="5" AutoGenerateColumns="False"
                   IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended"
+                  RowHeight="NaN" CellStyle="{StaticResource TallCell}"
+                  RowDetailsVisibilityMode="VisibleWhenSelected"
                   SelectionChanged="BillGrid_SelectionChanged">
+            <!-- Select a bill and who it is billed to opens under it: each tenant, where they stay, their share and whether it is paid.
+                 A bill that is not split yet shows who it would be split among. -->
+            <DataGrid.RowDetailsTemplate>
+                <DataTemplate>
+                    <StackPanel Margin="14,2,14,14"
+                                Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=DataGrid}, Converter={StaticResource Minus}, ConverterParameter=90}">
+                        <TextBlock Text="{Binding BilledTitle}" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding ScopeNote}" Style="{StaticResource MutedText}" FontSize="13"
+                                   TextWrapping="Wrap" Margin="0,2,0,8" />
+                        <ItemsControl ItemsSource="{Binding Shares}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="0,7">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" MinWidth="120" />
+                                                <ColumnDefinition Width="1.2*" MinWidth="120" />
+                                                <ColumnDefinition Width="110" />
+                                                <ColumnDefinition Width="96" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Tenant}" FontWeight="SemiBold" FontSize="14"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Place}" Style="{StaticResource MutedText}" FontSize="13"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Amount, StringFormat='₱{0:N2}'}" FontSize="14"
+                                                       HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                            <ContentPresenter Grid.Column="3" Content="{Binding StatusText}" HorizontalAlignment="Right"
+                                                              ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </DataTemplate>
+            </DataGrid.RowDetailsTemplate>
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Utility" Binding="{Binding UtilityType}" Width="*" />
-                <DataGridTextColumn Header="Applies to" Binding="{Binding Scope}" Width="170" />
-                <DataGridTextColumn Header="Period" Binding="{Binding PeriodText}" Width="210" />
-                <DataGridTextColumn Header="Total bill" Binding="{Binding Total, StringFormat='₱{0:N2}'}"
-                                    ElementStyle="{StaticResource RightCell}" Width="130" />
-                <DataGridTextColumn Header="Due" Binding="{Binding DueText}" Width="130" />
-                <DataGridTemplateColumn Header="Status" Width="110">
+                <!-- Three columns with two lines each: which bill / the total and when it is due / its status. -->
+                <DataGridTemplateColumn Header="Bill" SortMemberPath="UtilityType" Width="*" MinWidth="200">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <ContentPresenter Content="{Binding StatusText}"
+                            <StackPanel VerticalAlignment="Center" Margin="0,6">
+                                <TextBlock Text="{Binding UtilityType}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding LineTwo}" Style="{StaticResource MutedText}" FontSize="13"
+                                           TextWrapping="Wrap" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Total bill" HeaderStyle="{StaticResource RightColumnHeaderStyle}" SortMemberPath="Total" Width="170">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Right">
+                                <TextBlock Text="{Binding Total, StringFormat='₱{0:N2}'}" FontWeight="SemiBold"
+                                           FontSize="15" HorizontalAlignment="Right" />
+                                <TextBlock Text="{Binding DueLine}" Style="{StaticResource MutedText}" FontSize="13"
+                                           HorizontalAlignment="Right" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Status" HeaderStyle="{StaticResource RightColumnHeaderStyle}" SortMemberPath="StatusText" Width="130">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ContentPresenter Content="{Binding StatusText}" VerticalAlignment="Center" HorizontalAlignment="Right"
                                               ContentTemplate="{StaticResource StatusBadgeTemplate}" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>

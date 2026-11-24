@@ -1,4 +1,4 @@
-namespace Nexabode.Services;
+﻿namespace Nexabode.Services;
 
 // The rules and wording for bringing a voided rent charge back. No database or screens in here,
 // so it can be tested on its own.
@@ -44,5 +44,5 @@ public static class RentRestoreRules
     // was voided: the voided charge is left alone, so the person has to be told where to restore it.
     public static string VoidedMonthNote(string month) =>
         $"Note: the {month} rent was voided earlier, so it was not billed again. If it should be billed, " +
-        "open Rent Billing, tick Show voided, select it and use Restore charge.";
+        "open Rent Billing, tick Show voided, select it, then choose More and Restore charge.";
 }

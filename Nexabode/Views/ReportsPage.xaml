@@ -6,7 +6,7 @@
       Title="Reports">
     <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Auto" Background="Transparent">
-    <Border Padding="32,24" MinWidth="900" MinHeight="560"
+    <Border Padding="32,24" MinWidth="800" MinHeight="560"
             Width="{Binding ViewportWidth, ElementName=PageScroll}"
             Height="{Binding ViewportHeight, ElementName=PageScroll}">
     <Grid>
@@ -17,9 +17,7 @@
         </Grid.RowDefinitions>
 
         <controls:PageHeader Title="Reports"
-                             Subtitle="Collections overview, tenant statements, and printable reports."
-                             ActionText="Report settings"
-                             ActionClick="Settings_Click" />
+                             Subtitle="Collections overview, tenant statements, and printable reports." />
 
         <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,16">
             <controls:StatCard x:Name="CollectedCard" Label="Collected this month" Margin="0,0,12,0" />
@@ -69,6 +67,9 @@
                                        Click="Generate_Click" Margin="0,4,0,8" />
                             <ui:Button Content="Print / Save as PDF" HorizontalAlignment="Stretch"
                                        Click="Print_Click" />
+                            <ui:Button Content="Report settings" HorizontalAlignment="Stretch" Margin="0,8,0,0"
+                                       ToolTip="The name, address and other details shown at the top of printed reports."
+                                       Click="Settings_Click" />
                         </StackPanel>
                     </ui:Card>
                 </StackPanel>

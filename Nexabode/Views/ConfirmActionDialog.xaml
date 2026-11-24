@@ -13,7 +13,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Margin="24,24,24,22">
-            <TextBlock Text="Are you sure?" Style="{StaticResource SectionTitle}" FontSize="18" Margin="0,0,0,10" />
+            <TextBlock x:Name="HeadingText" Text="Are you sure?" Style="{StaticResource SectionTitle}" FontSize="18" Margin="0,0,0,10" />
 
             <!-- A long list of changes scrolls instead of making the window taller than the screen -->
             <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto">
@@ -26,7 +26,7 @@
         <Border Grid.Row="1" Background="{DynamicResource AppBackgroundBrush}"
                 BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="24,14">
             <UniformGrid Rows="1" HorizontalAlignment="Right">
-                <ui:Button Content="Back" IsCancel="True" MinWidth="120" MinHeight="34" Margin="0,0,4,0"
+                <ui:Button x:Name="BackButton" Content="Back" IsCancel="True" MinWidth="120" MinHeight="34" Margin="0,0,4,0"
                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
                 <ui:Button x:Name="ConfirmButton" Content="Confirm" Appearance="Primary" IsDefault="True"
                            MinWidth="120" MinHeight="34" Margin="4,0,0,0"

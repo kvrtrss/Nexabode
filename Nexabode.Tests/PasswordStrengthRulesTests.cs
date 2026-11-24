@@ -1,4 +1,4 @@
-using Nexabode.Services;
+﻿using Nexabode.Services;
 using Xunit;
 
 public class PasswordStrengthRulesTests
@@ -39,6 +39,38 @@ public class PasswordStrengthRulesTests
     {
         foreach (var p in new[] { "short", "sunflower", "Sunflower9", "blue kettle river" })
             Assert.False(string.IsNullOrWhiteSpace(PasswordStrengthRules.Evaluate(p).Hint));
+    }
+
+    [Theory]
+    [InlineData("12345678")]
+    [InlineData("password123")]
+    [InlineData("aaaaaaaaaa")]
+    [InlineData("hgfedcba")]
+    [InlineData("short")]
+    public void WeakPasswords_AreRefused_WithAReason(string password) =>
+        Assert.False(string.IsNullOrWhiteSpace(PasswordStrengthRules.Refusal(password)));
+
+    [Fact]
+    public void AUsernameInsideThePassword_IsRefused() =>
+        Assert.NotNull(PasswordStrengthRules.Refusal("johnsmith99!", "JohnSmith"));
+
+    [Theory]
+    [InlineData("sunflower")]            // Fair
+    [InlineData("Sunflower9")]           // Good
+    [InlineData("blue kettle river")]    // Strong
+    public void FairOrBetter_IsAccepted(string password) =>
+        Assert.Null(PasswordStrengthRules.Refusal(password));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("short")]
+    [InlineData("password123")]
+    [InlineData("Sunflower9")]
+    [InlineData("blue kettle river")]
+    public void TheMeterAndTheRule_NeverDisagree(string password)
+    {
+        var weak = PasswordStrengthRules.Evaluate(password).Level is PasswordStrength.Weak or PasswordStrength.None;
+        Assert.Equal(weak, PasswordStrengthRules.Refusal(password) != null || password.Length == 0);
     }
 
     [Fact]

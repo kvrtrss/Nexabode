@@ -1,0 +1,239 @@
+﻿<Window x:Class="Nexabode.Views.TenantAccountWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:svc="clr-namespace:Nexabode.Services"
+        Title="Tenant account" Width="820" Height="760" MinWidth="680" MinHeight="540"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI">
+    <Window.Resources>
+        <svc:SubtractConverter x:Key="Minus" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <Style x:Key="TallCell" TargetType="DataGridCell" BasedOn="{StaticResource AppCellStyle}">
+            <Setter Property="MinHeight" Value="58" />
+        </Style>
+    </Window.Resources>
+    <!-- One tenant, everything about their money in one place: what they owe now, what is overdue,
+         what they have paid. Opened from Billing Charges, Tenants and Payments. -->
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="140" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock x:Name="NameText" Style="{StaticResource SectionTitle}" FontSize="22" TextWrapping="Wrap" />
+            <TextBlock x:Name="InfoText" Style="{StaticResource MutedText}" Margin="0,2,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- The four numbers, all time -->
+        <Border Grid.Row="1" Padding="16,12" CornerRadius="6" Margin="0,0,0,16"
+                Background="{DynamicResource AppBackgroundBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1">
+            <UniformGrid Columns="4">
+                <StackPanel>
+                    <TextBlock Text="Billed" Style="{StaticResource MutedText}" FontSize="12.5" />
+                    <TextBlock x:Name="BilledValue" FontSize="20" FontWeight="SemiBold" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Paid" Style="{StaticResource MutedText}" FontSize="12.5" />
+                    <TextBlock x:Name="PaidValue" FontSize="20" FontWeight="SemiBold" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Balance" Style="{StaticResource MutedText}" FontSize="12.5" />
+                    <TextBlock x:Name="BalanceValue" FontSize="20" FontWeight="SemiBold" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Overdue" Style="{StaticResource MutedText}" FontSize="12.5" />
+                    <TextBlock x:Name="OverdueValue" FontSize="20" FontWeight="SemiBold" />
+                </StackPanel>
+            </UniformGrid>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="0,0,0,6">
+            <TextBlock Text="Charges" Style="{StaticResource SectionTitle}" FontSize="16" VerticalAlignment="Center" />
+            <CheckBox x:Name="IncludePaidCheck" Content="Include paid charges" HorizontalAlignment="Right"
+                      Checked="IncludePaid_Changed" Unchecked="IncludePaid_Changed"
+                      ToolTip="By default only what is still owed is shown." />
+        </Grid>
+
+        <TextBlock x:Name="EmptyText" Grid.Row="3" Panel.ZIndex="1" Style="{StaticResource MutedText}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                   TextWrapping="Wrap" MaxWidth="360" IsHitTestVisible="False" Visibility="Collapsed" />
+        <DataGrid x:Name="ChargeGrid" Grid.Row="3" AutoGenerateColumns="False" IsReadOnly="True"
+                  CanUserAddRows="False" SelectionMode="Single"
+                  RowHeight="NaN" CellStyle="{StaticResource TallCell}">
+            <DataGrid.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.ContainerStyle>
+                        <Style TargetType="GroupItem">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="GroupItem">
+                                        <StackPanel>
+                                            <!-- The heading looks like any other row of the app's tables: no fill, a thin line under it,
+                                                 the same tint when the pointer is over it. The whole row opens and closes the group. -->
+                                            <Border HorizontalAlignment="Left" MinHeight="52"
+                                                    Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ScrollContentPresenter}, FallbackValue=700}"
+                                                    BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="Transparent" />
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource NeutralSoftBrush}" />
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <ToggleButton x:Name="HeaderToggle" Grid.Column="0" Cursor="Hand"
+                                                                  IsChecked="{Binding Name.IsExpanded, Mode=TwoWay}"
+                                                                  ToolTip="Click to show or hide the charges">
+                                                        <ToggleButton.Template>
+                                                            <ControlTemplate TargetType="ToggleButton">
+                                                                <Border Background="Transparent" Padding="12,0">
+                                                                    <ContentPresenter VerticalAlignment="Center" />
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </ToggleButton.Template>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <!-- Arrow: points right when closed, down when open. -->
+                                                            <Path Data="M 0,0 L 5,5 L 10,0" Width="10" Height="6" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                                  Stroke="{DynamicResource AppSecondaryBrush}" StrokeThickness="1.8"
+                                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                                                  RenderTransformOrigin="0.5,0.5">
+                                                                <Path.Style>
+                                                                    <Style TargetType="Path">
+                                                                        <Setter Property="RenderTransform">
+                                                                            <Setter.Value><RotateTransform Angle="-90" /></Setter.Value>
+                                                                        </Setter>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Value="True">
+                                                                                <Setter Property="RenderTransform">
+                                                                                    <Setter.Value><RotateTransform Angle="0" /></Setter.Value>
+                                                                                </Setter>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Path.Style>
+                                                            </Path>
+                                                            <TextBlock Grid.Column="1" Text="{Binding Name.Name}" FontWeight="SemiBold" FontSize="15"
+                                                                       VerticalAlignment="Center" Margin="0,0,16,0" />
+                                                            <TextBlock Grid.Column="2" Text="{Binding Name.Summary}" Style="{StaticResource MutedText}"
+                                                                       FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                        </Grid>
+                                                    </ToggleButton>
+                                                </Grid>
+                                            </Border>
+                                            <ItemsPresenter Visibility="{Binding IsChecked, ElementName=HeaderToggle, Converter={StaticResource BoolToVis}}" />
+                                        </StackPanel>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </GroupStyle.ContainerStyle>
+                </GroupStyle>
+            </DataGrid.GroupStyle>
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Charge" Width="*" MinWidth="200">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel VerticalAlignment="Center" Margin="0,6">
+                                <TextBlock Text="{Binding ChargeText}" FontSize="15" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding LineTwoGrouped}" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0">
+                                    <TextBlock.Style>
+                                        <!-- Nothing to say (no payment, no note): the line is left out instead of repeating "No payment yet". -->
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                                            <Style.Triggers>
+                                                <Trigger Property="Text" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Amount" HeaderStyle="{StaticResource RightColumnHeaderStyle}" Width="140">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Right">
+                                <TextBlock Text="{Binding Amount, StringFormat='₱{0:N2}'}" FontWeight="SemiBold"
+                                           FontSize="15" HorizontalAlignment="Right" />
+                                <TextBlock Text="{Binding BalanceLine}" Style="{StaticResource MutedText}" FontSize="13"
+                                           HorizontalAlignment="Right" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Due" HeaderStyle="{StaticResource RightColumnHeaderStyle}" Width="200">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel VerticalAlignment="Center" Margin="0,6" HorizontalAlignment="Right">
+                                <TextBlock Text="{Binding DueText}" FontSize="14" HorizontalAlignment="Right" />
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding LateText}" FontSize="12" Margin="0,0,8,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource DangerBrush}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <Trigger Property="Text" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <ContentPresenter Content="{Binding Status}" HorizontalAlignment="Right"
+                                                      ContentTemplate="{StaticResource StatusBadgeTemplate}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <TextBlock Grid.Row="4" Text="Payments" Style="{StaticResource SectionTitle}" FontSize="16" Margin="0,16,0,6" />
+        <TextBlock x:Name="NoPaymentsText" Grid.Row="5" Style="{StaticResource MutedText}" Text="No payments yet."
+                   Visibility="Collapsed" Margin="0,0,0,4" />
+        <DataGrid x:Name="PaymentGrid" Grid.Row="5" AutoGenerateColumns="False" IsReadOnly="True"
+                  CanUserAddRows="False" SelectionMode="Single" MaxHeight="190">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Date" Binding="{Binding DateText}" Width="1*" MinWidth="110" />
+                <DataGridTextColumn Header="Receipt" Binding="{Binding ReceiptNo}" Width="1.3*" MinWidth="140" />
+                <DataGridTextColumn Header="Method" Binding="{Binding MethodText}" Width="1.4*" MinWidth="110" />
+                <DataGridTextColumn Header="Received" HeaderStyle="{StaticResource RightColumnHeaderStyle}"
+                                    Binding="{Binding Received, StringFormat='₱{0:N2}'}"
+                                    ElementStyle="{StaticResource RightCell}" Width="1*" MinWidth="110" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Grid Grid.Row="6" Margin="0,16,0,0">
+            <StackPanel Orientation="Horizontal">
+                <ui:Button Content="Record payment" Appearance="Primary" Click="RecordPayment_Click" Margin="0,0,8,0" />
+                <ui:Button Content="Print statement" Click="PrintStatement_Click"
+                           ToolTip="A printable billing statement for this tenant, with all charges and payments." />
+            </StackPanel>
+            <ui:Button Content="Close" IsCancel="True" HorizontalAlignment="Right" MinWidth="90" />
+        </Grid>
+    </Grid>
+</Window>

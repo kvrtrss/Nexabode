@@ -1,4 +1,4 @@
-namespace Nexabode.Services;
+﻿namespace Nexabode.Services;
 
 // What the "Are you sure?" windows say. Kept apart from the screens so it can be tested.
 // Nothing here touches the database or opens a window.
@@ -46,25 +46,25 @@ public static class ConfirmWording
     public static string MaintenanceEnd(string room, string bed) =>
         $"End the maintenance on {room}, {bed}?\n\nIt can be given to tenants again.";
 
-    // ---------- Credit (a tenant's deposit that has not been used) ----------
+    // ---------- Deposit (a tenant's deposit that has not been used) ----------
 
-    public static string ApplyCredit(string tenant, decimal amount, decimal creditBefore, decimal balanceBefore) =>
-        $"Use {Fmt.Peso(amount)} of {tenant}'s credit to pay unpaid charges?\n\n" +
-        $"Credit: {Fmt.Peso(creditBefore)} to {Fmt.Peso(creditBefore - amount)}\n" +
+    public static string ApplyDeposit(string tenant, decimal amount, decimal depositBefore, decimal balanceBefore) =>
+        $"Use {Fmt.Peso(amount)} of {tenant}'s deposit to pay unpaid charges?\n\n" +
+        $"Deposit: {Fmt.Peso(depositBefore)} to {Fmt.Peso(depositBefore - amount)}\n" +
         $"Unpaid balance: {Fmt.Peso(balanceBefore)} to {Fmt.Peso(balanceBefore - amount)}\n\n" +
-        "It is paid against the oldest unpaid charges first, and recorded as a payment with the method \"Credit\".";
+        "It is paid against the oldest unpaid charges first, and recorded as a payment with the method \"Deposit\".";
 
-    public static string RefundCredit(string tenant, decimal amount, decimal creditBefore) =>
-        $"Refund {Fmt.Peso(amount)} of credit to {tenant}?\n\n" +
-        $"Credit: {Fmt.Peso(creditBefore)} to {Fmt.Peso(creditBefore - amount)}\n\n" +
+    public static string RefundDeposit(string tenant, decimal amount, decimal depositBefore) =>
+        $"Refund {Fmt.Peso(amount)} of deposit to {tenant}?\n\n" +
+        $"Deposit: {Fmt.Peso(depositBefore)} to {Fmt.Peso(depositBefore - amount)}\n\n" +
         "This records money handed back to the tenant. If it was a mistake, use Undo refund.";
 
-    public static string UndoRefund(string tenant, decimal putBack, decimal creditBefore) =>
-        $"Put {Fmt.Peso(putBack)} back into {tenant}'s credit?\n\n" +
-        $"Credit: {Fmt.Peso(creditBefore)} to {Fmt.Peso(creditBefore + putBack)}";
+    public static string UndoRefund(string tenant, decimal putBack, decimal depositBefore) =>
+        $"Put {Fmt.Peso(putBack)} back into {tenant}'s deposit?\n\n" +
+        $"Deposit: {Fmt.Peso(depositBefore)} to {Fmt.Peso(depositBefore + putBack)}";
 
-    public static string EditCredit(string tenant, decimal before, decimal after, string reason) =>
-        $"Change {tenant}'s credit from {Fmt.Peso(before)} to {Fmt.Peso(after)}?\n\n" +
+    public static string EditDeposit(string tenant, decimal before, decimal after, string reason) =>
+        $"Change {tenant}'s deposit from {Fmt.Peso(before)} to {Fmt.Peso(after)}?\n\n" +
         $"Reason: {reason.Trim()}\n\nThe change is saved in the change history.";
 
     // ---------- Accounts and passwords ----------

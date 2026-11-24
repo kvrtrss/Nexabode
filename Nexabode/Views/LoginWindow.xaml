@@ -1,4 +1,4 @@
-<ui:FluentWindow x:Class="Nexabode.Views.LoginWindow"
+﻿<ui:FluentWindow x:Class="Nexabode.Views.LoginWindow"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -13,11 +13,8 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Background="Transparent" Margin="0,32,0,0">
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,16">
             <!-- Logo and name -->
-            <Border Width="52" Height="52" CornerRadius="13" HorizontalAlignment="Center"
-                    Background="{DynamicResource AppPrimaryBrush}">
-                <TextBlock Text="N" FontSize="26" FontWeight="Bold" Foreground="White"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Border>
+            <Image Source="pack://application:,,,/Assets/logo.png" Width="64" Height="64" HorizontalAlignment="Center"
+                   RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="Nexabode logo" />
             <TextBlock Text="Nexabode" FontSize="28" FontWeight="SemiBold" HorizontalAlignment="Center"
                        Foreground="{DynamicResource AppTextBrush}" Margin="0,14,0,2" />
             <TextBlock Text="Boarding house management" Style="{StaticResource MutedText}"
@@ -43,7 +40,7 @@
                         <ui:Button x:Name="ForgotButton" Content="Forgot password?"
                                    Style="{StaticResource LinkButton}" HorizontalAlignment="Right"
                                    Margin="0,-3,0,-3" Click="ForgotButton_Click"
-                                   ToolTip="Reset your password using your recovery code"
+                                   ToolTip="Reset your password using your Owner recovery key"
                                    AutomationProperties.Name="Forgot password" />
                     </Grid>
                     <ui:PasswordBox x:Name="PasswordInput" Margin="0,0,0,16"
@@ -71,7 +68,7 @@
                             <TextBlock Text="When the lock ends, you can:" FontWeight="SemiBold" TextWrapping="Wrap"
                                        Foreground="{DynamicResource AppTextBrush}" Margin="0,10,0,2" />
                             <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                                       Text="1. Sign in with another Owner account. That Owner can reset your password in Settings.&#x0A;2. Select &quot;Forgot password?&quot; and enter your recovery code.&#x0A;3. If no account can be used, select &quot;Locked out of every account?&quot; and enter the emergency access key or the reset phrase." />
+                                       Text="1. Sign in with another Owner account. That Owner can reset your password in Settings.&#x0A;2. Owners: select &quot;Forgot password?&quot; and enter your Owner recovery key." />
                         </StackPanel>
                     </Border>
 
@@ -88,18 +85,6 @@
                                Click="LoginButton_Click" />
                 </StackPanel>
             </Border>
-
-            <ui:Button x:Name="EmergencyButton" Content="Locked out of every account?"
-                       Style="{StaticResource LinkButton}" HorizontalAlignment="Center" Margin="0,10,0,0"
-                       Click="EmergencyButton_Click"
-                       ToolTip="Use your emergency access key or reset phrase to create a new Owner account"
-                       AutomationProperties.Name="Locked out of every account" />
-            <TextBlock x:Name="EmergencyHint" Style="{StaticResource MutedText}" FontSize="12" Width="340"
-                       TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,0"
-                       Text="Use your emergency access key or reset phrase to create a new Owner account." />
-
-            <TextBlock Text="Bed occupancy and payment monitoring" Style="{StaticResource MutedText}"
-                       HorizontalAlignment="Center" Margin="0,8,0,0" />
         </StackPanel>
         </ScrollViewer>
     </Grid>

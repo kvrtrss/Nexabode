@@ -81,7 +81,7 @@ public static class StayConflicts
     // Read-only: reports existing stays that break the rules. Changes nothing.
     public static List<string> ScanExisting()
     {
-        using var db = new AppDbContext();
+        using var db = AppDb.Create();
         var stays = db.Occupancies
             .Include(o => o.Tenant)
             .Include(o => o.Bed).ThenInclude(b => b.Room)

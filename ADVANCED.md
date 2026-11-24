@@ -11,7 +11,8 @@
 - Both files are in `%LOCALAPPDATA%\Nexabode\`:
   - `nexabode.db` is the encrypted database.
   - `db.key` is the database key, encrypted with Windows (DPAPI) for **your
-    Windows account on this PC**.
+    Windows account on this PC**. Nexabode also keeps a spare copy,
+    `db.key.bak`. If `db.key` is damaged, Nexabode repairs it from the spare.
 - The database password is **not** your Nexabode sign-in password. It is a random
   key stored in `db.key`.
 
